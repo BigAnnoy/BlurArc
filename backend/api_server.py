@@ -1205,22 +1205,41 @@ def _perform_import_check(source_path: Path, progress_callback=None):
             emit(stage_progress, 'source_duplicates', f'建立预筛索引... {idx}/{total_prescan}')
 
     # 只对特征相同的文件组计算 MD5（可能有重复）
+    # 性能优化：并行计算 MD5
     candidate_groups = [files for files in source_prescan.values() if len(files) > 1]
-    total_candidate_files = sum(len(files) for files in candidate_groups)
-    md5_computed = 0
+    candidate_files_for_md5 = [file for group in candidate_groups for file in group]
+    total_candidate_files = len(candidate_files_for_md5)
 
-    for group in candidate_groups:
-        for file in group:
+    if candidate_files_for_md5:
+        import concurrent.futures
+        max_workers = max(1, os.cpu_count() - 1)
+
+        def _compute_file_md5(file):
+            """计算单个文件的 MD5，返回 (file, md5_hash)"""
             file_path = Path(file['path'])
             md5_hash = calculate_md5(file_path)
+            return (file, md5_hash)
+
+        md5_results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(_compute_file_md5, file): file for file in candidate_files_for_md5}
+            for future in concurrent.futures.as_completed(futures):
+                md5_computed = len(md5_results) + 1
+                if total_candidate_files > 0:
+                    stage_progress = 62 + int((md5_computed / total_candidate_files) * 13)
+                    emit(stage_progress, 'source_duplicates', f'候选组 MD5 计算... {md5_computed}/{total_candidate_files}')
+                try:
+                    file, md5_hash = future.result()
+                    md5_results.append((file, md5_hash))
+                except Exception:
+                    pass
+
+        # 汇总 MD5 结果
+        for file, md5_hash in md5_results:
             if md5_hash:
                 if md5_hash not in md5_to_files:
                     md5_to_files[md5_hash] = []
                 md5_to_files[md5_hash].append(file)
-            md5_computed += 1
-            if total_candidate_files > 0:
-                stage_progress = 62 + int((md5_computed / total_candidate_files) * 13)
-                emit(stage_progress, 'source_duplicates', f'候选组 MD5 计算... {md5_computed}/{total_candidate_files}')
 
     for md5_hash, files in md5_to_files.items():
         if len(files) > 1:
@@ -1272,6 +1291,7 @@ def _perform_import_check(source_path: Path, progress_callback=None):
                 source_keys.add((size, exif_str))
 
         # 只对与源文件特征匹配的相册文件计算 MD5
+        # 性能优化：并行计算 MD5
         candidate_target_files = []
         for key in source_keys:
             if key in prescan_index:
@@ -1279,51 +1299,90 @@ def _perform_import_check(source_path: Path, progress_callback=None):
 
         target_md5_to_files = {}
         total_candidates = len(candidate_target_files)
-        for idx, file in enumerate(candidate_target_files, 1):
-            md5_hash = calculate_md5(file)
-            if md5_hash:
+
+        if candidate_target_files:
+            def _compute_target_md5(file):
+                """计算相册文件的 MD5，返回 (file, md5_hash, file_size)"""
+                md5_hash = calculate_md5(file)
                 try:
                     file_size = file.stat().st_size
                 except OSError:
                     file_size = 0
-                file_obj = {
-                    'name': file.name,
-                    'path': str(file),
-                    'size': file_size,
-                    'thumbnail_url': f'/api/album/thumbnail?path={urllib.parse.quote(str(file))}'
-                }
-                if md5_hash not in target_md5_to_files:
-                    target_md5_to_files[md5_hash] = []
-                target_md5_to_files[md5_hash].append(file_obj)
-            if total_candidates > 0:
-                stage_progress = 82 + int((idx / total_candidates) * 8)
-                emit(stage_progress, 'target_duplicates', f'候选集 MD5 计算... {idx}/{total_candidates}')
-            else:
-                emit(90, 'target_duplicates', '候选集为空，跳过 MD5 计算')
+                return (file, md5_hash, file_size)
+
+            md5_results = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(_compute_target_md5, file): file for file in candidate_target_files}
+                for future in concurrent.futures.as_completed(futures):
+                    md5_computed = len(md5_results) + 1
+                    if total_candidates > 0:
+                        stage_progress = 82 + int((md5_computed / total_candidates) * 8)
+                        emit(stage_progress, 'target_duplicates', f'候选集 MD5 计算... {md5_computed}/{total_candidates}')
+                    try:
+                        file, md5_hash, file_size = future.result()
+                        md5_results.append((file, md5_hash, file_size))
+                    except Exception:
+                        pass
+
+            # 汇总结果
+            for file, md5_hash, file_size in md5_results:
+                if md5_hash:
+                    file_obj = {
+                        'name': file.name,
+                        'path': str(file),
+                        'size': file_size,
+                        'thumbnail_url': f'/api/album/thumbnail?path={urllib.parse.quote(str(file))}'
+                    }
+                    if md5_hash not in target_md5_to_files:
+                        target_md5_to_files[md5_hash] = []
+                    target_md5_to_files[md5_hash].append(file_obj)
+        else:
+            emit(90, 'target_duplicates', '候选集为空，跳过 MD5 计算')
 
         # --- 阶段4c：遍历源文件，命中候选集才算 MD5 比对 ---
-        # 性能优化：使用缓存的 size 和 exif_datetime
+        # 性能优化：并行计算 MD5，使用缓存的 size 和 exif_datetime
         compare_targets = media_files
-        total_compare = len(compare_targets)
-        for idx, file in enumerate(compare_targets, 1):
-            # 使用缓存的 size 和 exif_datetime
+        # 筛选出需要计算 MD5 的文件
+        files_needing_md5 = []
+        for file in compare_targets:
             size = file.get('size')
             exif_str = file.get('exif_datetime')
             if size is None:
                 continue
             key = (size, exif_str)
             if key in prescan_index:
-                # 命中预筛，才算 MD5
+                files_needing_md5.append(file)
+
+        total_compare = len(files_needing_md5)
+        md5_compare_results = []
+
+        if files_needing_md5:
+            def _compare_source_md5(file):
+                """计算源文件 MD5 用于比对"""
                 file_path = Path(file['path'])
                 md5_hash = calculate_md5(file_path)
-                if md5_hash and md5_hash in target_md5_to_files:
-                    if md5_hash not in target_duplicates:
-                        target_duplicates[md5_hash] = target_md5_to_files[md5_hash] + [file]
-                    else:
-                        target_duplicates[md5_hash].append(file)
-            if total_compare > 0:
-                stage_progress = 90 + int((idx / total_compare) * 8)
-                emit(stage_progress, 'target_duplicates', f'目标重复检测... {idx}/{total_compare}')
+                return (file, md5_hash)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(_compare_source_md5, file): file for file in files_needing_md5}
+                for future in concurrent.futures.as_completed(futures):
+                    md5_computed = len(md5_compare_results) + 1
+                    if total_compare > 0:
+                        stage_progress = 90 + int((md5_computed / total_compare) * 8)
+                        emit(stage_progress, 'target_duplicates', f'目标重复检测... {md5_computed}/{total_compare}')
+                    try:
+                        file, md5_hash = future.result()
+                        md5_compare_results.append((file, md5_hash))
+                    except Exception:
+                        pass
+
+        # 汇总比对结果
+        for file, md5_hash in md5_compare_results:
+            if md5_hash and md5_hash in target_md5_to_files:
+                if md5_hash not in target_duplicates:
+                    target_duplicates[md5_hash] = target_md5_to_files[md5_hash] + [file]
+                else:
+                    target_duplicates[md5_hash].append(file)
 
     emit(100, 'completed', '检查完成')
 
