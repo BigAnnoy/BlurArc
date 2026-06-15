@@ -479,13 +479,15 @@ export class ImportDialog {
                                 <div class="date-filter-panel">
                                     <h4>日期筛选</h4>
                                     <div class="date-filter-list">
-                                        ${data.date_folders && data.date_folders.length > 0 ? 
-                                            data.date_folders.map(folder => `
-                                                <div class="date-filter-item" data-date="${folder.name}">
-                                                    <div class="date-filter-name">${folder.name}</div>
+                                        ${data.date_folders && data.date_folders.length > 0 ?
+                                            data.date_folders.map(folder => {
+                                                const safeName = this._escapeHtml(folder.name);
+                                                return `
+                                                <div class="date-filter-item" data-date="${safeName}">
+                                                    <div class="date-filter-name">${safeName}</div>
                                                     <div class="date-filter-count">${folder.count} 个文件</div>
-                                                </div>
-                                            `).join('') : 
+                                                </div>`;
+                                            }).join('') :
                                             '<div class="empty-state"><p>没有按日期组织的文件夹</p></div>'
                                         }
                                     </div>
