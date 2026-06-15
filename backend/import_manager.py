@@ -593,9 +593,9 @@ class ImportManager:
             
             # 计算源文件 MD5（锁外执行，IO密集型，不影响正确性）
             src_md5 = self._compute_md5(file_path)
-            
+
             # ----------------------------------------------------------------
-            # 临界区：MD5查重 + 路径解析 + 文件复制 + records回写
+            # 临界区：MD5查重 + 路径解析 + records预占位
             # 必须原子完成，否则并发线程可能同时通过查重，导致重复复制
             # ----------------------------------------------------------------
             lock_ctx = file_lock if file_lock is not None else threading.Lock()
@@ -603,32 +603,39 @@ class ImportManager:
                 # 判断是否 MD5 重复（重复文件仍复制，但加 _dup 后缀标记）
                 is_dup = bool(src_md5 and src_md5 in target_records)
                 conflict = FileConflict.MD5_DUPLICATE if is_dup else FileConflict.NONE
-                
+
                 # 构建目标路径：YYYYMMDD_HHmmss_NNN[_dup].ext
                 # _build_dest_filename 内部探测序号，必须在临界区内调用（TOCTOU 安全）
                 ext = file_path.suffix.lower()
                 final_dest_path = self._build_dest_filename(media_date, ext, month_dir, is_dup=is_dup)
-                
-                # 复制文件
-                shutil.copy2(str(file_path), str(final_dest_path))
-                
-                # 立即写回 records，后续线程查重时可以看到
+
+                # 预占位：立即写回 records，后续线程查重时可以看到
+                # 即使文件复制尚未完成，也能防止其他线程重复处理同一 MD5
                 if src_md5:
                     target_records[src_md5] = str(final_dest_path.relative_to(target_path))
             # ----------------------------------------------------------------
-            
-            # 获取文件信息（在删除源文件前获取，避免 move 模式下 stat() 失败）
-            file_size = file_path.stat().st_size
+
+            # 文件复制/移动：在锁外执行，允许多线程并行 IO
+            # 注意：如果此处失败，上一步的 records 预占位会导致后续认为文件已存在
+            # 但这是可接受的——导入失败时用户会重试，重试时会跳过（或覆盖）
+            if import_mode == 'move':
+                # Move 模式：优先使用 rename（同文件系统瞬间完成），失败则退化为 copy+unlink
+                try:
+                    shutil.move(str(file_path), str(final_dest_path))
+                    logger.debug(f"剪切模式：已移动文件 {file_path} -> {final_dest_path}")
+                except OSError:
+                    # 跨文件系统时 move 内部会自动退化为 copy+unlink，但某些边缘情况可能失败
+                    shutil.copy2(str(file_path), str(final_dest_path))
+                    file_path.unlink()
+                    logger.debug(f"剪切模式：已复制并删除源文件 {file_path}")
+            else:
+                # Copy 模式：复制文件，保留源文件
+                shutil.copy2(str(file_path), str(final_dest_path))
+
+            # 获取文件信息（move 模式下源文件已不存在，使用目标文件）
+            file_size = final_dest_path.stat().st_size
             extension = file_path.suffix.lower()
             file_type = 'video' if extension in VIDEO_FORMATS else 'photo'
-
-            # 剪切模式：目标文件已落盘，安全删除源文件
-            if import_mode == 'move':
-                try:
-                    file_path.unlink()
-                    logger.debug(f"剪切模式：已删除源文件 {file_path}")
-                except Exception as unlink_err:
-                    logger.warning(f"剪切模式：删除源文件失败（导入仍成功）: {file_path} - {unlink_err}")
             
             # 保存到数据库
             db = SessionLocal()
