@@ -125,8 +125,8 @@ class App {
         try {
             console.log('[checkInitializationStatus] 直接检查相册路径设置...');
             
-            // 直接构造API URL
-            const albumPathUrl = 'http://127.0.0.1:5000/api/settings/album-path';
+            // 使用相对路径（PyWebView 环境中更可靠）
+            const albumPathUrl = '/api/settings/album-path';
             console.log('[checkInitializationStatus] 直接调用API URL:', albumPathUrl);
             
             const response = await fetch(albumPathUrl);
@@ -146,15 +146,51 @@ class App {
                 }
             } else {
                 console.error('[checkInitializationStatus] ❌ API请求失败，状态码:', response.status);
-                // API请求失败，暂时默认不需要初始化
-                return false;
+                // API请求失败，尝试使用绝对URL
+                return await this.checkInitializationStatusFallback();
             }
         } catch (error) {
             console.error('[checkInitializationStatus] ❌ 检查初始化状态异常:', error);
             console.error('[checkInitializationStatus] 错误堆栈:', error.stack);
-            // 发生异常，暂时默认不需要初始化
-            return false;
+            // 发生异常，尝试使用绝对URL
+            return await this.checkInitializationStatusFallback();
         }
+    }
+
+    /**
+     * 备用检查方法（使用绝对URL）
+     */
+    async checkInitializationStatusFallback() {
+        try {
+            console.log('[checkInitializationStatusFallback] 尝试使用绝对URL...');
+            const albumPathUrl = 'http://127.0.0.1:5000/api/settings/album-path';
+
+            const response = await fetch(albumPathUrl);
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('[checkInitializationStatusFallback] API响应内容:', result);
+
+                if (result.album_path && result.album_path !== '') {
+                    console.log('[checkInitializationStatusFallback] ✅ 相册已初始化');
+                    return false;
+                } else {
+                    console.log('[checkInitializationStatusFallback] ⚠️ 相册路径未设置');
+                    return true;
+                }
+            }
+        } catch (error) {
+            console.error('[checkInitializationStatusFallback] ❌ 备用检查也失败:', error);
+        }
+
+        // Both methods failed - show error to user
+        console.error('[checkInitializationStatusFallback] API 完全不可用');
+        if (window.app && typeof window.app.showError === 'function') {
+            window.app.showError('无法连接到服务器，请检查服务器是否正在运行');
+        }
+
+        // Return false to show main interface (better UX than blank screen)
+        return false;
     }
 
     /**
