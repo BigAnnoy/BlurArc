@@ -588,18 +588,29 @@ export class AlbumBrowser {
         );
         if (!confirmed) return;
 
+        // 立即退出选择模式并从缓存中移除被删除的照片
+        this._photoSelection.exitSelectionMode();
+        const deletedPathsSet = new Set(paths);
+
+        // 从缓存中移除被删除的照片（避免不必要的重新加载）
+        if (this.currentPath && this.photosCache[this.currentPath]) {
+            this.photosCache[this.currentPath] = this.photosCache[this.currentPath].filter(
+                photo => !deletedPathsSet.has(photo.path)
+            );
+        }
+
         try {
             const response = await api.client.post('/files/delete', { paths });
             if (response.status === 'completed' || response.deleted_count !== undefined) {
                 const deletedCount = response.deleted_count !== undefined ? response.deleted_count : paths.length;
                 if (window.app) window.app.showSuccess(`已删除 ${deletedCount} 张照片`);
-                this._photoSelection.exitSelectionMode();
+                // 仅刷新当前视图，不重新加载整个目录树
                 if (this.currentPath) {
-                    delete this.photosCache[this.currentPath];
-                    await this.loadPhotos(this.currentPath);
+                    this.renderPhotos(this.photosCache[this.currentPath] || []);
                 }
+                // 异步刷新统计信息（不阻塞 UI）
                 if (window.app && typeof window.app.loadAlbumStats === 'function') {
-                    window.app.loadAlbumStats();
+                    window.app.loadAlbumStats().catch(() => {});
                 }
             } else {
                 if (window.app) window.app.showError('删除失败：' + (response.error || '未知错误'));

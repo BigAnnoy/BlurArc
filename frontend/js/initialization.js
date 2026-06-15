@@ -231,8 +231,8 @@ class InitializationScreen {
         }
 
         try {
-            // 调用 API 保存相册路径
-            const response = await fetch('/api/settings/album-path', {
+            // 调用 API 保存相册路径（使用绝对 URL 确保在 PyWebView 环境中可靠）
+            const response = await fetch('http://127.0.0.1:5000/api/settings/album-path', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json'

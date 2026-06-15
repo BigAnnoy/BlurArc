@@ -39,7 +39,7 @@ class ImportDialog {
     setupButtonVisibilityObserver() {
         if (!this.dialog) return;
         
-        const observer = new MutationObserver(() => {
+        this._buttonObserver = new MutationObserver(() => {
             const step1 = this.dialog.querySelector('.import-step-1').style.display;
             const step2 = this.dialog.querySelector('.import-step-2').style.display;
             const step3 = this.dialog.querySelector('.import-step-3').style.display;
@@ -65,7 +65,10 @@ class ImportDialog {
             }
         });
         
-        observer.observe(this.dialog, { subtree: true, attributes: true });
+        const steps = this.dialog.querySelectorAll('.import-step-1, .import-step-2, .import-step-3');
+        steps.forEach(step => {
+            this._buttonObserver.observe(step, { attributes: true, attributeFilter: ['style'] });
+        });
         
         // 初始显示第一步按钮
         const selectPathBtn = document.getElementById('select-source-path');
@@ -165,6 +168,9 @@ class ImportDialog {
             modalContent.style.maxWidth = '600px';
         }
         
+        // 重新设置按钮可见性观察器（因为 close() 时会断开）
+        this.setupButtonVisibilityObserver();
+        
         // 添加键盘事件监听
         this.bindKeyboardEvents();
         
@@ -179,9 +185,33 @@ class ImportDialog {
      * 关闭对话框
      */
     close() {
+        if (!this.dialog) return;
+        
         if (this.progressInterval) {
             clearInterval(this.progressInterval);
+            this.progressInterval = null;
         }
+        
+        // 清理 MutationObserver
+        if (this._buttonObserver) {
+            this._buttonObserver.disconnect();
+            this._buttonObserver = null;
+        }
+        
+        // 清理 PhotoSelection 实例
+        if (this._targetDupSelection) {
+            this._targetDupSelection.exitSelectionMode();
+            this._targetDupSelection = null;
+        }
+        if (this._sourceDupSelection) {
+            this._sourceDupSelection.exitSelectionMode();
+            this._sourceDupSelection = null;
+        }
+        if (this._timelineSelection) {
+            this._timelineSelection.exitSelectionMode();
+            this._timelineSelection = null;
+        }
+        
         this.isCheckingSource = false;
         this.checkCancelled = false;
         
@@ -245,6 +275,10 @@ class ImportDialog {
         // 清空文本
         const sourcePathInput = this.dialog.querySelector('#source-path-input');
         if (sourcePathInput) sourcePathInput.value = '';
+
+        // 清空选择集
+        this.selectedDuplicatePhotos.clear();
+        this.selectedSourceDuplicates.clear();
 
         // 只清空内容区域，保留tab导航结构
         const dateFoldersInfo = this.dialog.querySelector('#date-folders .preview-info');
@@ -651,15 +685,6 @@ class ImportDialog {
             
             // 绑定重复文件组事件
             this.bindDuplicatesEvents();
-            
-            // 重新绑定开始导入按钮事件 - 按钮在modal-footer中，不在步骤2内容中
-            const startBtn = document.getElementById('start-import-btn');
-            if (startBtn) {
-                // 先移除旧的事件监听器，避免重复绑定
-                startBtn.removeEventListener('click', this.startImport.bind(this));
-                // 绑定新的事件监听器
-                startBtn.addEventListener('click', () => this.startImport());
-            }
         }
     }
     
@@ -770,30 +795,26 @@ class ImportDialog {
         container.innerHTML = '';
         container.appendChild(grid);
 
-        // 接入 PhotoSelection
+        // 接入 PhotoSelection（只创建一次，复用实例以保留选中状态）
         if (window.PhotoSelection) {
-            if (this._timelineSelection) {
-                this._timelineSelection.exitSelectionMode();
+            if (!this._timelineSelection) {
+                this._timelineSelection = new PhotoSelection({
+                    onPreview: (photoData) => {
+                        this.previewPhoto({
+                            name: photoData.name,
+                            path: photoData.path,
+                            thumbnail_url: photoData.thumbnail_url,
+                            url: photoData.url,
+                            size: photoData.size
+                        });
+                    },
+                    onSelectionChange: (selectedPaths) => {
+                        const btnDel = document.getElementById('btn-delete-timeline-selected');
+                        if (btnDel) btnDel.disabled = selectedPaths.size === 0;
+                        this._timelineSelectedPaths = new Set(selectedPaths);
+                    }
+                });
             }
-            this._timelineSelection = new PhotoSelection({
-                onPreview: (photoData) => {
-                    // 从 dataset 中还原 photo 对象
-                    this.previewPhoto({
-                        name: photoData.name,
-                        path: photoData.path,
-                        thumbnail_url: photoData.thumbnail_url,
-                        url: photoData.url,
-                        size: photoData.size
-                    });
-                },
-                onSelectionChange: (selectedPaths) => {
-                    // 同步时间线删除按钮状态
-                    const btnDel = document.getElementById('btn-delete-timeline-selected');
-                    if (btnDel) btnDel.disabled = selectedPaths.size === 0;
-                    // 保存选中路径供删除使用
-                    this._timelineSelectedPaths = new Set(selectedPaths);
-                }
-            });
             this._timelineSelection.attachToGrid(grid, {
                 getPhoto: (item) => ({
                     name: item.dataset.name || '',
@@ -1055,13 +1076,13 @@ class ImportDialog {
                 this.selectedDuplicatePhotos = new Set();
                 const albumPath = this.targetPath || '';
                 
+                // 遍历所有重复组，选中源文件夹里的重复文件（跳过相册里已有的）
                 if (this.previewData && this.previewData.target_duplicates) {
                     for (const [hash, files] of Object.entries(this.previewData.target_duplicates)) {
-                        files.forEach(file => {
+                        // files[0] 是相册里已有的，选中其余源文件夹中的文件
+                        files.slice(1).forEach(file => {
                             let filePath = typeof file === 'string' ? file : (file.path || '');
-                            if (!filePath.startsWith(albumPath)) {
-                                this.selectedDuplicatePhotos.add(filePath);
-                            }
+                            this.selectedDuplicatePhotos.add(filePath);
                         });
                     }
                 }
@@ -1229,6 +1250,10 @@ class ImportDialog {
                         })
                     });
                     
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
                     const result = await response.json();
                     
                     if (result.status === 'completed') {
@@ -1284,6 +1309,9 @@ class ImportDialog {
                         source_paths: this.sourcePath ? [this.sourcePath] : []
                     })
                 });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 const result = await response.json();
 
                 if (result.status === 'completed') {
@@ -1392,6 +1420,10 @@ class ImportDialog {
                             source_paths: this.sourcePath ? [this.sourcePath] : []
                         })
                     });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
                     
                     const result = await response.json();
                     
@@ -1521,28 +1553,39 @@ class ImportDialog {
         container.innerHTML = '';
         container.appendChild(grid);
 
-        // 接入 PhotoSelection，第一张保留项不可选
+        // 接入 PhotoSelection（只创建一次，复用实例以保留选中状态）
         if (window.PhotoSelection) {
-            if (this._sourceDupSelection) {
-                this._sourceDupSelection.exitSelectionMode();
-            }
-            this._sourceDupSelection = new PhotoSelection({
-                onPreview: (photoData) => {
-                    this.previewPhoto({
-                        name: photoData.name,
-                        path: photoData.path,
-                        thumbnail_url: photoData.thumbnail_url,
-                        url: photoData.url,
-                        size: photoData.size
-                    });
-                },
-                canSelect: (item) => {
-                    // dataset.path 与 files[0] 的路径比对：第一张不可选
-                    const firstPath = typeof files[0] === 'string' ? files[0] : (files[0]?.path || '');
-                    return item.dataset.path !== firstPath;
-                },
-                onSelectionChange: (selectedPaths) => {
-                    // 同步到 selectedSourceDuplicates
+            if (!this._sourceDupSelection) {
+                this._sourceDupSelection = new PhotoSelection({
+                    onPreview: (photoData) => {
+                        this.previewPhoto({
+                            name: photoData.name,
+                            path: photoData.path,
+                            thumbnail_url: photoData.thumbnail_url,
+                            url: photoData.url,
+                            size: photoData.size
+                        });
+                    },
+                    canSelect: (item) => {
+                        const firstPath = typeof files[0] === 'string' ? files[0] : (files[0]?.path || '');
+                        return item.dataset.path !== firstPath;
+                    },
+                    onSelectionChange: (selectedPaths) => {
+                        files.slice(1).forEach(f => {
+                            const p = typeof f === 'string' ? f : f.path;
+                            if (selectedPaths.has(p)) {
+                                this.selectedSourceDuplicates.add(p);
+                            } else {
+                                this.selectedSourceDuplicates.delete(p);
+                            }
+                        });
+                        const clearBtn = document.getElementById('btn-clear-source-selection');
+                        if (clearBtn) clearBtn.disabled = this.selectedSourceDuplicates.size === 0;
+                        this.updateSourceDuplicatesStats();
+                    }
+                });
+            } else {
+                this._sourceDupSelection.onSelectionChange = (selectedPaths) => {
                     files.slice(1).forEach(f => {
                         const p = typeof f === 'string' ? f : f.path;
                         if (selectedPaths.has(p)) {
@@ -1554,17 +1597,7 @@ class ImportDialog {
                     const clearBtn = document.getElementById('btn-clear-source-selection');
                     if (clearBtn) clearBtn.disabled = this.selectedSourceDuplicates.size === 0;
                     this.updateSourceDuplicatesStats();
-                }
-            });
-            // 恢复多选模式
-            if (this.selectedSourceDuplicates.size > 0) {
-                const hasSelected = files.slice(1).some(f => {
-                    const p = typeof f === 'string' ? f : f.path;
-                    return this.selectedSourceDuplicates.has(p);
-                });
-                if (hasSelected) {
-                    this._sourceDupSelection.enterSelectionMode();
-                }
+                };
             }
             this._sourceDupSelection.attachToGrid(grid, {
                 getPhoto: (item) => ({
@@ -1695,24 +1728,40 @@ class ImportDialog {
         container.innerHTML = '';
         container.appendChild(grid);
 
-        // 接入 PhotoSelection
+        // 接入 PhotoSelection（只创建一次，复用实例以保留选中状态）
         if (window.PhotoSelection) {
-            if (this._targetDupSelection) {
-                this._targetDupSelection.exitSelectionMode();
-            }
-            this._targetDupSelection = new PhotoSelection({
-                onPreview: (photoData) => {
-                    this.previewPhoto({
-                        name: photoData.name,
-                        path: photoData.path,
-                        thumbnail_url: photoData.thumbnail_url,
-                        url: photoData.url,
-                        size: photoData.size
-                    });
-                },
-                onSelectionChange: (selectedPaths) => {
-                    // 同步到 selectedDuplicatePhotos
-                    // 只更新本次渲染的文件路径，保留其他已选
+            if (!this._targetDupSelection) {
+                // 只在首次创建 PhotoSelection
+                this._targetDupSelection = new PhotoSelection({
+                    onPreview: (photoData) => {
+                        this.previewPhoto({
+                            name: photoData.name,
+                            path: photoData.path,
+                            thumbnail_url: photoData.thumbnail_url,
+                            url: photoData.url,
+                            size: photoData.size
+                        });
+                    },
+                    onSelectionChange: (selectedPaths) => {
+                        // 同步到 selectedDuplicatePhotos
+                        // 只更新本次渲染的文件路径，保留其他已选
+                        sortedFiles.forEach(f => {
+                            const p = typeof f === 'string' ? f : f.path;
+                            if (selectedPaths.has(p)) {
+                                this.selectedDuplicatePhotos.add(p);
+                            } else {
+                                this.selectedDuplicatePhotos.delete(p);
+                            }
+                        });
+                        // 更新删除按钮状态
+                        const clearBtn = document.getElementById('btn-clear-selection');
+                        if (clearBtn) clearBtn.disabled = this.selectedDuplicatePhotos.size === 0;
+                        this.updateDuplicatesStats();
+                    }
+                });
+            } else {
+                // 复用已有实例，只需更新 onSelectionChange 回调（闭包引用最新的 sortedFiles）
+                this._targetDupSelection.onSelectionChange = (selectedPaths) => {
                     sortedFiles.forEach(f => {
                         const p = typeof f === 'string' ? f : f.path;
                         if (selectedPaths.has(p)) {
@@ -1721,21 +1770,10 @@ class ImportDialog {
                             this.selectedDuplicatePhotos.delete(p);
                         }
                     });
-                    // 更新删除按钮状态
                     const clearBtn = document.getElementById('btn-clear-selection');
                     if (clearBtn) clearBtn.disabled = this.selectedDuplicatePhotos.size === 0;
                     this.updateDuplicatesStats();
-                }
-            });
-            // 恢复多选模式并标记已选中的项
-            if (this.selectedDuplicatePhotos.size > 0) {
-                const hasSelected = sortedFiles.some(f => {
-                    const p = typeof f === 'string' ? f : f.path;
-                    return this.selectedDuplicatePhotos.has(p);
-                });
-                if (hasSelected) {
-                    this._targetDupSelection.enterSelectionMode();
-                }
+                };
             }
             this._targetDupSelection.attachToGrid(grid, {
                 getPhoto: (item) => ({
@@ -2031,18 +2069,18 @@ class ImportDialog {
 
         const close = () => {
             modeDialog.style.display = 'none';
-            copyBtn.removeEventListener('click', onCopy);
-            moveBtn.removeEventListener('click', onMove);
-            cancelBtn.removeEventListener('click', onCancel);
+            if (copyBtn) copyBtn.removeEventListener('click', onCopy);
+            if (moveBtn) moveBtn.removeEventListener('click', onMove);
+            if (cancelBtn) cancelBtn.removeEventListener('click', onCancel);
         };
 
         const onCopy = () => { close(); this._executeImport('copy'); };
         const onMove = () => { close(); this._executeImport('move'); };
         const onCancel = () => { close(); };
 
-        copyBtn.addEventListener('click', onCopy);
-        moveBtn.addEventListener('click', onMove);
-        cancelBtn.addEventListener('click', onCancel);
+        if (copyBtn) copyBtn.addEventListener('click', onCopy);
+        if (moveBtn) moveBtn.addEventListener('click', onMove);
+        if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
 
         // ESC 键关闭
         const onKey = (e) => {
