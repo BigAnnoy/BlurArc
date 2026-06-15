@@ -1210,10 +1210,11 @@ def _perform_import_check(source_path: Path, progress_callback=None):
     candidate_files_for_md5 = [file for group in candidate_groups for file in group]
     total_candidate_files = len(candidate_files_for_md5)
 
-    if candidate_files_for_md5:
-        import concurrent.futures
-        max_workers = max(1, os.cpu_count() - 1)
+    # 并行计算需要的模块和参数（提前准备，避免后续阶段未定义）
+    import concurrent.futures
+    max_workers = max(1, os.cpu_count() - 1)
 
+    if candidate_files_for_md5:
         def _compute_file_md5(file):
             """计算单个文件的 MD5，返回 (file, md5_hash)"""
             file_path = Path(file['path'])
