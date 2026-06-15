@@ -1081,7 +1081,10 @@ def _set_import_check_task(task_id, **kwargs):
 
 
 def _perform_import_check(source_path: Path, progress_callback=None):
-    """执行导入路径检查，支持进度回调"""
+    """执行导入路径检查，支持进度回调
+
+    性能优化：在扫描时一次性收集 size/mtime/EXIF，避免后续重复调用
+    """
     # 统计源目录中的媒体文件（使用 constants 模块）
     MEDIA_FORMATS = _MEDIA_FORMATS
 
@@ -1093,63 +1096,16 @@ def _perform_import_check(source_path: Path, progress_callback=None):
     media_files = []
     total_size = 0
 
-    # 阶段1：扫描源目录（0% -> 45%）
+    # 阶段1：扫描源目录并一次性收集所有信息（0% -> 50%）
     emit(0, 'scanning', '开始扫描源目录...')
-    all_files_total = 0
-    for _, _, files in os.walk(source_path):
-        all_files_total += len(files)
+
+    # 先统计文件总数（用于进度显示）
+    all_files_total = sum(len(files) for _, _, files in os.walk(source_path))
     scanned_files = 0
 
-    for root, _, files in os.walk(source_path):
-        for filename in files:
-            scanned_files += 1
-            file = Path(root) / filename
-
-            if file.suffix.lower() in MEDIA_FORMATS:
-                file_size = file.stat().st_size
-                total_size += file_size
-                media_files.append({
-                    'name': file.name,
-                    'path': str(file),
-                    'size': file_size,
-                    'thumbnail_url': f'/api/album/thumbnail?path={urllib.parse.quote(str(file))}'
-                })
-
-            if all_files_total > 0:
-                stage_progress = int((scanned_files / all_files_total) * 45)
-                emit(stage_progress, 'scanning', f'扫描中... {scanned_files}/{all_files_total}')
-
-    # 阶段2：按日期分组（45% -> 55%）
-    emit(45, 'grouping', '按日期整理预览...')
-    date_folders = []
-    if media_files:
-        from collections import defaultdict
-        files_by_date = defaultdict(list)
-        total_media = len(media_files)
-        for idx, file in enumerate(media_files, 1):
-            file_path = Path(file['path'])
-            try:
-                modified_time = file_path.stat().st_mtime
-                date_str = datetime.fromtimestamp(modified_time).strftime('%Y-%m')
-                files_by_date[date_str].append(file)
-            except Exception:
-                continue
-            stage_progress = 45 + int((idx / total_media) * 10)
-            emit(stage_progress, 'grouping', f'整理日期... {idx}/{total_media}')
-
-        for date_str, files in sorted(files_by_date.items(), reverse=True):
-            date_folders.append({
-                'name': date_str,
-                'count': len(files),
-                'size': sum(f['size'] for f in files),
-                'files': sorted(files, key=lambda x: x['name'])
-            })
-
-    # 计算文件MD5哈希值的函数（使用 utils.compute_md5，统一 1MB chunk）
-    calculate_md5 = _compute_md5
-
-    def _get_exif_datetime(path):
-        """读取 EXIF 拍摄时间，失败返回 None。优先 DateTimeOriginal，回退 DateTime。"""
+    # EXIF 读取函数（提前定义，避免重复定义）
+    def _get_exif_datetime_fast(path):
+        """读取 EXIF 拍摄时间，失败返回 None"""
         try:
             from PIL import Image, ExifTags
             with Image.open(path) as img:
@@ -1165,9 +1121,68 @@ def _perform_import_check(source_path: Path, progress_callback=None):
             pass
         return None
 
+    # 单次遍历：收集 size, mtime, exif_datetime
+    for root, _, files in os.walk(source_path):
+        for filename in files:
+            scanned_files += 1
+            file_path = Path(root) / filename
+
+            if file_path.suffix.lower() in MEDIA_FORMATS:
+                try:
+                    stat_info = file_path.stat()
+                    file_size = stat_info.st_size
+                    file_mtime = stat_info.st_mtime
+                except OSError:
+                    continue
+
+                # 一次性读取 EXIF（用于后续重复检测预筛）
+                exif_datetime = _get_exif_datetime_fast(file_path)
+
+                total_size += file_size
+                media_files.append({
+                    'name': file_path.name,
+                    'path': str(file_path),
+                    'size': file_size,
+                    'mtime': file_mtime,           # 用于日期分组
+                    'exif_datetime': exif_datetime, # 用于重复检测预筛
+                    'thumbnail_url': f'/api/album/thumbnail?path={urllib.parse.quote(str(file_path))}'
+                })
+
+            if all_files_total > 0:
+                stage_progress = int((scanned_files / all_files_total) * 50)
+                emit(stage_progress, 'scanning', f'扫描中... {scanned_files}/{all_files_total}')
+
+    # 阶段2：按日期分组（50% -> 55%）—— 使用缓存的 mtime
+    emit(50, 'grouping', '按日期整理预览...')
+    date_folders = []
+    if media_files:
+        from collections import defaultdict
+        files_by_date = defaultdict(list)
+        total_media = len(media_files)
+        for idx, file in enumerate(media_files, 1):
+            # 使用缓存的 mtime，不再调用 stat()
+            mtime = file.get('mtime')
+            if mtime:
+                date_str = datetime.fromtimestamp(mtime).strftime('%Y-%m')
+                files_by_date[date_str].append(file)
+            stage_progress = 50 + int((idx / total_media) * 5)
+            emit(stage_progress, 'grouping', f'整理日期... {idx}/{total_media}')
+
+        for date_str, files in sorted(files_by_date.items(), reverse=True):
+            date_folders.append({
+                'name': date_str,
+                'count': len(files),
+                'size': sum(f['size'] for f in files),
+                'files': sorted(files, key=lambda x: x['name'])
+            })
+
+    # 计算文件MD5哈希值的函数（使用 utils.compute_md5，统一 1MB chunk）
+    calculate_md5 = _compute_md5
+
     # 阶段3：源重复检测（55% -> 75%）—— 两阶段预筛
     # 阶段3a（55%~62%）：建预筛索引，用 (size, exif_time) 作为轻量特征
     # 阶段3b（62%~75%）：只对特征相同的文件组计算 MD5
+    # 性能优化：使用扫描时缓存的 size 和 exif_datetime，不再重复调用 stat/EXIF
 
     emit(55, 'source_duplicates', '建立源文件预筛索引...')
     source_duplicates = {}
@@ -1176,14 +1191,11 @@ def _perform_import_check(source_path: Path, progress_callback=None):
     source_prescan = {}  # key: (size, exif_str|None), value: [file_obj]
     total_prescan = len(media_files)
     for idx, file in enumerate(media_files, 1):
-        try:
-            size = Path(file['path']).stat().st_size
-        except OSError:
+        # 使用缓存的 size 和 exif_datetime
+        size = file.get('size')
+        exif_str = file.get('exif_datetime')
+        if size is None:
             continue
-        try:
-            exif_str = _get_exif_datetime(Path(file['path']))
-        except Exception:
-            exif_str = None  # EXIF read failed, use None as fallback
         key = (size, exif_str)
         if key not in source_prescan:
             source_prescan[key] = []
@@ -1218,6 +1230,7 @@ def _perform_import_check(source_path: Path, progress_callback=None):
     # 阶段4a（75%~82%）：建预筛索引，用 (size, exif_time) 作为轻量特征，不算 MD5
     # 阶段4b（82%~90%）：对预筛候选集计算相册文件 MD5
     # 阶段4c（90%~98%）：遍历源文件，命中预筛才算 MD5，精确比对
+    # 性能优化：使用缓存的 size 和 exif_datetime，避免重复调用
 
     emit(75, 'target_duplicates', '建立预筛索引...')
     target_duplicates = {}
@@ -1239,7 +1252,7 @@ def _perform_import_check(source_path: Path, progress_callback=None):
                 size = file.stat().st_size
             except OSError:
                 continue
-            exif_str = _get_exif_datetime(file)
+            exif_str = _get_exif_datetime_fast(file)
             key = (size, exif_str)
             if key not in prescan_index:
                 prescan_index[key] = []
@@ -1250,14 +1263,13 @@ def _perform_import_check(source_path: Path, progress_callback=None):
 
         # --- 阶段4b：收集候选集并计算相册侧 MD5 ---
         # 先用源文件特征查预筛索引，找出可能重复的相册文件候选集
+        # 性能优化：使用缓存的 size 和 exif_datetime
         source_keys = set()
         for file in media_files:
-            try:
-                size = Path(file['path']).stat().st_size
-            except OSError:
-                continue
-            exif_str = _get_exif_datetime(Path(file['path']))
-            source_keys.add((size, exif_str))
+            size = file.get('size')
+            exif_str = file.get('exif_datetime')
+            if size is not None:
+                source_keys.add((size, exif_str))
 
         # 只对与源文件特征匹配的相册文件计算 MD5
         candidate_target_files = []
@@ -1290,19 +1302,19 @@ def _perform_import_check(source_path: Path, progress_callback=None):
                 emit(90, 'target_duplicates', '候选集为空，跳过 MD5 计算')
 
         # --- 阶段4c：遍历源文件，命中候选集才算 MD5 比对 ---
+        # 性能优化：使用缓存的 size 和 exif_datetime
         compare_targets = media_files
         total_compare = len(compare_targets)
         for idx, file in enumerate(compare_targets, 1):
-            file_path = Path(file['path'])
-            # 先做轻量预筛
-            try:
-                size = file_path.stat().st_size
-            except OSError:
+            # 使用缓存的 size 和 exif_datetime
+            size = file.get('size')
+            exif_str = file.get('exif_datetime')
+            if size is None:
                 continue
-            exif_str = _get_exif_datetime(file_path)
             key = (size, exif_str)
             if key in prescan_index:
                 # 命中预筛，才算 MD5
+                file_path = Path(file['path'])
                 md5_hash = calculate_md5(file_path)
                 if md5_hash and md5_hash in target_md5_to_files:
                     if md5_hash not in target_duplicates:
