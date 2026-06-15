@@ -1148,34 +1148,6 @@ def _perform_import_check(source_path: Path, progress_callback=None):
     # 计算文件MD5哈希值的函数（使用 utils.compute_md5，统一 1MB chunk）
     calculate_md5 = _compute_md5
 
-    # 阶段3：源重复检测（55% -> 75%）
-    emit(55, 'source_duplicates', '检测源目录重复文件...')
-    source_duplicates = {}
-    md5_to_files = {}
-    source_md5_targets = media_files
-    total_source_md5 = len(source_md5_targets)
-
-    for idx, file in enumerate(source_md5_targets, 1):
-        file_path = Path(file['path'])
-        md5_hash = calculate_md5(file_path)
-        if md5_hash:
-            if md5_hash in md5_to_files:
-                md5_to_files[md5_hash].append(file)
-            else:
-                md5_to_files[md5_hash] = [file]
-        if total_source_md5 > 0:
-            stage_progress = 55 + int((idx / total_source_md5) * 20)
-            emit(stage_progress, 'source_duplicates', f'源重复检测... {idx}/{total_source_md5}')
-
-    for md5_hash, files in md5_to_files.items():
-        if len(files) > 1:
-            source_duplicates[md5_hash] = files
-
-    # 阶段4：目标重复检测（75% -> 98%）—— 两阶段去重
-    # 阶段4a（75%~82%）：建预筛索引，用 (size, exif_time) 作为轻量特征，不算 MD5
-    # 阶段4b（82%~90%）：对预筛候选集计算相册文件 MD5
-    # 阶段4c（90%~98%）：遍历源文件，命中预筛才算 MD5，精确比对
-
     def _get_exif_datetime(path):
         """读取 EXIF 拍摄时间，失败返回 None。优先 DateTimeOriginal，回退 DateTime。"""
         try:
@@ -1192,6 +1164,60 @@ def _perform_import_check(source_path: Path, progress_callback=None):
         except Exception:
             pass
         return None
+
+    # 阶段3：源重复检测（55% -> 75%）—— 两阶段预筛
+    # 阶段3a（55%~62%）：建预筛索引，用 (size, exif_time) 作为轻量特征
+    # 阶段3b（62%~75%）：只对特征相同的文件组计算 MD5
+
+    emit(55, 'source_duplicates', '建立源文件预筛索引...')
+    source_duplicates = {}
+    md5_to_files = {}
+
+    source_prescan = {}  # key: (size, exif_str|None), value: [file_obj]
+    total_prescan = len(media_files)
+    for idx, file in enumerate(media_files, 1):
+        try:
+            size = Path(file['path']).stat().st_size
+        except OSError:
+            continue
+        try:
+            exif_str = _get_exif_datetime(Path(file['path']))
+        except Exception:
+            exif_str = None  # EXIF read failed, use None as fallback
+        key = (size, exif_str)
+        if key not in source_prescan:
+            source_prescan[key] = []
+        source_prescan[key].append(file)
+        if total_prescan > 0:
+            stage_progress = 55 + int((idx / total_prescan) * 7)
+            emit(stage_progress, 'source_duplicates', f'建立预筛索引... {idx}/{total_prescan}')
+
+    # 只对特征相同的文件组计算 MD5（可能有重复）
+    candidate_groups = [files for files in source_prescan.values() if len(files) > 1]
+    total_candidate_files = sum(len(files) for files in candidate_groups)
+    md5_computed = 0
+
+    for group in candidate_groups:
+        for file in group:
+            file_path = Path(file['path'])
+            md5_hash = calculate_md5(file_path)
+            if md5_hash:
+                if md5_hash not in md5_to_files:
+                    md5_to_files[md5_hash] = []
+                md5_to_files[md5_hash].append(file)
+            md5_computed += 1
+            if total_candidate_files > 0:
+                stage_progress = 62 + int((md5_computed / total_candidate_files) * 13)
+                emit(stage_progress, 'source_duplicates', f'候选组 MD5 计算... {md5_computed}/{total_candidate_files}')
+
+    for md5_hash, files in md5_to_files.items():
+        if len(files) > 1:
+            source_duplicates[md5_hash] = files
+
+    # 阶段4：目标重复检测（75% -> 98%）—— 两阶段去重
+    # 阶段4a（75%~82%）：建预筛索引，用 (size, exif_time) 作为轻量特征，不算 MD5
+    # 阶段4b（82%~90%）：对预筛候选集计算相册文件 MD5
+    # 阶段4c（90%~98%）：遍历源文件，命中预筛才算 MD5，精确比对
 
     emit(75, 'target_duplicates', '建立预筛索引...')
     target_duplicates = {}
@@ -1583,6 +1609,7 @@ def delete_files():
 
         deleted = []
         failed = []
+        deleted_resolved_paths = []  # 记录成功删除文件的 resolved path，用于批量清理 MD5 记录
 
         for file_path in file_paths:
             try:
@@ -1621,11 +1648,15 @@ def delete_files():
                     failed.append({'path': file_path, 'error': '禁止删除相册根目录'})
                     continue
                 
+                skip_outer = False
                 for source_root in allowed_source_roots:
                     if path_resolved == source_root:
                         logger.warning(f"禁止删除源文件夹根目录: {file_path}")
                         failed.append({'path': file_path, 'error': '禁止删除源文件夹根目录'})
-                        continue
+                        skip_outer = True
+                        break
+                if skip_outer:
+                    continue
 
                 # 确保目标是文件而非目录
                 if path.is_dir():
@@ -1641,40 +1672,48 @@ def delete_files():
                 # 删除文件
                 path.unlink()
                 deleted.append(file_path)
+                deleted_resolved_paths.append(path_resolved)
                 logger.info(f"已删除文件: {file_path}")
-
-                # 同步清除该文件的 MD5 记录
-                if album_root:
-                    records_file = album_root / '.photo_organizer.json'
-                    if records_file.exists():
-                        try:
-                            import json as _json
-                            with open(records_file, 'r', encoding='utf-8') as f:
-                                raw = _json.load(f)
-                            # _save_target_records 写入的是 {version, records: {md5: path}, ...}
-                            # 需先取 records 子字段；旧格式（扁平 dict）直接是 {md5: path}
-                            records = raw.get('records', raw) if isinstance(raw, dict) else {}
-                            resolved_str = str(path.resolve())
-                            # records 结构: {md5: dest_path_str, ...}
-                            to_remove = [k for k, v in records.items() if isinstance(v, str) and str(Path(v).resolve()) == resolved_str]
-                            if to_remove:
-                                for k in to_remove:
-                                    del records[k]
-                                # 保持原始格式写回（嵌套 or 扁平）
-                                if 'records' in raw:
-                                    raw['records'] = records
-                                    out_data = raw
-                                else:
-                                    out_data = records
-                                with open(records_file, 'w', encoding='utf-8') as f:
-                                    _json.dump(out_data, f, ensure_ascii=False, indent=2)
-                                logger.info(f"已从 MD5 记录中移除 {len(to_remove)} 条: {file_path}")
-                        except Exception as e_rec:
-                            logger.warning(f"清除 MD5 记录失败 {file_path}: {e_rec}")
 
             except Exception as e:
                 logger.error(f"删除文件失败 {file_path}: {e}")
                 failed.append({'path': file_path, 'error': str(e)})
+        
+        # 批量清除 MD5 记录（只读取一次 JSON，批量修改，只写回一次）
+        if album_root and deleted_resolved_paths:
+            records_file = album_root / '.photo_organizer.json'
+            if records_file.exists():
+                try:
+                    import json as _json
+                    with open(records_file, 'r', encoding='utf-8') as f:
+                        raw = _json.load(f)
+                    # _save_target_records 写入的是 {version, records: {md5: path}, ...}
+                    # 需先取 records 子字段；旧格式（扁平 dict）直接是 {md5: path}
+                    records = raw.get('records', raw) if isinstance(raw, dict) else {}
+                    
+                    # 构建已删除文件的 resolved path 集合，用于快速匹配
+                    deleted_paths_set = set(str(p) for p in deleted_resolved_paths)
+                    
+                    # 批量清除匹配的记录
+                    to_remove = [
+                        k for k, v in records.items() 
+                        if isinstance(v, str) and str(Path(v).resolve()) in deleted_paths_set
+                    ]
+                    
+                    if to_remove:
+                        for k in to_remove:
+                            del records[k]
+                        # 保持原始格式写回（嵌套 or 扁平）
+                        if 'records' in raw:
+                            raw['records'] = records
+                            out_data = raw
+                        else:
+                            out_data = records
+                        with open(records_file, 'w', encoding='utf-8') as f:
+                            _json.dump(out_data, f, ensure_ascii=False, indent=2)
+                        logger.info(f"已从 MD5 记录中批量移除 {len(to_remove)} 条（共删除 {len(deleted)} 个文件）")
+                except Exception as e_rec:
+                    logger.warning(f"批量清除 MD5 记录失败: {e_rec}")
         
         return jsonify({
             'status': 'completed',
