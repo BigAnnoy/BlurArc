@@ -6,9 +6,28 @@
 import hashlib
 import logging
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+def get_file_fingerprint(path: Union[str, Path]) -> Optional[Tuple[int, float]]:
+    """获取文件快速指纹（大小 + 修改时间）
+
+    用于快速预筛，两个文件如果指纹不同则不可能内容相同。
+
+    Args:
+        path: 文件路径
+
+    Returns:
+        (文件大小, 修改时间戳) 元组，失败返回 None
+    """
+    try:
+        stat = Path(path).stat()
+        return (stat.st_size, stat.st_mtime)
+    except Exception as e:
+        logger.debug(f"获取文件指纹失败 [{path}]: {e}")
+        return None
 
 
 def compute_md5(path: Union[str, Path], chunk_size: int = 1024 * 1024) -> Optional[str]:

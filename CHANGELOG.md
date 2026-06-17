@@ -1,7 +1,52 @@
 # Changelog
 
-所有重要变更都记录在本文件中。  
+所有重要变更都记录在本文件中。
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+---
+
+## [0.5.0] — 2026-06-16
+
+### 变更
+- **项目重命名**：从 FrameAlbum 更名为 Blur Arc，统一品牌标识
+- **版本号标准化**：所有配置文件、文档、安装包统一为 v0.5.0
+- **文档重构**：README.md 重写，更简洁专业
+
+### 修复
+- 修复前端构建后仍显示旧名称的问题
+- 修复多处版本号不一致问题
+
+---
+
+## [0.4.0] — 2026-06-16
+
+### 新增
+- **FFmpeg 8.1.1 集成**：视频缩略图生成、元数据提取功能完整可用
+- **MD5 缓存复用**：一次导入中每个文件只计算一次 MD5，结果缓存复用
+- **并行源文件去重**：使用 ThreadPoolExecutor 并行计算 MD5
+- **两阶段预筛优化**：按文件大小分组，只对大小相同的文件组计算 MD5
+- **快速文件指纹**：新增 `get_file_fingerprint()` 函数，用于快速预筛
+- **前端架构升级**：React 19 + TypeScript + Vite + Tailwind CSS
+
+### 性能提升
+| 场景 | 优化前 | 优化后 |
+|------|--------|--------|
+| 1000 文件无重复 | 全算 MD5 | 0 个算 MD5 |
+| 源文件去重 | 串行计算 | 并行计算 |
+| 同文件 MD5 | 最多 3 次 | 只 1 次 |
+
+### 变更
+- 前端从原生 JS 重构为 React + TypeScript
+- `_load_target_records()` 返回值改为 `Tuple[Dict, Dict]`，增加文件大小索引
+- `_import_file()` 增加 `md5_cache` 参数支持缓存复用
+- `utils.py` 新增 `get_file_fingerprint()` 函数
+
+### 文档
+- 新增 `项目分析报告.md`
+- 新增 `docs/API_REFERENCE.md`
+- 新增 `docs/DATABASE_SCHEMA.md`
+- 新增 `docs/DEVELOPMENT_GUIDE.md`
+- 更新 `README.md` 版本信息和功能说明
 
 ---
 

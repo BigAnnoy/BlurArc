@@ -7,13 +7,18 @@ import { SettingsDialog } from './components/dialogs/SettingsDialog';
 import { PhotoPreview } from './components/dialogs/PhotoPreview';
 import { DeleteConfirmDialog } from './components/dialogs/DeleteConfirmDialog';
 import { ToastProvider, useToast } from './components/common/Toast';
+import { I18nProvider, useI18n } from './contexts/I18nContext';
+import { WelcomeScreen } from './components/WelcomeScreen';
 import { api } from './services/api';
-import type { Photo, YearNode } from './types';
+import { formatSize } from './utils/format';
+import type { Photo, YearNode, DirNode } from './types';
 
 interface AppState {
   initialized: boolean;
+  isFirstRun: boolean;
   stats: { total: number; videos: number; size: string } | null;
   years: YearNode[];
+  rootDir: DirNode | null;
   selectedPath: string | null;
   selectedTitle: string;
   photos: Photo[];
@@ -24,10 +29,13 @@ interface AppState {
 
 function AppContent() {
   const { showToast } = useToast();
+  const { t } = useI18n();
   const [state, setState] = useState<AppState>({
     initialized: false,
+    isFirstRun: false,
     stats: null,
     years: [],
+    rootDir: null,
     selectedPath: null,
     selectedTitle: '',
     photos: [],
@@ -47,21 +55,30 @@ function AppContent() {
     const init = async () => {
       try {
         await api.health();
+        
+        // Check if this is first run
+        const settings = await api.getSettings();
+        if (!settings.album_path) {
+          setState((prev) => ({ ...prev, isFirstRun: true, loading: false }));
+          return;
+        }
+        
         const [statsRes, treeRes] = await Promise.all([
           api.getStats().catch(() => null),
-          api.getTree().catch(() => ({ tree: [] })),
+          api.getTree().catch(() => ({ tree: [], rootDir: null })),
         ]);
 
         setState((prev) => ({
           ...prev,
           initialized: true,
-          stats: statsRes ? { total: statsRes.total_files, videos: statsRes.video_count, size: `${(statsRes.total_size_mb / 1024).toFixed(1)} GB` } : null,
+          stats: statsRes ? { total: statsRes.total_files, videos: statsRes.video_count, size: formatSize(statsRes.total_size_mb) } : null,
           years: treeRes.tree || [],
+          rootDir: treeRes.rootDir || null,
           loading: false,
         }));
       } catch (error) {
         console.error('Failed to initialize:', error);
-        showToast('连接服务器失败，请重启应用', 'error');
+        showToast(t('app.connectionFailed'), 'error');
         setState((prev) => ({ ...prev, loading: false }));
       }
     };
@@ -88,16 +105,27 @@ function AppContent() {
         loading: false,
       }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : '加载照片失败';
+      const message = error instanceof Error ? error.message : t('app.loadPhotosFailed');
       showToast(message, 'error');
       setState((prev) => ({ ...prev, photos: [], loading: false }));
     }
   }, [showToast]);
 
   const handleSelectPath = useCallback((path: string) => {
-    const parts = path.split('/');
-    const title = parts.length >= 2 ? `${parts[0]}年${parseInt(parts[1])}月` : path;
-    loadPhotos(path, title);
+    // 从路径提取目录名
+    const parts = path.split(/[\\/]/);
+    const dirName = parts[parts.length - 1] || path;
+    
+    // 检查是否是 YYYY-MM 格式
+    const match = dirName.match(/^(\d{4})-(\d{2})$/);
+    if (match) {
+      const year = match[1];
+      const month = parseInt(match[2]);
+      const title = `${year}年${month}月`;
+      loadPhotos(path, title);
+    } else {
+      loadPhotos(path, dirName);
+    }
   }, [loadPhotos]);
 
   const handlePhotoClick = useCallback((photo: Photo) => {
@@ -148,23 +176,56 @@ function AppContent() {
 
   const handleDeleteComplete = useCallback(() => {
     setState((prev) => ({ ...prev, selectionMode: false, selectedIds: new Set() }));
-    showToast('删除成功', 'success');
+    showToast(t('delete.success'), 'success');
     if (state.selectedPath) {
       loadPhotos(state.selectedPath, state.selectedTitle);
     }
-  }, [state.selectedPath, state.selectedTitle, loadPhotos, showToast]);
+  }, [state.selectedPath, state.selectedTitle, loadPhotos, showToast, t]);
 
-  const refreshStats = useCallback(async () => {
+  // Reload app data after first run setup
+  const handleWelcomeComplete = useCallback(async () => {
     try {
-      const res = await api.getStats();
-      setState((prev) => ({
-        ...prev,
-        stats: { total: res.total_files, videos: res.video_count, size: `${(res.total_size_mb / 1024).toFixed(1)} GB` },
-      }));
+      const settings = await api.getSettings();
+      if (settings.album_path) {
+        const [statsRes, treeRes] = await Promise.all([
+          api.getStats().catch(() => null),
+          api.getTree().catch(() => ({ tree: [], rootDir: null })),
+        ]);
+        setState((prev) => ({
+          ...prev,
+          isFirstRun: false,
+          initialized: true,
+          stats: statsRes ? { total: statsRes.total_files, videos: statsRes.video_count, size: formatSize(statsRes.total_size_mb) } : null,
+          years: treeRes.tree || [],
+          rootDir: treeRes.rootDir || null,
+        }));
+      }
     } catch (error) {
-      console.error('Failed to refresh stats:', error);
+      console.error('Failed to reload after welcome:', error);
     }
   }, []);
+
+  // Refresh all app data (stats, tree, and current photos)
+  const refreshAppData = useCallback(async () => {
+    try {
+      const [statsRes, treeRes] = await Promise.all([
+        api.getStats().catch(() => null),
+        api.getTree().catch(() => ({ tree: [], rootDir: null })),
+      ]);
+      setState((prev) => ({
+        ...prev,
+        stats: statsRes ? { total: statsRes.total_files, videos: statsRes.video_count, size: formatSize(statsRes.total_size_mb) } : null,
+        years: treeRes.tree || [],
+        rootDir: treeRes.rootDir || null,
+      }));
+      // Reload current photos if a path is selected
+      if (state.selectedPath) {
+        loadPhotos(state.selectedPath, state.selectedTitle);
+      }
+    } catch (error) {
+      console.error('Failed to refresh app data:', error);
+    }
+  }, [state.selectedPath, state.selectedTitle, loadPhotos]);
 
   if (!state.initialized && state.loading) {
     return (
@@ -174,6 +235,11 @@ function AppContent() {
     );
   }
 
+  // Show welcome screen on first run
+  if (state.isFirstRun) {
+    return <WelcomeScreen onComplete={handleWelcomeComplete} />;
+  }
+
   return (
     <div className="flex flex-col w-full h-full">
       <Header onSettings={handleSettings} />
@@ -181,12 +247,13 @@ function AppContent() {
         <Sidebar
           stats={state.stats}
           years={state.years}
+          rootDir={state.rootDir}
           selectedPath={state.selectedPath}
           onSelectPath={handleSelectPath}
           onImport={handleImport}
         />
         <MainContent
-          title={state.selectedTitle || '选择目录开始浏览'}
+          title={state.selectedTitle || t('main.selectToBrowse')}
           count={state.photos.length}
           photos={state.photos}
           loading={state.loading}
@@ -204,11 +271,10 @@ function AppContent() {
         isOpen={importOpen}
         onClose={() => setImportOpen(false)}
         onComplete={() => {
-          refreshStats();
-          if (state.selectedPath) loadPhotos(state.selectedPath, state.selectedTitle);
+          refreshAppData();
         }}
       />
-      <SettingsDialog isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsDialog isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} onDataRefresh={refreshAppData} />
       <PhotoPreview
         isOpen={!!previewPhoto}
         onClose={() => setPreviewPhoto(null)}
@@ -228,9 +294,11 @@ function AppContent() {
 
 export function App() {
   return (
-    <ToastProvider>
-      <AppContent />
-    </ToastProvider>
+    <I18nProvider>
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
+    </I18nProvider>
   );
 }
 

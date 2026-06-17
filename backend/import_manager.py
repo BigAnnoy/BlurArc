@@ -26,7 +26,7 @@ from .database import SessionLocal, Photo, ImportHistory
 
 # 共享常量和工具
 from .constants import MEDIA_FORMATS, VIDEO_FORMATS
-from .utils import compute_md5
+from .utils import compute_md5, get_file_fingerprint
 
 # 日志配置
 logger = logging.getLogger(__name__)
@@ -236,11 +236,11 @@ class ImportManager:
         with self.lock:
             return self.cancel_flags.get(import_id, False)
     
-    def start_import_async(self, import_id: str, source_path: str, target_path: str, import_mode: str = 'copy', skip_source_duplicates: bool = False, skip_target_duplicates: bool = False):
+    def start_import_async(self, import_id: str, source_path: str, target_path: str, import_mode: str = 'copy'):
         """后台启动导入任务"""
         thread = threading.Thread(
             target=self._do_import,
-            args=(import_id, source_path, target_path, import_mode, skip_source_duplicates, skip_target_duplicates),
+            args=(import_id, source_path, target_path, import_mode),
             daemon=True  # 守护线程：窗口关闭后不阻止进程退出
         )
         thread.start()
@@ -248,7 +248,7 @@ class ImportManager:
         with self.lock:
             self.import_threads[import_id] = thread
     
-    def _do_import(self, import_id: str, source_path: str, target_path: str, import_mode: str = 'copy', skip_source_duplicates: bool = False, skip_target_duplicates: bool = False):
+    def _do_import(self, import_id: str, source_path: str, target_path: str, import_mode: str = 'copy'):
         """执行导入（后台线程，优化版）
         
         优化点：
@@ -256,7 +256,7 @@ class ImportManager:
         2. 批量加载文件大小信息
         3. 减少循环内的方法调用
         """
-        logger.info(f"[_do_import] 导入任务开始: {import_id}, skip_source_duplicates={skip_source_duplicates}, skip_target_duplicates={skip_target_duplicates}")
+        logger.info(f"[_do_import] 导入任务开始: {import_id}")
         progress = self.get_progress(import_id)
         if not progress:
             return
@@ -305,8 +305,10 @@ class ImportManager:
             media_files = self._scan_source(source_path, ignore_last_scan=True)
             
             if not media_files:
-                progress.status = ImportStatus.COMPLETED
+                # 语义修正：空源目录是失败场景，不应报"完成"（COMPLETED 会让前端弹"导入成功"toast）
+                progress.status = ImportStatus.FAILED
                 progress.error_message = "源目录中没有媒体文件"
+                logger.info(f"导入中止：源目录无媒体文件 {source_path}")
                 return
             
             # 保存原始扫描到的文件总数（用于统计）
@@ -319,40 +321,11 @@ class ImportManager:
                     logger.debug(f"获取文件大小失败 {file_path}: {e}")
                     original_total_size += 0
             
-            # 跳过源文件夹中重复的文件
-            if skip_source_duplicates:
-                logger.info(f"开始检测源文件夹中的重复文件，共 {len(media_files)} 个文件")
-                # 计算所有文件的 MD5 哈希值
-                md5_to_files = {}
-                for file_path in media_files:
-                    try:
-                        file_md5 = self._compute_md5(file_path)
-                        if file_md5:
-                            if file_md5 not in md5_to_files:
-                                md5_to_files[file_md5] = []
-                            md5_to_files[file_md5].append(file_path)
-                    except Exception as e:
-                        logger.error(f"计算文件 MD5 失败 {file_path}: {e}")
-                
-                # 过滤出重复的文件组（只保留每个组的第一个文件）
-                unique_files = []
-                skipped_duplicates = 0
-                for md5, files in md5_to_files.items():
-                    if len(files) > 1:
-                        # 保留第一个文件，跳过其他重复文件
-                        unique_files.append(files[0])
-                        skipped_duplicates += len(files) - 1
-                        logger.debug(f"跳过 {len(files) - 1} 个重复文件，MD5: {md5}")
-                    else:
-                        # 只有一个文件，直接添加
-                        unique_files.append(files[0])
-                
-                if skipped_duplicates > 0:
-                    logger.info(f"检测到 {skipped_duplicates} 个源重复文件，已跳过")
-                    media_files = unique_files
-                    progress.skipped_files += skipped_duplicates
-            
-            # 使用原始扫描的文件总数作为总文件数（包含被跳过的源重复文件）
+            # MD5 缓存：一次导入中每个文件只计算一次 MD5，后续复用
+            # 格式: {file_path_str: md5_hash}
+            md5_cache: Dict[str, Optional[str]] = {}
+
+            # 使用原始扫描的文件总数作为总文件数
             progress.total_files = original_total_files
             progress.total_size = original_total_size
             
@@ -375,21 +348,12 @@ class ImportManager:
             
             # 加载目标目录的 MD5 记录
             progress.status = ImportStatus.PROCESSING
-            target_records = self._load_target_records(target_path)
-            
-            # 如果启用了跳过相册重复，预计算相册中已存在的 MD5 集合
-            existing_md5s = set()
-            logger.info(f"[_do_import] skip_target_duplicates={skip_target_duplicates}, target_records数量={len(target_records)}")
-            if skip_target_duplicates:
-                logger.info(f"开始检测相册中已存在的文件，用于跳过重复")
-                # target_records 是 {md5_hash: path} 格式的字典
-                for md5_hash, file_path in target_records.items():
-                    if md5_hash:
-                        existing_md5s.add(md5_hash)
-                logger.info(f"相册中已有 {len(existing_md5s)} 个不同的MD5，前5个: {list(existing_md5s)[:5]}")
+            target_records, target_size_to_md5s = self._load_target_records(target_path)
             
             # 使用线程池并行处理文件导入（保留1个核心给系统）
-            max_workers = max(1, os.cpu_count() - 1)
+            # 注：os.cpu_count() 在某些受限环境下返回 None，需要兜底
+            cpu_count = os.cpu_count() or 2
+            max_workers = max(1, cpu_count - 1)
             logger.info(f"使用 {max_workers} 个线程并行导入文件")
             
             # file_lock：保护 target_records 读写 + 路径解析 + 文件复制的原子性
@@ -400,33 +364,25 @@ class ImportManager:
                 # 检查取消标志
                 if self._should_cancel(import_id):
                     return False
-                
+
                 # 暂停等待：若 pause_event 未 set，阻塞在此直到 resume 或 cancel
                 pause_event = self.pause_events.get(import_id)
                 if pause_event:
                     pause_event.wait()
-                
+
                 # 再次检查取消（resume 后可能已被取消）
                 if self._should_cancel(import_id):
                     return False
-                
+
                 try:
                     # 更新当前处理的文件名（ImportProgress 内部已有 _lock，线程安全）
                     progress.update_current_file(file_path.name)
-                    
-                    # 如果启用了跳过相册重复，检查文件是否已存在
-                    if skip_target_duplicates and existing_md5s:
-                        file_md5 = self._compute_md5(file_path)
-                        logger.debug(f"[_do_import] 检查文件: {file_path.name}, MD5={file_md5}, 是否在existing_md5s中={file_md5 in existing_md5s if file_md5 else 'N/A'}")
-                        if file_md5 and file_md5 in existing_md5s:
-                            # 文件已存在于相册中，跳过（统一计入 skipped_files）
-                            file_size = file_path.stat().st_size
-                            progress.skip_file(file_path, file_size)
-                            logger.info(f"跳过相册重复文件: {file_path.name}, MD5={file_md5}")
-                            return True
-                    
-                    # 执行导入逻辑（传入 file_lock 保证原子性）
-                    self._import_file(file_path, target_path, target_records, progress, file_lock, import_mode)
+
+                    file_path_str = str(file_path)
+                    file_size = file_path.stat().st_size
+
+                    # 执行导入逻辑（传入 file_lock 和 md5_cache 保证原子性和缓存复用）
+                    self._import_file(file_path, target_path, target_records, progress, file_lock, import_mode, md5_cache)
                     return True
                 except Exception as e:
                     logger.error(f"导入文件失败: {file_path} - {e}")
@@ -457,9 +413,17 @@ class ImportManager:
             
             # 保存最终的 MD5 记录
             self._save_target_records(target_path, target_records)
-            
-            if progress.status not in (ImportStatus.CANCELLED, ImportStatus.PAUSED):
-                progress.status = ImportStatus.COMPLETED
+
+            # 状态收尾：必须先检查 cancel_flag（cancel_import 不直接改 status，
+            # 只设标志位并唤醒 pause 事件，让工作线程自行退出）
+            if self._should_cancel(import_id):
+                progress.update_status(ImportStatus.CANCELLED)
+                logger.info(f"导入已取消: {progress.processed_files} 个文件, 失败 {progress.failed_files} 个")
+            elif progress.status == ImportStatus.PAUSED:
+                # 用户暂停后未继续，保留 PAUSED 状态以便用户后续恢复
+                logger.info(f"导入已暂停: {progress.processed_files} 个文件已处理")
+            else:
+                progress.update_status(ImportStatus.COMPLETED)
                 logger.info(f"导入完成: {progress.processed_files} 个文件, 跳过 {progress.skipped_files} 个, 失败 {progress.failed_files} 个")
         
         except Exception as e:
@@ -568,14 +532,16 @@ class ImportManager:
         logger.info(f"扫描完成，找到 {len(media_files)} 个媒体文件")
         return media_files
     
-    def _import_file(self, file_path: Path, target_path: Path, target_records: Dict, progress: ImportProgress, file_lock: threading.Lock = None, import_mode: str = 'copy'):
+    def _import_file(self, file_path: Path, target_path: Path, target_records: Dict, progress: ImportProgress, file_lock: threading.Lock = None, import_mode: str = 'copy', md5_cache: Dict[str, Optional[str]] = None):
         """导入单个文件
-        
+
         file_lock 用于保护以下临界区的原子性（多线程导入时必须传入）：
           MD5 查重 → 目标路径解析 → 文件复制 → target_records 回写
         不传时退化为单线程行为（向后兼容）。
-        
+
         import_mode: 'copy'（保留源文件）或 'move'（导入成功后删除源文件）
+
+        md5_cache: MD5 缓存字典，避免同一文件重复计算 MD5
         """
         try:
             # 获取媒体日期
@@ -583,16 +549,22 @@ class ImportManager:
             if not media_date:
                 # 降级到文件修改时间
                 media_date = datetime.fromtimestamp(file_path.stat().st_mtime)
-            
+
             # 构建目标路径：target/YYYY-MM/filename（不再创建 YYYY 层级）
             month = media_date.strftime('%Y-%m')
             month_dir = target_path / month
-            
+
             # 创建目录（exist_ok=True，多线程安全）
             month_dir.mkdir(parents=True, exist_ok=True)
-            
-            # 计算源文件 MD5（锁外执行，IO密集型，不影响正确性）
-            src_md5 = self._compute_md5(file_path)
+
+            # 计算源文件 MD5（优先使用缓存，锁外执行，IO密集型，不影响正确性）
+            file_path_str = str(file_path)
+            if md5_cache is not None and file_path_str in md5_cache:
+                src_md5 = md5_cache[file_path_str]
+            else:
+                src_md5 = self._compute_md5(file_path)
+                if md5_cache is not None:
+                    md5_cache[file_path_str] = src_md5
 
             # ----------------------------------------------------------------
             # 临界区：MD5查重 + 路径解析 + records预占位
@@ -725,22 +697,37 @@ class ImportManager:
         """计算文件 MD5（委托给 utils.compute_md5）"""
         return compute_md5(filepath)
     
-    def _load_target_records(self, target_path: Path) -> Dict:
-        """加载目标目录的 MD5 记录（只加载属于本次目标相册的记录）"""
+    def _load_target_records(self, target_path: Path) -> Tuple[Dict, Dict[int, set]]:
+        """加载目标目录的 MD5 记录（只加载属于本次目标相册的记录）
+
+        Returns:
+            Tuple[Dict, Dict[int, set]]:
+                - records: {md5_hash: path} 字典
+                - size_to_md5s: {file_size: set(md5_hash)} 字典，用于快速预筛
+        """
         target_prefix = str(target_path)
+        # 规范化前缀：确保以路径分隔符结尾，防止前缀歧义（如 E:\Photos 与 E:\Photos2）
+        target_prefix_with_sep = target_prefix.rstrip(os.sep) + os.sep
         db = SessionLocal()
         try:
             # 只加载路径在 target_path 目录下的照片，防止跨相册误判重复
+            # 使用 startswith 而非 like '%' 模式：避免前缀歧义 + 防止 LIKE 通配符注入
             photos = db.query(Photo).filter(
-                Photo.path.like(target_prefix + '%')
+                Photo.path.startswith(target_prefix_with_sep)
             ).all()
             # md5_hash 不再有 unique 约束（允许 _dup 副本），取最后写入的路径即可
             records = {}
+            size_to_md5s: Dict[int, set] = {}  # 文件大小 → MD5 集合（用于预筛）
             for photo in photos:
                 if photo.md5_hash:
                     records[photo.md5_hash] = photo.path
-            logger.info(f"从数据库加载了 {len(records)} 条MD5记录（相册: {target_prefix}）")
-            return records
+                    # 构建大小索引（用于快速预筛）
+                    if photo.size:
+                        if photo.size not in size_to_md5s:
+                            size_to_md5s[photo.size] = set()
+                        size_to_md5s[photo.size].add(photo.md5_hash)
+            logger.info(f"从数据库加载了 {len(records)} 条MD5记录，{len(size_to_md5s)} 个大小组（相册: {target_prefix}）")
+            return records, size_to_md5s
         except Exception as e:
             logger.warning(f"从数据库加载记录失败: {e}")
             # 回退到文件系统记录
@@ -751,13 +738,13 @@ class ImportManager:
                         data = json.load(f)
                     if "records" in data:
                         logger.info(f"从文件加载了 {len(data['records'])} 条MD5记录")
-                        return data["records"]
+                        return data["records"], {}
                 except Exception as e:
                     logger.warning(f"读取记录文件失败: {e}")
         finally:
             db.close()
-        
-        return {}
+
+        return {}, {}
     
     def _save_target_records(self, target_path: Path, records: Dict):
         """保存 MD5 记录到目标目录"""

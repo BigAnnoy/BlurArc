@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# FrameAlbum 发布脚本
+# Blur Arc 发布脚本
 # 功能：
 # 1. 检查 Git 状态
 # 2. 创建 tag
@@ -14,12 +14,12 @@
 set -e
 
 # 配置
-REPO_NAME="framealbum/framealbum"
-VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
+REPO_NAME="blurarc/blurarc"
+VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
 CHANGELOG_FILE="CHANGELOG.md"
 
 echo "=========================================="
-echo "FrameAlbum 发布脚本 v1.0"
+echo "Blur Arc 发布脚本 v1.0"
 echo "=========================================="
 echo "版本：$VERSION"
 echo ""
@@ -77,7 +77,7 @@ if command -v gh &> /dev/null; then
     RELEASE_NOTES="## 安装说明\n\n下载对应平台的安装包并运行。\n\n## 系统要求\n\n- Windows 10/11 或 macOS 10.14+\n- Python 3.11+\n\n## 更新内容\n\n请查看 CHANGELOG.md"
 
     gh release create "$VERSION" \
-        --title "FrameAlbum $VERSION" \
+        --title "Blur Arc $VERSION" \
         --notes "$RELEASE_NOTES" \
         --repo "$REPO_NAME"
     echo "✓ Release 已创建"

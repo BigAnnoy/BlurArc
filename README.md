@@ -1,122 +1,94 @@
-<h1 align="center">📷 FrameAlbum</h1>
-<h3 align="center">本地照片管理器 · 隐私零泄露 · 按日期自动整理</h3>
-
+<p align="center">
+  <img src="https://img.shields.io/badge/版本-v0.5.0-gold?style=flat-square" />
+  <img src="https://img.shields.io/badge/Python-3.8+-blue?style=flat-square&logo=python" />
+  <img src="https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square" />
+  <img src="https://img.shields.io/badge/许可证-MIT-lightgrey?style=flat-square" />
+</p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/版本-v0.1-gold?style=flat-square" />
-  <img src="https://img.shields.io/badge/Python-3.8+-blue?style=flat-square&logo=python" />
-  <img src="https://img.shields.io/badge/PyWebView-6.1+-green?style=flat-square" />
-  <img src="https://img.shields.io/badge/Flask-2.3+-red?style=flat-square&logo=flask" />
-  <img src="https://img.shields.io/badge/许可证-MIT-lightgrey?style=flat-square" />
+  让照片回归秩序。<br/>
+  完全本地运行，隐私零泄露，无任何云端依赖。
 </p>
 
 ---
 
-## ✨ 功能亮点
+## 为什么选择 Blur Arc
 
-| 功能 | 说明 |
-|------|------|
-| 🗂 **智能时间线整理** | 读取 EXIF 拍摄时间，自动归档至 `YYYY/YYYY-MM/` 目录 |
-| 🔍 **两阶段去重** | (文件大小 + EXIF 时间) 预筛 → MD5 精确比对，减少 I/O |
-| ▶️ **视频原生播放** | HTTP Range 支持 Seek，自动提取时长/分辨率/编码信息 |
-| 🖼 **特殊格式预览** | HEIC / TIFF / BMP 自动转 JPEG 缩略图，无格式障碍 |
-| ☑️ **多选批量操作** | 长按 / 勾选框进入多选，一键批量删除含确认弹窗 |
-| ⏸ **可暂停异步导入** | 多线程 + 实时进度轮询，随时暂停/继续 |
-| 📋/✂️ **复制或移动** | 导入时弹窗二选一，复制保留源文件，移动删除源文件 |
-| 🖱 **右键菜单 + 快捷键** | 右键预览/打开/删除；← → 翻页；ESC 关闭 |
-| 🔒 **完全本地运行** | 数据不离机，无任何云端依赖 |
+市面上的照片管理工具要么依赖云端、要么停止维护。Blur Arc 是一个**完全本地**的照片/视频管理器——数据不离机，按拍摄日期自动归档，导入时智能去重。
 
----
+## 核心能力
 
-## 🚀 快速开始
+| | |
+|---|---|
+| **智能归档** | 读取 EXIF 拍摄时间，自动整理至 `YYYY/YYYY-MM/` 目录 |
+| **高效去重** | 文件大小预筛 + MD5 精确比对，减少 99% 无效 I/O |
+| **可暂停导入** | 多线程并行，实时进度，随时暂停/继续/取消 |
+| **视频支持** | FFmpeg 集成，HTTP Range 拖拽播放，自动提取时长与编码信息 |
+| **全格式预览** | HEIC / TIFF / BMP / RAW 自动转 JPEG 缩略图 |
+| **批量操作** | 多选删除、复制/移动导入、右键菜单、键盘快捷键 |
 
-### 方式一：下载 EXE（推荐）
+## 快速开始
 
-前往 [GitHub Releases](https://github.com/BigAnnoy/FrameAlbum/releases) 下载最新版本的 `FrameAlbum.exe`，双击即可运行，无需安装任何依赖。
+### 下载运行
 
-### 方式二：从源码运行
+前往 [Releases](https://github.com/BigAnnoy/BlurArc/releases) 下载 `BlurArc.exe`，双击即可运行。
 
-**环境要求**
-- Python 3.8+
-- Windows / macOS / Linux
+### 从源码启动
 
-**安装依赖**
 ```bash
-git clone https://github.com/BigAnnoy/FrameAlbum.git
-cd FrameAlbum
+git clone https://github.com/BigAnnoy/BlurArc.git
+cd BlurArc
 pip install -r requirements.txt
-```
-
-**启动**
-```bash
-python src/FrameAlbum.py
+python src/BlurArc.py
 ```
 
 首次启动会引导选择相册存储目录。
 
-### FFmpeg（可选，视频功能）
+### FFmpeg（可选）
 
-视频缩略图和元数据提取需要 FFmpeg。
+视频缩略图和元数据提取需要 FFmpeg，未安装时图片功能完全正常。
 
-**自动下载（推荐）**
 ```bash
 python scripts/download_ffmpeg.py
 ```
 
-脚本自动检测平台，下载静态编译版（约 70MB）到 `backend/ffmpeg_binaries/`，无需手动配置。
+自动下载静态编译版到 `backend/ffmpeg_binaries/`，无需手动配置。
 
-**手动安装**
-```bash
-# Windows
-winget install ffmpeg
+## 技术栈
 
-# macOS
-brew install ffmpeg
+| 层 | 技术 |
+|---|---|
+| 窗口 | PyWebView 6.1+ |
+| 后端 | Flask 2.3+ / SQLAlchemy / SQLite |
+| 前端 | React 19 / TypeScript / Vite / Tailwind CSS |
+| 图像 | Pillow / pillow-heif |
+| 视频 | FFmpeg 8.1.1 |
 
-# Linux
-sudo apt install ffmpeg
-```
-
-> 未安装 FFmpeg 时图片功能完全正常，视频显示占位图标。
-
----
-
-## 📁 目录结构
+## 项目结构
 
 ```
-FrameAlbum/
-├── src/
-│   └── FrameAlbum.py              # 主入口（PyWebView 窗口 + Flask 启动）
+BlurArc/
+├── src/BlurArc.py                 # 主入口
 ├── backend/
-│   ├── __init__.py
-│   ├── api_server.py              # Flask REST API（25+ 端点）
-│   ├── config_manager.py          # 配置管理
-│   ├── database.py                # SQLAlchemy 数据模型
-│   ├── import_manager.py          # 异步导入逻辑（MD5 去重）
+│   ├── api_server.py              # REST API（35+ 端点）
+│   ├── import_manager.py          # 异步导入 + 两阶段去重
 │   ├── thumbnail_manager.py       # 缩略图生成与缓存
 │   ├── video_processor.py         # FFmpeg 视频处理
-│   └── ffmpeg_binaries/           # FFmpeg（可选，自动下载）
-├── frontend/
-│   ├── index.html                 # 单页应用入口
-│   ├── css/                       # 样式
-│   ├── modules/                   # 模块化 JS
-│   │   ├── api/                   # API 客户端
-│   │   ├── app/                   # 应用层
-│   │   ├── components/            # UI 组件
-│   │   └── utils/                 # 工具函数
-│   └── *.svg                      # 图标资源
-├── docs/                          # 文档
-├── scripts/
-│   └── download_ffmpeg.py         # FFmpeg 下载脚本
-├── FrameAlbum.spec                # PyInstaller 打包配置
-├── requirements.txt
-└── README.md
+│   ├── database.py                # 数据模型
+│   └── config_manager.py          # 配置管理
+├── frontend/                      # React + TypeScript 前端
+├── docs/                          # 文档与落地页
+├── scripts/                       # FFmpeg 下载、发布脚本
+├── installer/                     # NSIS Windows 安装包
+├── test/                          # 测试
+├── BlurArc.spec                   # PyInstaller 打包
+└── requirements.txt
 ```
 
-整理后的媒体文件结构：
+整理后的相册目录结构：
 
 ```
-相册目录/
+相册/
 └── 2024/
     └── 2024-03/
         ├── 20240315_143022_001.jpg
@@ -124,48 +96,38 @@ FrameAlbum/
         └── 20240316_091500_001.mp4
 ```
 
----
-
-## 🏗 技术栈
-
-| 层 | 技术 |
-|----|------|
-| 窗口层 | [PyWebView](https://pywebview.flowrl.com/) 6.1+ |
-| 后端 API | Flask 2.3+ · Flask-CORS |
-| 数据库 | SQLite · SQLAlchemy |
-| 图像处理 | Pillow 10+ · pillow-heif |
-| 视频处理 | FFmpeg（可选） |
-| 前端 | 原生 HTML / CSS / JavaScript（零框架依赖） |
-
----
-
-## 📋 核心 API
+## API 概览
 
 ```
-GET  /api/health                  # 服务健康检查
-GET  /api/album/stats              # 统计信息（照片数/视频数/时间跨度）
-GET  /api/album/tree               # 目录树
-GET  /api/album/photos?path=...   # 照片列表（含 thumbnail/preview/url）
-GET  /api/album/thumbnail?path=... # 缩略图（带缓存）
-GET  /api/album/preview?path=...   # HEIC 等特殊格式 JPEG 预览
-POST /api/import/check             # 导入预检（MD5 去重 + 统计）
-POST /api/import/start             # 启动异步导入
-GET  /api/import/progress/<id>    # 实时进度
-POST /api/import/pause/<id>       # 暂停导入
-POST /api/import/resume/<id>       # 继续导入
-POST /api/import/cancel/<id>       # 取消导入
-POST /api/files/delete             # 批量删除文件
-GET/PUT /api/settings/album-path    # 相册路径管理
+GET  /api/health                    # 健康检查
+GET  /api/album/stats               # 统计（照片数/视频数/时间跨度）
+GET  /api/album/tree                # 目录树
+GET  /api/album/photos?path=...     # 照片列表
+GET  /api/album/thumbnail?path=...  # 缩略图
+GET  /api/album/preview?path=...    # 特殊格式预览
+POST /api/import/check              # 导入预检（去重 + 统计）
+POST /api/import/start              # 启动异步导入
+GET  /api/import/progress/<id>      # 实时进度
+POST /api/import/pause/<id>         # 暂停
+POST /api/import/resume/<id>        # 继续
+POST /api/files/delete              # 批量删除
 ```
 
----
+完整 API 文档见 [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
 
-## 🗒 更新日志
+## 开发
 
-见 [CHANGELOG.md](CHANGELOG.md)
+```bash
+# 后端
+pip install -r requirements.txt
+python src/BlurArc.py
 
----
+# 前端开发模式
+cd frontend
+npm install
+npm run dev
+```
 
-## 📄 许可证
+## 许可证
 
-[MIT License](LICENSE) © 2026
+[MIT](LICENSE) &copy; 2026

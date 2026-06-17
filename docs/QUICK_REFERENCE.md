@@ -1,4 +1,4 @@
-# 相册管理 v3.0 - 快速参考
+# Blur Arc v0.5.0 - 快速参考
 
 ## 🚀 快速开始
 
@@ -6,19 +6,19 @@
 ```bash
 cd c:\Users\IT20240802\Desktop\照片整理
 pip install -r requirements.txt
-python FrameAlbum.py
+python BlurArc.py
 ```
 
 ### 方式 2: 启动脚本
 ```bash
-启动FrameAlbum.bat
+启动BlurArc.bat
 ```
 
 ### 方式 3: 打包成 EXE（生产）
 ```bash
 pip install pyinstaller
 打包.bat
-# 输出: dist/相册管理.exe
+# 输出: dist/BlurArc.exe
 ```
 
 ---
@@ -46,14 +46,14 @@ pip install pyinstaller
 │   ├── index.html           # 单页应用
 │   ├── css/                 # 样式 (1250+ 行)
 │   └── js/                  # 逻辑 (1450+ 行)
-├── FrameAlbum.py           # 主程序入口
+├── BlurArc.py           # 主程序入口
 ├── api_server.py            # Flask API 服务器
 ├── config_manager.py        # 配置管理
 ├── import_manager.py        # 导入管理
 ├── photo_organizer_engine.py # 整理引擎
 ├── requirements.txt         # 依赖
 ├── build.spec              # PyInstaller 配置
-└── 启动FrameAlbum.bat    # 启动脚本
+└── 启动BlurArc.bat    # 启动脚本
 ```
 
 ---
@@ -104,7 +104,7 @@ pip install pyinstaller
 1. pip install pyinstaller
 2. 运行: 打包.bat
 3. 等待完成（1-2 分钟）
-4. 使用: dist/相册管理.exe
+4. 使用: dist/BlurArc.exe
 ```
 
 ---
@@ -126,7 +126,7 @@ pip install pyinstaller
 
 ## ✨ 版本信息
 
-- **版本**: v0.3 PyWebView
+- **版本**: v0.5.0 PyWebView
 - **完成日期**: 2026-03-23
 - **代码行数**: ~3900 行
 - **状态**: ✅ 完全可用
@@ -146,6 +146,6 @@ pip install pyinstaller
 
 ---
 
-**开始使用**: `python FrameAlbum.py` 或 `启动FrameAlbum.bat`
+**开始使用**: `python BlurArc.py` 或 `启动BlurArc.bat`
 
-🚀 享受高效的相册管理体验！
+🚀 享受高效的 Blur Arc 体验！

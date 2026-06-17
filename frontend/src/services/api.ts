@@ -1,4 +1,10 @@
+import type { ImportPhoto, ImportProgress } from '../components/dialogs/ImportDialog/types';
+import type { DirNode, YearNode, MonthNode } from '../types';
+
 const API_BASE = '/api';
+
+// 复用 ImportPhoto 类型
+export type { ImportPhoto };
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -36,41 +42,66 @@ export const api = {
   // Stats
   getStats: () => fetchJson<{ total_files: number; video_count: number; total_size_mb: number; last_import: string }>(`${API_BASE}/album/stats`),
 
-  // Directory tree - 转换后端返回的扁平结构为按年份分组
+  // Directory tree - 支持多层级目录
   getTree: async () => {
-    const response = await fetchJson<{ children: { name: string; path: string; count: number; type: string }[] }>(`${API_BASE}/album/tree`);
-    // 将扁平的 YYYY-MM 目录转换为按年份分组
-    const yearMap = new Map<string, { name: string; path: string; count: number }[]>();
+    const response = await fetchJson<DirNode & { type: string }>(`${API_BASE}/album/tree`);
+
+    // 过滤 YYYY-MM 格式的目录（用于按年份浏览）
+    const yearMonthDirs: DirNode[] = [];
+
     for (const item of response.children || []) {
-      // 从 "2014-05" 或 "D:\...\2014-05" 提取年月
       const match = item.name.match(/^(\d{4})-(\d{2})$/);
       if (match) {
-        const year = match[1];
-        const monthNum = parseInt(match[2]);
-        const monthName = `${monthNum}月`;
-        if (!yearMap.has(year)) {
-          yearMap.set(year, []);
-        }
-        yearMap.get(year)!.push({
-          name: monthName,
-          path: item.path,
-          count: item.count,
-        });
+        yearMonthDirs.push(item);
       }
     }
-    // 转换为数组并按年份降序排列
-    const tree = Array.from(yearMap.entries())
+
+    // 将 YYYY-MM 目录按年份分组
+    const yearMap = new Map<string, MonthNode[]>();
+    for (const item of yearMonthDirs) {
+      const match = item.name.match(/^(\d{4})-(\d{2})$/)!;
+      const year = match[1];
+      if (!yearMap.has(year)) {
+        yearMap.set(year, []);
+      }
+      yearMap.get(year)!.push({
+        name: item.name,
+        path: item.path,
+        count: item.count,
+      });
+    }
+
+    // 转换为按年份降序排列的数组
+    const yearGroups: YearNode[] = Array.from(yearMap.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([year, months]) => ({
         year,
-        // 按月份数字排序（1月 < 2月 < ... < 12月）
         months: months.sort((a, b) => {
-          const numA = parseInt(a.name);
-          const numB = parseInt(b.name);
+          const numA = parseInt(a.name.match(/^(\d{4})-(\d{2})$/)?.[2] || '0');
+          const numB = parseInt(b.name.match(/^(\d{4})-(\d{2})$/)?.[2] || '0');
           return numA - numB;
         }),
       }));
-    return { tree };
+
+    // 构造根目录节点（过滤掉 YYYY-MM 格式目录，避免与"按年份浏览"重复）
+    const sortChildren = (children: DirNode[]): DirNode[] => {
+      return children
+        .filter((child) => !child.name.match(/^(\d{4})-(\d{2})$/))
+        .map((child) => ({
+          ...child,
+          children: child.children ? sortChildren(child.children) : [],
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+    };
+
+    const rootDir: DirNode = {
+      name: response.name,
+      path: response.path,
+      count: response.count,
+      children: sortChildren(response.children || []),
+    };
+
+    return { tree: yearGroups, rootDir };
   },
 
   // Photos
@@ -83,18 +114,43 @@ export const api = {
   getFile: (path: string) => `${API_BASE}/album/file?path=${encodeURIComponent(path)}`,
 
   // Import
+  // 同步检查（简化版，兼容保留）
   checkImport: (sourcePath: string) => fetchJson<{ valid: boolean; count: number }>(`${API_BASE}/import/check`, {
     method: 'POST',
     body: JSON.stringify({ source_path: sourcePath }),
   }),
 
-  startImport: (sourcePath: string, mode: 'copy' | 'move', options?: { skip_source_duplicates?: boolean; skip_target_duplicates?: boolean }) =>
+  // 异步检查（带进度）
+  startImportCheck: (sourcePath: string) =>
+    fetchJson<{ status: string; check_id: string }>(`${API_BASE}/import/check/start`, {
+      method: 'POST',
+      body: JSON.stringify({ source_path: sourcePath }),
+    }),
+
+  getImportCheckProgress: (checkId: string) =>
+    fetchJson<{
+      status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+      progress: number;
+      stage: 'queued' | 'scanning' | 'grouping' | 'source_duplicates' | 'target_duplicates' | 'completed' | 'failed';
+      detail: string;
+      result?: {
+        status: string;
+        source_path: string;
+        media_count: number;
+        total_size_mb: number;
+        date_folders: { name: string; count: number; size: number; files: ImportPhoto[] }[];
+        target_duplicates: Record<string, ImportPhoto[]>;
+        source_duplicates: Record<string, ImportPhoto[]>;
+      };
+    }>(`${API_BASE}/import/check/progress/${checkId}`),
+
+  startImport: (sourcePath: string, targetPath: string, mode: 'copy' | 'move') =>
     fetchJson<{ import_id: string }>(`${API_BASE}/import/start`, {
       method: 'POST',
       body: JSON.stringify({
         source_path: sourcePath,
-        mode: mode,
-        ...options,
+        target_path: targetPath,
+        import_mode: mode,
       }),
     }).then((res) => {
       currentImportId = res.import_id;
@@ -105,25 +161,48 @@ export const api = {
     if (!currentImportId) {
       return Promise.resolve({ step: 0, total: 0, current: '', status: 'idle' });
     }
-    return fetchJson<{ step: number; total: number; current: string; status: string }>(`${API_BASE}/import/progress/${currentImportId}`);
+    return api.getImportProgressById(currentImportId);
   },
 
-  cancelImport: () => {
-    if (!currentImportId) {
-      return Promise.resolve({ cancelled: true });
-    }
-    return fetchJson<{ cancelled: boolean }>(`${API_BASE}/import/cancel/${currentImportId}`, { method: 'POST' })
-      .then((res) => {
-        currentImportId = null;
-        return res;
-      });
+  getImportProgressById: (importId: string) =>
+    fetchJson<{
+      import_id: string;
+      status: string;
+      progress: number;
+      total_files: number;
+      processed_files: number;
+      failed_files: number;
+      duplicated_files: number;
+      current_file: string | null;
+      error_message: string | null;
+    }>(`${API_BASE}/import/progress/${importId}`).then((data) => ({
+      step: data.processed_files,
+      total: data.total_files,
+      current: data.current_file ?? '',
+      status: data.status as ImportProgress['status'],
+      progress: data.progress,
+      error: data.error_message ?? undefined,
+      failed: data.failed_files,
+      duplicated: data.duplicated_files,
+    })),
+
+  cancelImport: (importId: string) => {
+    return fetchJson<{ cancelled: boolean }>(`${API_BASE}/import/cancel/${importId}`, { method: 'POST' });
+  },
+
+  pauseImport: (importId: string) => {
+    return fetchJson<{ paused: boolean }>(`${API_BASE}/import/pause/${importId}`, { method: 'POST' });
+  },
+
+  resumeImport: (importId: string) => {
+    return fetchJson<{ resumed: boolean }>(`${API_BASE}/import/resume/${importId}`, { method: 'POST' });
   },
 
   // Delete
-  deletePhotos: (paths: string[]) =>
+  deletePhotos: (paths: string[], sourcePaths?: string[]) =>
     fetchJson<{ deleted: number }>(`${API_BASE}/files/delete`, {
       method: 'POST',
-      body: JSON.stringify({ files: paths }),
+      body: JSON.stringify({ paths, source_paths: sourcePaths || [] }),
     }),
 
   // Settings - 并行获取所有设置
@@ -162,17 +241,17 @@ export const api = {
   },
 
   // Change album path - 使用 PyWebView API 选择文件夹
-  changeAlbumPath: async (): Promise<{ album_path: string }> => {
+  changeAlbumPath: async (): Promise<{ album_path: string; task_id: string }> => {
     // 检查 PyWebView API 是否可用
     if (window.pywebview?.api?.select_folder) {
       const newPath = await window.pywebview.api.select_folder();
       if (newPath) {
         // 调用后端设置路径
-        await fetchJson<{ album_path: string; task_id: string }>(`${API_BASE}/settings/album-path`, {
+        const res = await fetchJson<{ album_path: string; task_id: string }>(`${API_BASE}/settings/album-path`, {
           method: 'PUT',
           body: JSON.stringify({ album_path: newPath }),
         });
-        return { album_path: newPath };
+        return { album_path: newPath, task_id: res.task_id };
       }
       throw new Error('未选择文件夹');
     }

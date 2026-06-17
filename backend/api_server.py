@@ -1,5 +1,5 @@
 """
-Flask API 服务器 - 相册管理应用的 REST API 接口
+Flask API 服务器 - Blur Arc 的 REST API 接口
 
 提供以下功能：
 - 相册统计信息获取
@@ -233,11 +233,12 @@ def get_album_stats():
             'years': {}
         }
     
-    # 使用数据库统计（如果可用），否则使用文件系统统计
-    final_total_files = db_total_files if db_total_files is not None else total_files
-    final_video_count = db_video_count if db_video_count is not None else video_count
-    final_total_size = db_total_size if db_total_size is not None else total_size
-    
+    # 始终使用文件系统统计（更准确，反映实际文件数量）
+    # 数据库统计仅作为备用（当文件系统扫描失败时）
+    final_total_files = total_files if total_files > 0 else (db_total_files or 0)
+    final_video_count = video_count if total_files > 0 else (db_video_count or 0)
+    final_total_size = total_size if total_files > 0 else (db_total_size or 0)
+
     return {
         'total_files': final_total_files,
         'video_count': final_video_count,
@@ -455,10 +456,12 @@ def album_photos():
                 encoded_path = urllib.parse.quote(str(file))
                 file_type = 'photo' if file.suffix.lower() in _IMAGE_FORMATS else 'video'
                 photos.append({
+                    'id': str(file),
                     'name': file.name,
                     'path': str(file),
                     'size': stat.st_size,
                     'size_mb': round(stat.st_size / (1024 * 1024), 2),
+                    'date': datetime.fromtimestamp(stat.st_mtime).isoformat(),
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
                     'type': file_type,
                     'thumbnail_url': f'/api/album/thumbnail?path={encoded_path}',
@@ -933,7 +936,7 @@ _rebuild_lock = threading.Lock()
 @app.route('/api/settings/rebuild-progress/<task_id>', methods=['GET'])
 def get_rebuild_progress(task_id):
     """查询相册 MD5 索引重建进度
-    
+
     返回:
       status: running | done | error
       progress: 0-100
@@ -941,11 +944,94 @@ def get_rebuild_progress(task_id):
     """
     with _rebuild_lock:
         task = _rebuild_tasks.get(task_id)
-    
+
     if not task:
         return jsonify({'error': '任务不存在'}), 404
-    
+
     return jsonify(task)
+
+
+@app.route('/api/settings/rebuild-index', methods=['POST'])
+def rebuild_index():
+    """强制重建相册索引（数据库 + 清空缩略图缓存）
+
+    用于手动刷新数据库记录和清理缩略图缓存。
+
+    返回:
+      task_id: 任务 ID，用于查询进度
+      status: started
+    """
+    try:
+        album_path = get_album_path()
+        if not album_path:
+            return jsonify({'error': '未设置相册路径'}), 400
+
+        album_path_abs = str(Path(album_path).absolute())
+
+        # 清空缩略图缓存
+        tm = get_thumbnail_manager()
+        cache_cleared = 0
+        try:
+            for cache_file in tm.cache_dir.glob('*.jpg'):
+                cache_file.unlink()
+                cache_cleared += 1
+            logger.info(f"[rebuild] 已清空 {cache_cleared} 个缩略图缓存")
+        except Exception as e:
+            logger.warning(f"[rebuild] 清空缩略图缓存失败: {e}")
+
+        # 生成任务 ID，后台线程执行重建
+        task_id = f"rebuild_{uuid.uuid4().hex[:8]}"
+        with _rebuild_lock:
+            _rebuild_tasks[task_id] = {
+                'status': 'running',
+                'album_path': album_path_abs,
+                'message': '正在重建索引...',
+                'progress': 0,
+            }
+
+        def _do_rebuild(tid, path_abs):
+            def _ttl_cleanup():
+                with _rebuild_lock:
+                    _rebuild_tasks.pop(tid, None)
+                logger.debug(f"[rebuild] 任务 {tid} TTL 已清理")
+
+            def on_progress(msg, pct):
+                with _rebuild_lock:
+                    if tid in _rebuild_tasks:
+                        _rebuild_tasks[tid]['message'] = msg
+                        _rebuild_tasks[tid]['progress'] = pct
+
+            try:
+                cfg = get_config_manager()
+                cfg._rebuild_md5_index_for_album(Path(path_abs), progress_cb=on_progress)
+
+                with _rebuild_lock:
+                    _rebuild_tasks[tid]['status'] = 'done'
+                    _rebuild_tasks[tid]['message'] = '索引重建完成'
+                    _rebuild_tasks[tid]['progress'] = 100
+                logger.info(f"[rebuild] 任务 {tid} 完成")
+            except Exception as e:
+                logger.error(f"[rebuild] 任务 {tid} 失败: {e}")
+                with _rebuild_lock:
+                    _rebuild_tasks[tid]['status'] = 'error'
+                    _rebuild_tasks[tid]['message'] = str(e)
+
+            # 5 分钟后自动清理任务记录
+            t_cleanup = threading.Timer(300, _ttl_cleanup)
+            t_cleanup.daemon = True
+            t_cleanup.start()
+
+        t = threading.Thread(target=_do_rebuild, args=(task_id, album_path_abs), daemon=True)
+        t.start()
+
+        return jsonify({
+            'status': 'started',
+            'task_id': task_id,
+            'cache_cleared': cache_cleared
+        })
+    except Exception as e:
+        logger.error(f"API 错误 POST /api/settings/rebuild-index: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 
@@ -1047,6 +1133,35 @@ def set_language():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/settings/theme', methods=['GET'])
+def get_theme():
+    """获取用户主题偏好"""
+    try:
+        cm = get_config_manager()
+        theme = cm.get_setting('theme', 'system')
+        return jsonify({'theme': theme})
+    except Exception as e:
+        logger.error(f'[API] 获取主题偏好失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/settings/theme', methods=['PUT'])
+def set_theme():
+    """保存用户主题偏好（'light' / 'dark' / 'system'）"""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        theme = data.get('theme', 'system')
+        if theme not in ('light', 'dark', 'system'):
+            return jsonify({'error': '不支持的主题，仅支持 light / dark / system'}), 400
+        cm = get_config_manager()
+        cm.update_setting('theme', theme)
+        logger.info(f'[API] 主题偏好已保存: {theme}')
+        return jsonify({'status': 'ok', 'theme': theme})
+    except Exception as e:
+        logger.error(f'[API] 保存主题偏好失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/test', methods=['GET'])
 def test_api():
     """测试 API"""
@@ -1105,7 +1220,8 @@ def _perform_import_check(source_path: Path, progress_callback=None):
 
     # EXIF 读取函数（提前定义，避免重复定义）
     def _get_exif_datetime_fast(path):
-        """读取 EXIF 拍摄时间，失败返回 None"""
+        """读取 EXIF 拍摄时间，解析为 datetime 对象（与 media_date 类型一致），
+        失败返回 None。返回 datetime 后，预筛 key 用 isoformat() 统一格式。"""
         try:
             from PIL import Image, ExifTags
             with Image.open(path) as img:
@@ -1116,7 +1232,13 @@ def _perform_import_check(source_path: Path, progress_callback=None):
                 for tag_name in ('DateTimeOriginal', 'DateTime'):
                     tag_id = tag_map.get(tag_name)
                     if tag_id and tag_id in exif_data:
-                        return str(exif_data[tag_id])
+                        value = exif_data[tag_id]
+                        if isinstance(value, str):
+                            try:
+                                from datetime import datetime as _dt
+                                return _dt.strptime(value, "%Y:%m:%d %H:%M:%S")
+                            except ValueError:
+                                return None
         except Exception:
             pass
         return None
@@ -1191,11 +1313,12 @@ def _perform_import_check(source_path: Path, progress_callback=None):
     source_prescan = {}  # key: (size, exif_str|None), value: [file_obj]
     total_prescan = len(media_files)
     for idx, file in enumerate(media_files, 1):
-        # 使用缓存的 size 和 exif_datetime
+        # 使用缓存的 size 和 exif_datetime（datetime 对象，统一用 isoformat 作为 key）
         size = file.get('size')
-        exif_str = file.get('exif_datetime')
+        exif_dt = file.get('exif_datetime')
         if size is None:
             continue
+        exif_str = exif_dt.isoformat() if exif_dt else None
         key = (size, exif_str)
         if key not in source_prescan:
             source_prescan[key] = []
@@ -1212,7 +1335,9 @@ def _perform_import_check(source_path: Path, progress_callback=None):
 
     # 并行计算需要的模块和参数（提前准备，避免后续阶段未定义）
     import concurrent.futures
-    max_workers = max(1, os.cpu_count() - 1)
+    # os.cpu_count() 在某些受限环境下可能返回 None，需要兜底
+    cpu_count = os.cpu_count() or 2
+    max_workers = max(1, cpu_count - 1)
 
     if candidate_files_for_md5:
         def _compute_file_md5(file):
@@ -1259,20 +1384,42 @@ def _perform_import_check(source_path: Path, progress_callback=None):
     if album_path:
         album_path = Path(album_path)
 
-        # --- 阶段4a：建预筛索引 (size, exif_time) → [file_path] ---
+        # --- 阶段4a：从数据库构建预筛索引 (size, exif_time) → [file_path] ---
+        # 优化：直接查询数据库，避免重新扫描整个相册文件夹
+        # 若 DB 为空（相册未被索引过），回退到文件系统扫描，确保不漏检
         prescan_index = {}   # key: (size, exif_str|None), value: [Path]
         target_media_files = []
-        for file in album_path.rglob('*'):
-            if file.is_file() and file.suffix.lower() in MEDIA_FORMATS:
-                target_media_files.append(file)
+        try:
+            from database import SessionLocal, Photo as PhotoModel
+            db = SessionLocal()
+            try:
+                db_photos = db.query(PhotoModel.path, PhotoModel.size, PhotoModel.media_date).all()
+                for p_path, p_size, p_media_date in db_photos:
+                    if p_path and p_size:
+                        target_media_files.append((Path(p_path), p_size, p_media_date))
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"从数据库加载预筛索引失败，回退到文件系统扫描: {e}")
+            target_media_files = []
+
+        # DB 为空时回退到文件系统扫描（相册存在但未被索引）
+        # DB 不为空时，若源文件 key 全部命中预筛索引则跳过；否则追加文件系统扫描以补齐
+        if not target_media_files:
+            logger.info("数据库中无相册记录，回退到文件系统扫描以检测目标重复")
+            for file in album_path.rglob('*'):
+                if file.is_file() and file.suffix.lower() in MEDIA_FORMATS:
+                    try:
+                        size = file.stat().st_size
+                        exif_dt = _get_exif_datetime_fast(file)
+                        target_media_files.append((file, size, exif_dt))
+                    except OSError:
+                        continue
 
         total_prescan = len(target_media_files)
-        for idx, file in enumerate(target_media_files, 1):
-            try:
-                size = file.stat().st_size
-            except OSError:
-                continue
-            exif_str = _get_exif_datetime_fast(file)
+        for idx, (file, size, media_date) in enumerate(target_media_files, 1):
+            # media_date 是 datetime 对象，统一用 isoformat() 作为 key
+            exif_str = media_date.isoformat() if media_date else None
             key = (size, exif_str)
             if key not in prescan_index:
                 prescan_index[key] = []
@@ -1283,13 +1430,31 @@ def _perform_import_check(source_path: Path, progress_callback=None):
 
         # --- 阶段4b：收集候选集并计算相册侧 MD5 ---
         # 先用源文件特征查预筛索引，找出可能重复的相册文件候选集
-        # 性能优化：使用缓存的 size 和 exif_datetime
+        # 性能优化：使用缓存的 size 和 exif_datetime（统一用 isoformat 作为 key）
         source_keys = set()
         for file in media_files:
             size = file.get('size')
-            exif_str = file.get('exif_datetime')
+            exif_dt = file.get('exif_datetime')
             if size is not None:
+                exif_str = exif_dt.isoformat() if exif_dt else None
                 source_keys.add((size, exif_str))
+
+        # 兜底：若存在未命中的源 key（DB 中没有对应记录，可能相册未被索引），
+        # 追加一次文件系统扫描补齐预筛索引，确保不漏检已在相册中但未入库的文件
+        missing_keys = {k for k in source_keys if k not in prescan_index}
+        if missing_keys:
+            logger.info(f"DB 预筛索引有 {len(missing_keys)} 个源 key 缺失，追加文件系统扫描补齐")
+            for file in album_path.rglob('*'):
+                if file.is_file() and file.suffix.lower() in MEDIA_FORMATS:
+                    try:
+                        size = file.stat().st_size
+                        exif_dt = _get_exif_datetime_fast(file)
+                        exif_str = exif_dt.isoformat() if exif_dt else None
+                        key = (size, exif_str)
+                        if key in missing_keys and key not in prescan_index:
+                            prescan_index[key] = [file]
+                    except OSError:
+                        continue
 
         # 只对与源文件特征匹配的相册文件计算 MD5
         # 性能优化：并行计算 MD5
@@ -1341,15 +1506,16 @@ def _perform_import_check(source_path: Path, progress_callback=None):
             emit(90, 'target_duplicates', '候选集为空，跳过 MD5 计算')
 
         # --- 阶段4c：遍历源文件，命中候选集才算 MD5 比对 ---
-        # 性能优化：并行计算 MD5，使用缓存的 size 和 exif_datetime
+        # 性能优化：并行计算 MD5，使用缓存的 size 和 exif_datetime（统一 isoformat key）
         compare_targets = media_files
         # 筛选出需要计算 MD5 的文件
         files_needing_md5 = []
         for file in compare_targets:
             size = file.get('size')
-            exif_str = file.get('exif_datetime')
+            exif_dt = file.get('exif_datetime')
             if size is None:
                 continue
+            exif_str = exif_dt.isoformat() if exif_dt else None
             key = (size, exif_str)
             if key in prescan_index:
                 files_needing_md5.append(file)
@@ -1530,13 +1696,15 @@ def start_import():
         source_path = data.get('source_path')
         target_path = data.get('target_path')
         import_mode = data.get('import_mode', 'copy')
-        skip_source_duplicates = data.get('skip_source_duplicates', False)
-        skip_target_duplicates = data.get('skip_target_duplicates', False)
-        
+
         # 合法性校验：只接受 'copy' 或 'move'，其他值回落到 'copy'
         if import_mode not in ('copy', 'move'):
             import_mode = 'copy'
-        
+
+        # target_path 缺省时回退到配置的相册路径
+        if not target_path:
+            target_path = get_album_path()
+
         if not source_path or not target_path:
             return jsonify({'error': '缺少必需参数'}), 400
         
@@ -1557,9 +1725,9 @@ def start_import():
         import_manager.create_import(import_id, str(source_path), str(target_path))
         
         # 后台启动导入
-        import_manager.start_import_async(import_id, str(source_path), str(target_path), import_mode, skip_source_duplicates, skip_target_duplicates)
+        import_manager.start_import_async(import_id, str(source_path), str(target_path), import_mode)
         
-        logger.info(f"导入已启动: {import_id}，模式: {import_mode}，跳过源重复: {skip_source_duplicates}，跳过目标重复: {skip_target_duplicates}")
+        logger.info(f"导入已启动: {import_id}，模式: {import_mode}")
         
         return jsonify({
             'status': 'started',
@@ -1804,125 +1972,150 @@ def delete_files():
 
 # ============================================================================
 # 前端文件服务（重要：PyWebView 需要通过 Flask 获取前端）
+# 支持 Vite 构建的 React 前端
 # ============================================================================
+
+# MIME 类型映射
+MIME_TYPES = {
+    '.html': 'text/html; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.js': 'application/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.ico': 'image/x-icon',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+    '.eot': 'application/vnd.ms-fontobject',
+}
+
+def get_mime_type(filename):
+    """根据文件扩展名获取 MIME 类型"""
+    ext = Path(filename).suffix.lower()
+    return MIME_TYPES.get(ext, 'application/octet-stream')
 
 @app.route('/')
 def index():
-    """提供主页面"""
+    """提供主页面 - 支持 Vite 构建的前端"""
     try:
+        # 优先使用 Vite 构建产物
         frontend_dir = Path(__file__).parent.parent / 'frontend'
-        index_file = frontend_dir / 'index.html'
-        
-        if not index_file.exists():
-            logger.error(f"找不到 index.html: {index_file}")
-            return jsonify({'error': '找不到 index.html'}), 404
-        
-        with open(index_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-            # 修复：返回正确的 MIME 类型
+        dist_index = frontend_dir / 'dist' / 'index.html'
+
+        if dist_index.exists():
+            # 使用 Vite 构建产物
+            with open(dist_index, 'r', encoding='utf-8') as f:
+                content = f.read()
             return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+        # 回退到旧前端
+        index_file = frontend_dir / 'index.html'
+        if index_file.exists():
+            with open(index_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+        logger.error(f"找不到 index.html")
+        return jsonify({'error': '找不到 index.html'}), 404
     except Exception as e:
         logger.error(f"加载 index.html 失败: {e}")
         return jsonify({'error': '加载页面失败'}), 500
 
-@app.route('/js/<path:filename>')
-def serve_js(filename):
-    """提供 JavaScript 文件"""
+@app.route('/assets/<path:filename>')
+def serve_assets(filename):
+    """提供 Vite 构建的静态资源文件"""
     try:
         # 安全检查：防止路径遍历
-        if '..' in filename or filename.startswith('/'):
+        if '..' in filename or filename.startswith('/') or filename.startswith('\\'):
             logger.warning(f"非法路径访问尝试: {filename}")
             return jsonify({'error': '访问被拒绝'}), 403
-        
-        frontend_dir = Path(__file__).parent.parent / 'frontend'
-        file_path = frontend_dir / 'js' / filename
-        
-        # 确保文件在 frontend/js 目录内
-        try:
-            file_path.resolve().relative_to(frontend_dir.resolve())
-        except ValueError:
-            logger.warning(f"路径遍历攻击尝试: {filename}")
-            return jsonify({'error': '访问被拒绝'}), 403
-        
-        if not file_path.exists():
-            logger.warning(f"JS 文件不存在: {filename}")
-            return jsonify({'error': f'找不到文件: {filename}'}), 404
-        
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read(), 200, {'Content-Type': 'application/javascript; charset=utf-8'}
-    except Exception as e:
-        logger.error(f"加载 JS 文件失败: {filename}, 错误: {e}")
-        return jsonify({'error': '加载 JS 文件失败'}), 500
 
-@app.route('/css/<path:filename>')
-def serve_css(filename):
-    """提供 CSS 文件"""
-    try:
-        # 安全检查：防止路径遍历
-        if '..' in filename or filename.startswith('/'):
-            logger.warning(f"非法路径访问尝试: {filename}")
-            return jsonify({'error': '访问被拒绝'}), 403
-        
         frontend_dir = Path(__file__).parent.parent / 'frontend'
-        file_path = frontend_dir / 'css' / filename
-        
-        # 确保文件在 frontend/css 目录内
+        file_path = frontend_dir / 'dist' / 'assets' / filename
+
+        # 确保文件在 dist/assets 目录内
         try:
-            file_path.resolve().relative_to(frontend_dir.resolve())
+            file_path.resolve().relative_to((frontend_dir / 'dist' / 'assets').resolve())
         except ValueError:
             logger.warning(f"路径遍历攻击尝试: {filename}")
             return jsonify({'error': '访问被拒绝'}), 403
-        
+
         if not file_path.exists():
-            logger.warning(f"CSS 文件不存在: {filename}")
+            logger.warning(f"资源文件不存在: {filename}")
             return jsonify({'error': f'找不到文件: {filename}'}), 404
-        
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read(), 200, {'Content-Type': 'text/css; charset=utf-8'}
+
+        # 根据扩展名确定 MIME 类型
+        mime_type = get_mime_type(filename)
+
+        with open(file_path, 'rb') as f:
+            return f.read(), 200, {'Content-Type': mime_type}
     except Exception as e:
-        logger.error(f"加载 CSS 文件失败: {filename}, 错误: {e}")
-        return jsonify({'error': '加载 CSS 文件失败'}), 500
+        logger.error(f"加载资源文件失败: {filename}, 错误: {e}")
+        return jsonify({'error': '加载资源文件失败'}), 500
+
+@app.route('/favicon.svg')
+def favicon_svg():
+    """网站图标 SVG"""
+    try:
+        frontend_dir = Path(__file__).parent.parent / 'frontend'
+        favicon_file = frontend_dir / 'dist' / 'favicon.svg'
+
+        if not favicon_file.exists():
+            favicon_file = frontend_dir / 'public' / 'favicon.svg'
+
+        if favicon_file.exists():
+            with open(favicon_file, 'rb') as f:
+                return f.read(), 200, {'Content-Type': 'image/svg+xml'}
+
+        return '', 204
+    except Exception as e:
+        return '', 204
 
 @app.route('/favicon.ico')
 def favicon():
     """网站图标"""
-    try:
-        frontend_dir = Path(__file__).parent.parent / 'frontend'
-        favicon_file = frontend_dir / 'favicon.svg'
-        
-        if favicon_file.exists():
-            with open(favicon_file, 'rb') as f:
-                return f.read(), 200, {'Content-Type': 'image/svg+xml'}
-        
-        return '', 204
-    except Exception as e:
-        return '', 204
+    return favicon_svg()
 
-@app.route('/<filename>.svg')
-def serve_svg(filename):
-    """提供前端根目录 SVG 文件（如 app-logo.svg）"""
+# 保留旧前端路由作为回退（开发时可能需要）
+@app.route('/js/<path:filename>')
+def serve_js(filename):
+    """提供 JavaScript 文件（旧前端回退）"""
     try:
-        # 安全检查：只允许纯文件名，不允许路径穿越
-        if '/' in filename or '\\' in filename or '..' in filename:
+        if '..' in filename or filename.startswith('/'):
             return jsonify({'error': '访问被拒绝'}), 403
 
-        frontend_dir = Path(__file__).parent.parent / 'frontend'
-        svg_file = frontend_dir / f'{filename}.svg'
+        frontend_dir = Path(__file__).parent.parent / 'frontend-legacy'
+        file_path = frontend_dir / 'js' / filename
 
-        # 确保文件在 frontend 目录内
-        try:
-            svg_file.resolve().relative_to(frontend_dir.resolve())
-        except ValueError:
+        if not file_path.exists():
+            return jsonify({'error': f'找不到文件: {filename}'}), 404
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read(), 200, {'Content-Type': 'application/javascript; charset=utf-8'}
+    except Exception as e:
+        return jsonify({'error': '加载 JS 文件失败'}), 500
+
+@app.route('/css/<path:filename>')
+def serve_css(filename):
+    """提供 CSS 文件（旧前端回退）"""
+    try:
+        if '..' in filename or filename.startswith('/'):
             return jsonify({'error': '访问被拒绝'}), 403
 
-        if not svg_file.exists():
-            return jsonify({'error': f'找不到文件: {filename}.svg'}), 404
+        frontend_dir = Path(__file__).parent.parent / 'frontend-legacy'
+        file_path = frontend_dir / 'css' / filename
 
-        with open(svg_file, 'rb') as f:
-            return f.read(), 200, {'Content-Type': 'image/svg+xml; charset=utf-8'}
+        if not file_path.exists():
+            return jsonify({'error': f'找不到文件: {filename}'}), 404
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read(), 200, {'Content-Type': 'text/css; charset=utf-8'}
     except Exception as e:
-        logger.error(f"加载 SVG 文件失败: {filename}.svg, 错误: {e}")
-        return jsonify({'error': '加载 SVG 文件失败'}), 500
+        return jsonify({'error': '加载 CSS 文件失败'}), 500
 
 @app.route('/frontend/modules/<path:filename>')
 def serve_frontend_modules(filename):

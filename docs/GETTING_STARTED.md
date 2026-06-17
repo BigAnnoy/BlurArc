@@ -40,7 +40,7 @@ python check_deps.py
 
 ```bash
 cd c:\Users\IT20240802\Desktop\照片整理
-python src\FrameAlbum.py
+python src\BlurArc.py
 ```
 
 #### 方式 2️⃣：双击启动脚本（最方便）
@@ -61,7 +61,7 @@ python 启动相册.py
 #### 方式 4️⃣：从 scripts 文件夹启动
 
 ```bash
-scripts\启动FrameAlbum.bat
+scripts\启动BlurArc.bat
 ```
 
 ## 故障排除
@@ -92,7 +92,7 @@ Address already in use
 ### 问题 3: 找不到应用文件
 
 ```
-can't open file 'FrameAlbum.py': [Errno 2] No such file or directory
+can't open file 'BlurArc.py': [Errno 2] No such file or directory
 ```
 
 **原因**：从错误的目录启动
@@ -107,7 +107,7 @@ can't open file 'FrameAlbum.py': [Errno 2] No such file or directory
 
 ```
 照片整理/
-├── src/FrameAlbum.py      <- 应用主文件
+├── src/BlurArc.py      <- 应用主文件
 ├── 启动相册.bat             <- 推荐启动脚本
 ├── 启动相册.py              <- Python 启动脚本
 ├── scripts/                 <- 其他启动脚本
@@ -122,7 +122,7 @@ can't open file 'FrameAlbum.py': [Errno 2] No such file or directory
 1. ✅ 检查配置（首次启动会提示设置相册路径）
 2. ✅ 启动 Flask API 服务器（端口 5000）
 3. ✅ 打开 PyWebView 窗口
-4. ✅ 显示相册管理界面
+4. ✅ 显示 Blur Arc 界面
 
 ## 常用操作
 
@@ -141,6 +141,6 @@ can't open file 'FrameAlbum.py': [Errno 2] No such file or directory
 
 ---
 
-**版本**: v0.3 PyWebView  
+**版本**: v0.5.0 PyWebView  
 **更新时间**: 2026-03-23  
 **状态**: ✅ 生产级

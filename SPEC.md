@@ -1,11 +1,11 @@
-# FrameAlbum v0.1 产品规格说明书
+# Blur Arc v0.5 产品规格说明书
 
 ## 1. 项目概述
 
 | 属性 | 详情 |
 |------|------|
-| **项目名称** | FrameAlbum |
-| **版本** | v0.1.0 |
+| **项目名称** | Blur Arc |
+| **版本** | v0.5.0 |
 | **类型** | 本地照片/视频管理器（桌面应用） |
 | **许可证** | MIT |
 | **平台** | Windows / macOS / Linux |
@@ -90,16 +90,16 @@ processor  constants.py
 | 数据库 | SQLAlchemy 2.x + SQLite（`.config/photo_manager.db`） |
 | 图像处理 | Pillow 9.x + pillow-heif（HEIC 格式支持） |
 | 视频处理 | FFmpeg / ffprobe（可选，bundled 或 PATH） |
-| 打包 | PyInstaller（`FrameAlbum.spec`） |
+| 打包 | PyInstaller（`BlurArc.spec`） |
 | 前端 | HTML5 + CSS3 + Vanilla JS（ES Modules 双轨制） |
 | 国际化 | 中英双语（`js/i18n.js`） |
 
 ### 3.2 目录结构
 
 ```
-e:/Frame_Album/
+e:/BlurArc/
 ├── src/
-│   └── FrameAlbum.py              # 应用入口（PyWebView + Flask 集成）
+│   └── BlurArc.py              # 应用入口（PyWebView + Flask 集成）
 ├── backend/
 │   ├── api_server.py              # Flask REST API（25+ 端点）
 │   ├── import_manager.py          # 导入管理（ThreadPoolExecutor 多线程）
@@ -126,7 +126,7 @@ e:/Frame_Album/
 │   └── download_ffmpeg.py          # FFmpeg 自动下载脚本
 ├── test/                          # pytest 单元测试
 ├── docs/                          # 图标等资源
-├── FrameAlbum.spec                # PyInstaller 打包配置
+├── BlurArc.spec                # PyInstaller 打包配置
 ├── requirements.txt                # 生产依赖
 ├── requirements-dev.txt           # 开发依赖
 ├── SPEC.md                        # 本规格文档
@@ -183,8 +183,8 @@ e:/Frame_Album/
 ### 4.7 设置
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/settings/album_path` | 获取相册路径 |
-| POST | `/api/settings/album_path` | 设置相册路径 |
+| GET | `/api/settings/album-path` | 获取相册路径 |
+| PUT | `/api/settings/album-path` | 设置相册路径 |
 | GET | `/api/settings/config` | 获取完整配置 |
 | POST | `/api/settings/config` | 更新配置 |
 
@@ -249,7 +249,7 @@ e:/Frame_Album/
 ## 7. 验收标准
 
 ### 7.1 启动
-- [ ] 运行 `python src/FrameAlbum.py` 或打包后的 `FrameAlbum.exe` 能正常启动
+- [ ] 运行 `python src/BlurArc.py` 或打包后的 `BlurArc.exe` 能正常启动
 - [ ] PyWebView 窗口显示正确（最大化，暗色主题）
 - [ ] Flask API 在 30 秒内就绪，页面正常加载
 - [ ] 低端机或首次启动时，等待页面正常显示并自动重连
@@ -278,4 +278,4 @@ e:/Frame_Album/
 
 | 版本 | 日期 | 主要变化 |
 |------|------|---------|
-| v0.1 | 当前 | 初始版本：PyWebView + Flask 架构、相册浏览、导入管理、缩略图缓存、EXIF 查看、视频预览 |
+| v0.5 | 当前 | 重命名为 Blur Arc，全面更新项目名称和文档 |

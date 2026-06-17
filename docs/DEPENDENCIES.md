@@ -117,7 +117,7 @@ pip freeze > config/requirements.txt
 **安装完成后**，可以启动应用：
 
 ```bash
-python src/FrameAlbum.py
+python src/BlurArc.py
 ```
 
 或双击 `启动相册.bat` 脚本。
