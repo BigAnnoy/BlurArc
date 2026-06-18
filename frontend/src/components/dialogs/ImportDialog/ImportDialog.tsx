@@ -9,6 +9,7 @@ import { Step3Importing } from './Step3Importing';
 import { PhotoPreviewModal } from './PhotoPreviewModal';
 import { ImportModeDialog } from './ImportModeDialog';
 import type { ImportStep, ImportMode, CheckResult, CheckProgress, ImportProgress, ImportPhoto } from './types';
+import { PhoneImportPanel } from './PhoneImportPanel';
 
 interface ImportDialogProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
   const { showToast } = useToast();
 
   // 步骤控制
-  const [step, setStep] = useState<ImportStep>('select');
+  const [step, setStep] = useState<ImportStep>('select-mode');
 
   // 步骤1：选择
   const [sourcePath, setSourcePath] = useState('');
@@ -56,7 +57,7 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
 
   // 重置状态
   const resetState = useCallback(() => {
-    setStep('select');
+    setStep('select-mode');
     setSourcePath('');
     setCheckId(null);
     setCheckProgress({ status: 'queued', progress: 0, stage: 'queued', detail: '' });
@@ -92,10 +93,10 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
         } else if (progress.status === 'failed') {
           clearInterval(interval);
           showToast(`${t('import.checkFailed')}: ${progress.detail}`, 'error');
-          setStep('select');
+          setStep('select-mode');
         } else if (progress.status === 'cancelled') {
           clearInterval(interval);
-          setStep('select');
+          setStep('select-mode');
         }
       } catch (error) {
         console.error('Failed to get check progress:', error);
@@ -139,6 +140,22 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
     return () => clearInterval(interval);
   }, [step, importId, finalStatus, onComplete, onClose, showToast, t]);
 
+  // 开始检查（从手机导入直接传入 sourcePath）
+  const handleStartCheckFromPhone = async (phoneSourcePath: string) => {
+    setSourcePath(phoneSourcePath);
+    setStep('checking');
+    setCheckProgress({ status: 'queued', progress: 0, stage: 'queued', detail: t('import.checkingStatus') });
+
+    try {
+      const res = await api.startImportCheck(phoneSourcePath);
+      setCheckId(res.check_id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('import.startCheckFailed');
+      showToast(message, 'error');
+      setStep('select-mode');
+    }
+  };
+
   // 开始检查
   const handleStartCheck = async () => {
     if (!sourcePath.trim()) {
@@ -155,14 +172,14 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
     } catch (error) {
       const message = error instanceof Error ? error.message : t('import.startCheckFailed');
       showToast(message, 'error');
-      setStep('select');
+      setStep('select-mode');
     }
   };
 
   // 取消检查
   const handleCancelCheck = () => {
     setCheckId(null);
-    setStep('select');
+    setStep('select-mode');
     setCheckProgress({ status: 'cancelled', progress: 0, stage: 'queued', detail: t('import.cancelled') });
   };
 
@@ -311,7 +328,55 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
   // 渲染当前步骤
   const renderStep = () => {
     switch (step) {
-      case 'select':
+      case 'select-mode':
+        return (
+          <div className="space-y-5">
+            <p className="text-sm text-text-secondary text-center">{t('phoneImport.selectMode')}</p>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setStep('phone-upload')}
+                className="flex flex-col items-center gap-3 p-6 bg-card border-2 border-border rounded-xl hover:border-primary transition-all group"
+              >
+                <span className="text-4xl">📱</span>
+                <div className="text-center">
+                  <p className="font-semibold text-sm group-hover:text-primary transition-colors">
+                    {t('phoneImport.entry')}
+                  </p>
+                  <p className="text-xs text-text-tertiary mt-1">
+                    {t('phoneImport.subtitle')}
+                  </p>
+                </div>
+              </button>
+              <button
+                onClick={() => setStep('select-path')}
+                className="flex flex-col items-center gap-3 p-6 bg-card border-2 border-border rounded-xl hover:border-primary transition-all group"
+              >
+                <span className="text-4xl">💻</span>
+                <div className="text-center">
+                  <p className="font-semibold text-sm group-hover:text-primary transition-colors">
+                    {t('phoneImport.localImport')}
+                  </p>
+                  <p className="text-xs text-text-tertiary mt-1">
+                    {t('phoneImport.localImportDesc')}
+                  </p>
+                </div>
+              </button>
+            </div>
+          </div>
+        );
+
+      case 'phone-upload':
+        return (
+          <PhoneImportPanel
+            onStartImport={(uploadDir: string) => {
+              setSourcePath(uploadDir);
+              handleStartCheckFromPhone(uploadDir);
+            }}
+            onBack={() => setStep('select-mode')}
+          />
+        );
+
+      case 'select-path':
       case 'checking':
         return (
           <Step1Select
@@ -330,7 +395,7 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
             onPreviewPhoto={setPreviewPhoto}
             onDeleteFiles={handleDeleteFiles}
             onStartImport={handleStartImport}
-            onBack={() => setStep('select')}
+            onBack={() => setStep('select-mode')}
           />
         );
       case 'importing':
@@ -350,8 +415,11 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
   // 获取标题
   const getTitle = () => {
     switch (step) {
-      case 'select':
+      case 'select-mode':
+      case 'select-path':
         return t('import.title');
+      case 'phone-upload':
+        return t('phoneImport.title');
       case 'checking':
         return t('import.checking');
       case 'preview':
@@ -368,7 +436,7 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
         onClose={step === 'importing' ? () => {} : onClose}
         title={getTitle()}
         size={
-          step === 'select' || step === 'checking'
+          step === 'select-mode' || step === 'select-path' || step === 'checking' || step === 'phone-upload'
             ? 'md'
             : step === 'importing'
             ? 'lg'
