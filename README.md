@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/版本-v0.5.0-gold?style=flat-square" />
+  <img src="https://img.shields.io/badge/版本-v0.5.1-gold?style=flat-square" />
   <img src="https://img.shields.io/badge/Python-3.8+-blue?style=flat-square&logo=python" />
   <img src="https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square" />
   <img src="https://img.shields.io/badge/许可证-MIT-lightgrey?style=flat-square" />
