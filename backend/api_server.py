@@ -1196,6 +1196,139 @@ def test_api():
         'timestamp': datetime.now().isoformat()
     })
 
+
+# ============================================================================
+# 手机上传 API
+# ============================================================================
+
+# 手机上传服务器（延迟初始化）
+_phone_upload_server = None
+
+def _get_phone_upload_server():
+    """获取手机上传服务器单例"""
+    global _phone_upload_server
+    if _phone_upload_server is None:
+        try:
+            from .phone_upload_server import PhoneUploadServer
+        except ImportError:
+            from phone_upload_server import PhoneUploadServer
+        _phone_upload_server = PhoneUploadServer()
+    return _phone_upload_server
+
+
+@app.route('/api/phone-upload/start', methods=['POST'])
+def phone_upload_start():
+    """启动手机上传服务器"""
+    try:
+        server = _get_phone_upload_server()
+        info = server.start()
+        return jsonify(info)
+    except Exception as e:
+        logger.error(f'[API] 启动手机上传服务器失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/phone-upload/stop', methods=['POST'])
+def phone_upload_stop():
+    """停止手机上传服务器（保留已上传文件）"""
+    try:
+        server = _get_phone_upload_server()
+        server.stop(cleanup=False)
+        return jsonify({'status': 'stopped'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/phone-upload/status', methods=['GET'])
+def phone_upload_status():
+    """获取上传进度"""
+    try:
+        server = _get_phone_upload_server()
+        session = server.get_session()
+        if not session:
+            return jsonify({'error': '没有活跃的会话'}), 404
+        return jsonify(session.to_dict())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/phone-upload/qr', methods=['GET'])
+def phone_upload_qr():
+    """获取二维码 PNG 图片"""
+    try:
+        server = _get_phone_upload_server()
+        png_data = server.get_qr_png()
+        return send_file(
+            io.BytesIO(png_data),
+            mimetype='image/png',
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/phone-upload/incomplete', methods=['GET'])
+def phone_upload_incomplete():
+    """检查是否有未完成的会话"""
+    try:
+        server = _get_phone_upload_server()
+        session = server.has_incomplete_session()
+        return jsonify({'session': session})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/phone-upload/resume', methods=['POST'])
+def phone_upload_resume():
+    """恢复未完成的会话"""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        session_id = data.get('session_id', '')
+        if not session_id:
+            return jsonify({'error': '缺少 session_id'}), 400
+
+        server = _get_phone_upload_server()
+        session = server.resume_session(session_id)
+        if not session:
+            return jsonify({'error': '会话不存在或已完成'}), 404
+
+        info = server.start()
+        return jsonify(info)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/phone-upload/discard', methods=['POST'])
+def phone_upload_discard():
+    """放弃未完成的会话并清理文件"""
+    try:
+        from .phone_upload_server import UPLOAD_ROOT, SESSIONS_FILE
+    except ImportError:
+        from phone_upload_server import UPLOAD_ROOT, SESSIONS_FILE
+
+    try:
+        server = _get_phone_upload_server()
+        incomplete = server.has_incomplete_session()
+        if incomplete:
+            session_dir = UPLOAD_ROOT / incomplete["upload_dir"]
+            if session_dir.exists():
+                shutil.rmtree(session_dir, ignore_errors=True)
+            # Remove from sessions.json
+            if SESSIONS_FILE.exists():
+                data = json.loads(SESSIONS_FILE.read_text(encoding="utf-8"))
+                data["sessions"] = [
+                    s for s in data.get("sessions", [])
+                    if s.get("id") != incomplete.get("id")
+                ]
+                SESSIONS_FILE.write_text(
+                    json.dumps(data, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+        return jsonify({'status': 'discarded'})
+    except Exception as e:
+        logger.error(f'[API] 放弃上传会话失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
 # ============================================================================
 # 导入 API
 # ============================================================================

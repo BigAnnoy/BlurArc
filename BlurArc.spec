@@ -42,6 +42,7 @@ hiddenimports = [
     'tkinter', 'tkinter.filedialog',
     'email', 'email.mime', 'email.mime.text', 'html.parser',
     'webview', 'webview.platforms', 'webview.platforms.winforms',
+    'qrcode',           # 手机上传二维码生成
     'threading',
     # 标准库（确保不被排除）
     'difflib', 'doctest', 'pdb', 'profile', 'pstats', 'cProfile',
