@@ -232,6 +232,11 @@ const translations: Record<Language, Record<string, string>> = {
     'welcome.selecting': '正在设置...',
     'welcome.hint': '建议选择空文件夹，您可以随时在设置中更改相册路径',
     'welcome.selectFailed': '选择相册路径失败',
+    'welcome.folderNotSelected': '未选择文件夹',
+    'welcome.selectingFolder': '正在选择文件夹...',
+    'welcome.buildingIndex': '正在建立索引和缩略图...',
+    'welcome.processing': '处理中',
+    'welcome.rebuildFailed': '建立索引失败',
   },
   en: {
     // Common
@@ -451,6 +456,11 @@ const translations: Record<Language, Record<string, string>> = {
     'welcome.selecting': 'Setting up...',
     'welcome.hint': 'It is recommended to select an empty folder. You can change the album path anytime in Settings',
     'welcome.selectFailed': 'Failed to select album path',
+    'welcome.folderNotSelected': 'No folder selected',
+    'welcome.selectingFolder': 'Selecting folder...',
+    'welcome.buildingIndex': 'Building index and thumbnails...',
+    'welcome.processing': 'Processing',
+    'welcome.rebuildFailed': 'Failed to build index',
   },
 };
 

@@ -13,9 +13,11 @@ interface MainContentProps {
   onSelect: () => void;
   onSelectAll: () => void;
   onDelete: () => void;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
 }
 
-export function MainContent({ title, count, photos, loading, selectionMode, selectedIds, onPhotoClick, onSelect, onSelectAll, onDelete }: MainContentProps) {
+export function MainContent({ title, count, photos, loading, selectionMode, selectedIds, onPhotoClick, onSelect, onSelectAll, onDelete, hasMore, onLoadMore }: MainContentProps) {
   const selectedCount = selectedIds.size;
   const { t } = useI18n();
 
@@ -77,6 +79,8 @@ export function MainContent({ title, count, photos, loading, selectionMode, sele
           selectionMode={selectionMode}
           selectedIds={selectedIds}
           onPhotoClick={onPhotoClick}
+          hasMore={hasMore}
+          onLoadMore={onLoadMore}
         />
       )}
     </section>

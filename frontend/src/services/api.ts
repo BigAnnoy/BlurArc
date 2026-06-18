@@ -104,8 +104,14 @@ export const api = {
     return { tree: yearGroups, rootDir };
   },
 
-  // Photos
-  getPhotos: (path: string) => fetchJson<{ photos: { id: string; name: string; path: string; size: number; date: string; type: string; duration?: string }[] }>(`${API_BASE}/album/photos?path=${encodeURIComponent(path)}`),
+  // Photos - 支持分页
+  getPhotos: (path: string, page: number = 1, pageSize: number = 100) => fetchJson<{ 
+    photos: { id: string; name: string; path: string; size: number; date: string; type: string; duration?: string }[];
+    count: number;
+    total_pages: number;
+    page: number;
+    page_size: number;
+  }>(`${API_BASE}/album/photos?path=${encodeURIComponent(path)}&page=${page}&page_size=${pageSize}`),
 
   // Thumbnail
   getThumbnail: (path: string) => `${API_BASE}/album/thumbnail?path=${encodeURIComponent(path)}`,

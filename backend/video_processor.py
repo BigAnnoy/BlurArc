@@ -13,6 +13,30 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
 
+# ---------------------------------------------------------------------------
+# Windows 无窗口运行子进程
+# ---------------------------------------------------------------------------
+# subprocess.run/Popen 在 Windows 默认创建新控制台窗口（闪烁后消失）。
+# 通过设置 CREATE_NO_WINDOW 标志（Win32 API）可以完全抑制窗口创建。
+# 非 Windows 平台不需要此标志。
+_NO_CONSOLE_FLAGS: int = 0
+if sys.platform == 'win32':
+    try:
+        _NO_CONSOLE_FLAGS = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+    except AttributeError:
+        # 旧 Python 版本没有 CREATE_NO_WINDOW 常量，直接使用 Win32 值
+        _NO_CONSOLE_FLAGS = 0x08000000  # CREATE_NO_WINDOW
+
+def _run_subprocess_silent(cmd, **kwargs):
+    """执行子进程但不创建新控制台窗口（Windows）。
+    在非 Windows 平台上等价于 subprocess.run。
+    """
+    if sys.platform == 'win32':
+        # 合并调用方可能已设置的其他 creationflags
+        existing = kwargs.pop('creationflags', 0) or 0
+        kwargs['creationflags'] = existing | _NO_CONSOLE_FLAGS
+    return subprocess.run(cmd, **kwargs)
+
 # 路径适配：兼容 PyInstaller 打包（sys._MEIPASS）和直接运行两种模式
 if getattr(sys, 'frozen', False):
     _BACKEND_BASE = Path(sys._MEIPASS) / 'backend'
@@ -27,10 +51,8 @@ def _find_ffmpeg_in_path():
     """在系统PATH中查找ffmpeg"""
     cmd = 'where' if sys.platform == 'win32' else 'which'
     try:
-        result = subprocess.run([cmd, 'ffmpeg'], capture_output=True, text=True, check=False)
+        result = _run_subprocess_silent([cmd, 'ffmpeg'], capture_output=True, text=True, check=False)
         if result.returncode == 0 and result.stdout.strip():
-            # BUG-016：Windows `where` 输出行尾为 \r\n，用 splitlines() 代替 split('\n')
-            # 避免路径末尾携带 \r 导致文件路径无效
             lines = result.stdout.strip().splitlines()
             return Path(lines[0]) if lines else None
     except Exception:
@@ -41,9 +63,8 @@ def _find_ffprobe_in_path():
     """在系统PATH中查找ffprobe"""
     cmd = 'where' if sys.platform == 'win32' else 'which'
     try:
-        result = subprocess.run([cmd, 'ffprobe'], capture_output=True, text=True, check=False)
+        result = _run_subprocess_silent([cmd, 'ffprobe'], capture_output=True, text=True, check=False)
         if result.returncode == 0 and result.stdout.strip():
-            # BUG-016：同上，用 splitlines() 避免 \r 问题
             lines = result.stdout.strip().splitlines()
             return Path(lines[0]) if lines else None
     except Exception:
@@ -102,7 +123,7 @@ class VideoProcessor:
             command = [str(FFMPEG_PATH)] + args
             
             # 执行命令（BUG-014：加 timeout=60s，防止损坏视频永久阻塞线程）
-            result = subprocess.run(
+            result = _run_subprocess_silent(
                 command,
                 capture_output=True,
                 text=True,

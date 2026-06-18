@@ -1,16 +1,38 @@
 import type { Photo } from '../../types';
 import { PhotoCard } from './PhotoCard';
 import { useI18n } from '../../contexts/I18nContext';
+import { useEffect, useRef } from 'react';
 
 interface PhotoGridProps {
   photos: Photo[];
   selectionMode?: boolean;
   selectedIds?: Set<string>;
   onPhotoClick: (photo: Photo) => void;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
 }
 
-export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick }: PhotoGridProps) {
+export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick, hasMore, onLoadMore }: PhotoGridProps) {
   const { t } = useI18n();
+  const observerRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting && hasMore && onLoadMore) {
+          onLoadMore();
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    
+    if (observerRef.current) {
+      observer.observe(observerRef.current);
+    }
+    
+    return () => observer.disconnect();
+  }, [hasMore, onLoadMore]);
   
   if (photos.length === 0) {
     return (
@@ -35,6 +57,11 @@ export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick }: 
           onClick={() => onPhotoClick(photo)}
         />
       ))}
+      {hasMore && (
+        <div ref={observerRef} className="flex items-center justify-center py-4">
+          <div className="animate-spin w-5 h-5 border-2 border-border border-t-primary rounded-full" />
+        </div>
+      )}
     </div>
   );
 }

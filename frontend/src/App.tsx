@@ -25,6 +25,10 @@ interface AppState {
   loading: boolean;
   selectionMode: boolean;
   selectedIds: Set<string>;
+  // 分页状态
+  totalPhotos: number;
+  currentPage: number;
+  hasMore: boolean;
 }
 
 function AppContent() {
@@ -42,6 +46,9 @@ function AppContent() {
     loading: true,
     selectionMode: false,
     selectedIds: new Set(),
+    totalPhotos: 0,
+    currentPage: 1,
+    hasMore: false,
   });
 
   // Dialog states
@@ -87,21 +94,28 @@ function AppContent() {
   }, [showToast]);
 
   // Load photos when path changes
-  const loadPhotos = useCallback(async (path: string, title: string) => {
-    setState((prev) => ({ ...prev, selectedPath: path, selectedTitle: title, loading: true }));
+  const loadPhotos = useCallback(async (path: string, title: string, page: number = 1, append: boolean = false) => {
+    if (page === 1) {
+      setState((prev) => ({ ...prev, selectedPath: path, selectedTitle: title, loading: true }));
+    }
     try {
-      const res = await api.getPhotos(path);
+      const res = await api.getPhotos(path, page, 100);
+      const newPhotos = res.photos.map((p) => ({
+        id: p.path,
+        name: p.name,
+        path: p.path,
+        size: p.size,
+        date: p.date,
+        type: p.type as 'photo' | 'video',
+        duration: p.duration,
+      }));
+      
       setState((prev) => ({
         ...prev,
-        photos: res.photos.map((p) => ({
-          id: p.path, // 使用 path 作为唯一标识
-          name: p.name,
-          path: p.path,
-          size: p.size,
-          date: p.date,
-          type: p.type as 'photo' | 'video',
-          duration: p.duration,
-        })),
+        photos: append ? [...prev.photos, ...newPhotos] : newPhotos,
+        totalPhotos: res.count,
+        currentPage: res.page,
+        hasMore: res.page < res.total_pages,
         loading: false,
       }));
     } catch (error) {
@@ -122,9 +136,9 @@ function AppContent() {
       const year = match[1];
       const month = parseInt(match[2]);
       const title = `${year}年${month}月`;
-      loadPhotos(path, title);
+      loadPhotos(path, title, 1);
     } else {
-      loadPhotos(path, dirName);
+      loadPhotos(path, dirName, 1);
     }
   }, [loadPhotos]);
 
@@ -178,7 +192,7 @@ function AppContent() {
     setState((prev) => ({ ...prev, selectionMode: false, selectedIds: new Set() }));
     showToast(t('delete.success'), 'success');
     if (state.selectedPath) {
-      loadPhotos(state.selectedPath, state.selectedTitle);
+      loadPhotos(state.selectedPath, state.selectedTitle, 1);
     }
   }, [state.selectedPath, state.selectedTitle, loadPhotos, showToast, t]);
 
@@ -220,7 +234,7 @@ function AppContent() {
       }));
       // Reload current photos if a path is selected
       if (state.selectedPath) {
-        loadPhotos(state.selectedPath, state.selectedTitle);
+        loadPhotos(state.selectedPath, state.selectedTitle, 1);
       }
     } catch (error) {
       console.error('Failed to refresh app data:', error);
@@ -254,7 +268,7 @@ function AppContent() {
         />
         <MainContent
           title={state.selectedTitle || t('main.selectToBrowse')}
-          count={state.photos.length}
+          count={state.totalPhotos}
           photos={state.photos}
           loading={state.loading}
           selectionMode={state.selectionMode}
@@ -263,6 +277,12 @@ function AppContent() {
           onSelect={handleSelect}
           onSelectAll={handleSelectAll}
           onDelete={handleDelete}
+          hasMore={state.hasMore}
+          onLoadMore={() => {
+            if (state.selectedPath && state.hasMore) {
+              loadPhotos(state.selectedPath, state.selectedTitle, state.currentPage + 1, true);
+            }
+          }}
         />
       </main>
 

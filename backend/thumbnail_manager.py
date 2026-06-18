@@ -43,8 +43,9 @@ class ThumbnailManager:
         self.thumbnail_size = self._get_thumbnail_size()
         
         # 创建线程池
+        cpu_count = os.cpu_count() or 2
         self.executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=max(1, os.cpu_count() - 1)
+            max_workers=max(1, cpu_count - 1)
         )
         
         # 图片文件扩展名

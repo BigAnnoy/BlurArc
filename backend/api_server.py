@@ -427,11 +427,15 @@ def album_tree():
 
 @app.route('/api/album/photos', methods=['GET'])
 def album_photos():
-    """获取指定路径下的照片列表"""
+    """获取指定路径下的照片列表（支持分页）"""
     try:
         path = request.args.get('path')
         if not path:
             return jsonify({'error': '缺少 path 参数'}), 400
+        
+        # 分页参数
+        page = int(request.args.get('page', '1'))
+        page_size = int(request.args.get('page_size', '100'))
         
         target_path = Path(path)
         if not target_path.exists() or not target_path.is_dir():
@@ -449,9 +453,28 @@ def album_photos():
         # 支持的媒体格式（使用 constants 模块）
         MEDIA_FORMATS = _MEDIA_FORMATS
         
-        photos = []
+        # 收集所有媒体文件
+        all_files = []
         for file in sorted(target_path.iterdir()):
             if file.is_file() and file.suffix.lower() in MEDIA_FORMATS:
+                all_files.append(file)
+        
+        # 分页计算
+        total_count = len(all_files)
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        # 边界检查
+        if page < 1:
+            page = 1
+        if page > total_pages:
+            photos = []
+        else:
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            page_files = all_files[start_idx:end_idx]
+            
+            photos = []
+            for file in page_files:
                 stat = file.stat()
                 encoded_path = urllib.parse.quote(str(file))
                 file_type = 'photo' if file.suffix.lower() in _IMAGE_FORMATS else 'video'
@@ -472,7 +495,10 @@ def album_photos():
         
         return jsonify({
             'path': str(target_path),
-            'count': len(photos),
+            'count': total_count,
+            'total_pages': total_pages,
+            'page': page,
+            'page_size': page_size,
             'photos': photos
         })
     except Exception as e:
