@@ -112,3 +112,18 @@ class TestSessionPersistence:
         server = PhoneUploadServer()
         result = server.has_incomplete_session()
         assert result is None
+
+    def test_has_incomplete_ignores_zero_files(self, monkeypatch, tmp_path):
+        """测试 0 文件的 incomplete 会话不被视为可恢复"""
+        import backend.phone_upload_server as mod
+        monkeypatch.setattr(mod, "UPLOAD_ROOT", tmp_path)
+        monkeypatch.setattr(mod, "SESSIONS_FILE", tmp_path / "sessions.json")
+
+        mod.SESSIONS_FILE.write_text(json.dumps({
+            "sessions": [{"id": "abc", "upload_dir": "foo", "created_at": 0,
+                          "file_count": 0, "total_bytes": 0, "status": "incomplete"}]
+        }), encoding="utf-8")
+
+        server = PhoneUploadServer()
+        result = server.has_incomplete_session()
+        assert result is None

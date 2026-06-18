@@ -125,6 +125,9 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
           setFinalStatus('completed');
           clearInterval(interval);
           showToast(t('importing.complete'), 'success');
+          if (sourceStep === 'phone-upload') {
+            api.discardPhoneSession().catch(() => {});
+          }
           onComplete();
         } else if (progress.status === 'failed' || progress.status === 'error') {
           setFinalStatus('failed');
@@ -192,13 +195,16 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
   // 开始导入 - 先显示模式选择对话框
   const handleStartImport = async () => {
     if (!previewData) return;
-    setShowModeDialog(true);
+    // 手机导入源文件在临时目录，不需要用户选择 copy/move，直接走 move
+    if (sourceStep === 'phone-upload') {
+      await startImportWithMode('move');
+    } else {
+      setShowModeDialog(true);
+    }
   };
 
-  // 处理模式选择
-  const handleModeSelect = async (selectedMode: ImportMode) => {
-    setShowModeDialog(false);
-
+  // 导入实际执行
+  const startImportWithMode = async (mode: ImportMode) => {
     try {
       const settings = await api.getSettings();
       const targetPath = settings.album_path;
@@ -206,14 +212,21 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
         showToast(t('settings.albumPathChangeFailed'), 'error');
         return;
       }
-      const res = await api.startImport(sourcePath, targetPath, selectedMode);
+      const res = await api.startImport(sourcePath, targetPath, mode);
       setImportId(res.import_id);
       setStep('importing');
       setImportProgress({ step: 0, total: previewData?.media_count || 0, current: '', status: 'pending' });
+      // 导入已启动，手机临时文件等导入完成后清理（见导入进度轮询）
     } catch (error) {
       const message = error instanceof Error ? error.message : t('importing.startFailed');
       showToast(message, 'error');
     }
+  };
+
+  // 处理模式选择
+  const handleModeSelect = async (selectedMode: ImportMode) => {
+    setShowModeDialog(false);
+    await startImportWithMode(selectedMode);
   };
 
   // 暂停导入
