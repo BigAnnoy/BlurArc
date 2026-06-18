@@ -1,15 +1,19 @@
 """
 手机上传服务器 - 独立端口 Flask 实例
 提供手机端 HTML 页面、文件接收、进度查询
+每次启动生成一次性 PIN 码，手机端需携带 PIN 才能上传
 """
 import io
 import json
 import logging
 import os
+import secrets
 import socket
+import string
 import threading
 import uuid
 import shutil
+import struct
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -29,6 +33,26 @@ UPLOAD_ROOT = APP_DATA_DIR / ".config" / "phone_upload"
 SESSIONS_FILE = UPLOAD_ROOT / "sessions.json"
 MAX_SINGLE_FILE_BYTES = 500 * 1024 * 1024  # 500 MB
 MAX_FILES_PER_SESSION = 2000
+PIN_LENGTH = 6  # 一次性 PIN 码长度
+
+# 文件 magic bytes 白名单（用于校验上传文件是否为合法图片/视频）
+MAGIC_BYTES_WHITELIST = {
+    b'\xff\xd8\xff': 'JPEG',
+    b'\x89PNG\r\n\x1a\n': 'PNG',
+    b'GIF8': 'GIF',
+    b'RIFF': 'AVI/WEBP',   # RIFF container (AVI or WEBP)
+    b'\x00\x00\x00\x1c\x66\x74\x79\x70': 'MP4',   # ftyp
+    b'\x00\x00\x00\x18\x66\x74\x79\x70': 'MP4',   # ftyp variant
+    b'\x00\x00\x00\x20\x66\x74\x79\x70': 'MP4',   # ftyp variant
+    b'\x00\x00\x00\x28\x66\x74\x79\x70': 'MP4',   # ftyp variant (heic)
+    b'\x00\x00\x00\x30\x66\x74\x79\x70': 'MP4',   # ftyp variant (3gp)
+    b'ftyp': 'MP4',       # ftyp at offset 4
+    b'\x1a\x45\xdf\xa3': 'MKV/WebM',
+    b'BM': 'BMP',
+    b'II*\x00': 'TIFF',
+    b'MM\x00*': 'TIFF',
+    b'\x50\x56\x52': 'VRD',
+}
 
 # 允许的扩展名（复用 constants.py 定义，保持与导入流程一致）
 ALLOWED_EXTENSIONS = MEDIA_FORMATS
@@ -73,18 +97,21 @@ class UploadSession:
 
 
 class PhoneUploadServer:
-    """手机上传服务器（独立端口 Flask 实例）"""
+    """手机上传服务器（独立端口 Flask 实例）
+    每次启动生成一次性 PIN 码，手机端上传需携带 PIN"""
 
     HOST = "0.0.0.0"
     PORT_RANGE = (9800, 9900)
 
     def __init__(self):
         self.app = Flask(__name__)
+        self.app.config['MAX_CONTENT_LENGTH'] = MAX_SINGLE_FILE_BYTES  # Werkzeug 全局上传限制
         self.port: int | None = None
         self._local_ip: str = "127.0.0.1"
         self._thread: threading.Thread | None = None
         self._server = None
         self._session: UploadSession | None = None
+        self._pin: str | None = None  # 一次性 PIN 码
         self._register_routes()
 
     def _register_routes(self):
@@ -92,17 +119,26 @@ class PhoneUploadServer:
 
         @self.app.route("/")
         def upload_page():
-            """返回手机端上传页面 HTML"""
+            """返回手机端上传页面 HTML（PIN 码已嵌入页面）"""
+            if not self._pin:
+                return "服务器未就绪", 503
             return self._render_phone_page()
 
         @self.app.route("/upload", methods=["POST"])
         def receive_file():
-            """接收单文件上传"""
+            """接收单文件上传（需携带 PIN 码）"""
+            # PIN 验证：从 query 参数或 header 获取
+            pin = request.args.get("pin") or request.headers.get("X-Upload-PIN", "")
+            if not self._pin or pin != self._pin:
+                return jsonify({"error": "PIN 码无效"}), 401
             return self._handle_upload()
 
         @self.app.route("/status")
         def upload_status():
-            """返回当前上传进度"""
+            """返回当前上传进度（需携带 PIN 码）"""
+            pin = request.args.get("pin") or request.headers.get("X-Upload-PIN", "")
+            if not self._pin or pin != self._pin:
+                return jsonify({"error": "PIN 码无效"}), 401
             if not self._session:
                 return jsonify({"error": "没有活跃的会话"}), 404
             return jsonify(self._session.to_dict())
@@ -110,10 +146,13 @@ class PhoneUploadServer:
     # ============== 公开方法 ==============
 
     def start(self, session: UploadSession | None = None) -> dict:
-        """启动服务器。返回 {port, local_ip, upload_url, session_id, upload_dir}
-        如果传入 session 参数则复用（用于断点续传），否则创建新会话。"""
+        """启动服务器。返回 {port, local_ip, upload_url, session_id, upload_dir, pin}
+        如果传入 session 参数则复用（用于断点续传），否则创建新会话。
+        每次启动生成一次性 PIN 码，手机端需携带才能上传。"""
         self._local_ip = self._get_local_ip()
         self.port = self._find_free_port()
+        # 生成一次性 PIN 码
+        self._pin = ''.join(secrets.choice(string.digits) for _ in range(PIN_LENGTH))
         if session:
             self._session = session
         else:
@@ -129,14 +168,15 @@ class PhoneUploadServer:
         )
         self._thread.start()
 
-        logger.info(f"[PhoneUpload] 服务器已启动: {self._local_ip}:{self.port}")
+        logger.info(f"[PhoneUpload] 服务器已启动: {self._local_ip}:{self.port} PIN={self._pin}")
 
         return {
             "port": self.port,
             "local_ip": self._local_ip,
-            "upload_url": f"http://{self._local_ip}:{self.port}",
+            "upload_url": f"http://{self._local_ip}:{self.port}?pin={self._pin}",
             "session_id": self._session.session_id,
             "upload_dir": str(self._session.upload_dir),
+            "pin": self._pin,
         }
 
     def stop(self, cleanup: bool = False):
@@ -147,6 +187,7 @@ class PhoneUploadServer:
                 self._cleanup_session_dir()
             else:
                 self._update_session_status("incomplete")
+        self._pin = None  # 清除 PIN 码
         if self._server:
             self._server.shutdown()
         logger.info(f"[PhoneUpload] 服务器已停止 (port={self.port})")
@@ -155,10 +196,10 @@ class PhoneUploadServer:
         return self._session
 
     def get_qr_png(self) -> bytes:
-        """生成二维码 PNG 字节流"""
+        """生成二维码 PNG 字节流（URL 包含 PIN 参数）"""
         if not self._session:
             raise RuntimeError("服务器未启动")
-        url = f"http://{self._local_ip}:{self.port}"
+        url = f"http://{self._local_ip}:{self.port}?pin={self._pin}"
         img = qrcode.make(url, box_size=10, border=2)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
@@ -216,6 +257,28 @@ class PhoneUploadServer:
 
     # ============== 内部方法 ==============
 
+    @staticmethod
+    def _validate_magic_bytes(path: Path) -> bool:
+        """校验文件 magic bytes 是否为合法图片/视频格式
+        读取文件头部字节，与白名单比对。MP4 ftyp 在 offset 4 处。"""
+        try:
+            with open(path, "rb") as f:
+                header = f.read(32)
+            if len(header) < 2:
+                return False
+            for magic, label in MAGIC_BYTES_WHITELIST.items():
+                if header[:len(magic)] == magic:
+                    return True
+            # MP4 ftyp 可能出现在 offset 4（前 4 字节是 box size）
+            if len(header) >= 12 and header[4:8] == b"ftyp":
+                return True
+            # HEIC/HEVC 也是 ftyp container
+            if len(header) >= 12 and header[4:8] == b"ftyp" and b"heic" in header[8:12].lower():
+                return True
+            return False
+        except Exception:
+            return False
+
     def _handle_upload(self):
         """处理单个文件上传"""
         if not self._session or not self._session.is_active:
@@ -269,6 +332,12 @@ class PhoneUploadServer:
             save_path.unlink()
             return jsonify({"error": f"文件超过 {MAX_SINGLE_FILE_BYTES // (1024**2)} MB 限制"}), 413
 
+        # 校验：magic bytes 检查（防止伪装扩展名的恶意文件）
+        if not self._validate_magic_bytes(save_path):
+            save_path.unlink()
+            logger.warning(f"[PhoneUpload] 文件 magic bytes 不匹配: {file.filename}")
+            return jsonify({"error": "文件内容与扩展名不符，可能是伪装文件"}), 400
+
         uploaded = UploadedFile(
             original_name=file.filename,
             saved_path=str(save_path),
@@ -304,9 +373,13 @@ class PhoneUploadServer:
             return "127.0.0.1"
 
     def _cleanup_session_dir(self):
-        """删除会话临时目录"""
+        """删除会话临时目录（带异常捕获和日志）"""
         if self._session and self._session.upload_dir.exists():
-            shutil.rmtree(self._session.upload_dir, ignore_errors=True)
+            try:
+                shutil.rmtree(self._session.upload_dir, ignore_errors=True)
+                logger.info(f"[PhoneUpload] 已清理临时目录: {self._session.upload_dir}")
+            except Exception as e:
+                logger.error(f"[PhoneUpload] 清理临时目录失败（将在下次启动时重试）: {e}")
         self._remove_from_sessions_json()
 
     def _update_session_status(self, status: str):
@@ -361,12 +434,16 @@ class PhoneUploadServer:
         )
 
     def _render_phone_page(self) -> str:
-        """渲染手机端上传页面（内联 HTML）"""
-        from .config_manager import ConfigManager
+        """渲染手机端上传页面（内联 HTML）
+        PIN 码通过 URL query 参数自动传递，上传请求自动携带 PIN"""
+
+        # PIN 码已通过 URL ?pin=XXX 传入，JS 会自动从 URL 解析并附加到上传请求
+        pin = self._pin or ""
 
         # 读取主题设置
         theme = "system"
         try:
+            from .config_manager import ConfigManager
             cm = ConfigManager()
             theme = cm.get_setting("theme", "system")
         except Exception:
@@ -515,7 +592,11 @@ body {{
 <p class="footer-note">💡 上传完成后在电脑端继续操作</p>
 
 <script>
-const UPLOAD_URL = '/upload';
+// 从 URL query 参数中获取 PIN 码
+const URL_PARAMS = new URLSearchParams(window.location.search);
+const PIN = URL_PARAMS.get('pin') || '';
+const UPLOAD_URL = '/upload?pin=' + encodeURIComponent(PIN);
+const STATUS_URL = '/status?pin=' + encodeURIComponent(PIN);
 let totalFiles = 0, doneFiles = 0, failedFiles = 0;
 let allFileNames = [];
 let currentIndex = 0;

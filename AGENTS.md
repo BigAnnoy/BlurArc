@@ -124,3 +124,32 @@ npm run build
 # 预览构建结果
 npm run preview
 ```
+
+## Flutter App 开发
+
+Flutter App 位于 `blurarc_app/` 目录，用于手机/平板通过局域网浏览相册和推送照片。
+
+```bash
+cd blurarc_app
+
+# 安装依赖
+flutter pub get
+
+# 代码分析
+flutter analyze
+
+# 运行（需要连接 Android 真机或模拟器）
+flutter run
+
+# 构建 APK
+flutter build apk
+```
+
+**Flutter SDK 位置：** `E:\Applications\flutter`（已添加到用户 PATH）
+
+---
+
+## 📋 开发日志
+
+开发日志存放在 `docs/devlogs/` 目录，按 `YYYY-MM-DD-<topic>.md` 命名。
+每次实质性开发完成后自动新增或更新对应日志文件。查阅时直接读取该目录下列表即可。

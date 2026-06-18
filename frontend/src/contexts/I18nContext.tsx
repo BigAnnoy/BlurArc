@@ -260,6 +260,35 @@ const translations: Record<Language, Record<string, string>> = {
     'welcome.processing': '处理中',
     'welcome.rebuildFailed': '建立索引失败',
     'welcome.rebuildTimeout': '建立索引超时',
+
+    // Mobile Access
+    'mobileAccess.title': '移动设备访问',
+    'mobileAccess.service': '移动接入服务',
+    'mobileAccess.running': '运行中',
+    'mobileAccess.stopped': '已停止',
+    'mobileAccess.connectionInfo': '连接信息',
+    'mobileAccess.newDevice': '新设备配对',
+    'mobileAccess.scanQrHint': '使用 Blur Arc App 扫描此二维码',
+    'mobileAccess.pairRequest': '请求连接相册',
+    'mobileAccess.pairedDevices': '已配对设备',
+    'mobileAccess.revoke': '撤销',
+    'mobileAccess.revokeAll': '撤销全部',
+    'mobileAccess.entry': '移动设备',
+
+    // Pairing Mode (新流程)
+    'pairing.title': '配对模式',
+    'pairing.description': '开启后广播服务，允许新设备配对',
+    'pairing.start': '点击开启',
+    'pairing.stop': '停止广播',
+    'pairing.broadcasting': '正在广播...',
+    'pairing.deviceFound': '等待设备连接...',
+    'pairing.confirmPairing': '确认配对',
+    'pairing.rejectPairing': '拒绝',
+    'pairing.pairingCode': '配对码',
+    'pairing.enterCodeOnPhone': '请在手机上输入此配对码',
+    'pairing.codeExpiresIn': '有效期: {seconds} 秒',
+    'pairing.cancelPairing': '取消配对',
+    'pairing.requestFrom': '{device} 请求配对',
   },
   en: {
     // Common
@@ -507,6 +536,35 @@ const translations: Record<Language, Record<string, string>> = {
     'welcome.processing': 'Processing',
     'welcome.rebuildFailed': 'Failed to build index',
     'welcome.rebuildTimeout': 'Building index timed out',
+
+    // Mobile Access
+    'mobileAccess.title': 'Mobile Access',
+    'mobileAccess.service': 'Mobile Access Service',
+    'mobileAccess.running': 'Running',
+    'mobileAccess.stopped': 'Stopped',
+    'mobileAccess.connectionInfo': 'Connection Info',
+    'mobileAccess.newDevice': 'New Device Pairing',
+    'mobileAccess.scanQrHint': 'Scan with Blur Arc App',
+    'mobileAccess.pairRequest': 'Request to connect',
+    'mobileAccess.pairedDevices': 'Paired Devices',
+    'mobileAccess.revoke': 'Revoke',
+    'mobileAccess.revokeAll': 'Revoke All',
+    'mobileAccess.entry': 'Mobile',
+
+    // Pairing Mode (新流程)
+    'pairing.title': 'Pairing Mode',
+    'pairing.description': 'Broadcast service after enabling, allow new devices to pair',
+    'pairing.start': 'Tap to Start',
+    'pairing.stop': 'Stop Broadcasting',
+    'pairing.broadcasting': 'Broadcasting...',
+    'pairing.deviceFound': 'Waiting for device...',
+    'pairing.confirmPairing': 'Confirm Pairing',
+    'pairing.rejectPairing': 'Reject',
+    'pairing.pairingCode': 'Pairing Code',
+    'pairing.enterCodeOnPhone': 'Enter this code on your phone',
+    'pairing.codeExpiresIn': 'Expires in {seconds}s',
+    'pairing.cancelPairing': 'Cancel Pairing',
+    'pairing.requestFrom': '{device} requests pairing',
   },
 };
 

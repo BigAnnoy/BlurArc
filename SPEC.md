@@ -5,11 +5,11 @@
 | 属性 | 详情 |
 |------|------|
 | **项目名称** | Blur Arc |
-| **版本** | v0.5.1 |
-| **类型** | 本地照片/视频管理器（桌面应用） |
+| **版本** | v0.5.2 |
+| **类型** | 本地照片/视频管理器（桌面应用 + 移动端 App） |
 | **许可证** | MIT |
-| **平台** | Windows / macOS / Linux |
-| **核心功能** | 相册管理、照片导入、缩略图缓存、EXIF 查看、视频预览 |
+| **平台** | Windows / macOS / Linux（桌面端）；Android / iOS（移动端） |
+| **核心功能** | 相册管理、照片导入、缩略图缓存、EXIF 查看、视频预览、手机无线互联 |
 | **目标用户** | 希望整理和浏览本地照片/视频的普通用户 |
 
 ---
@@ -61,7 +61,7 @@
 ┌────────────────────▼────────────────────────┐
 │             Flask API Server                │
 │           backend/api_server.py             │
-│         25+ REST endpoints (threaded)        │
+│         35+ REST endpoints (threaded)        │
 └──┬──────────┬──────────┬───────────────────┘
    │          │          │
    ▼          ▼          ▼
@@ -75,8 +75,22 @@ processor  constants.py
 .py
 
 ─────────────────────────────────────────────
+│             Mobile Access Server             │
+│        backend/mobile_access_server.py        │
+│     独立端口 8900-8999，与主 API 隔离        │
+└──┬──────────┬──────────┬───────────────────┘
+   │          │          │
+   ▼          ▼          ▼
+Token-  Pairing-  Zeroconf-
+Manager  Manager   Publisher
+         │
+         ▼
+   Flutter App (Android / iOS / 平板)
+   blurarc_app/lib/
+
+─────────────────────────────────────────────
 │                 Frontend                    │
-│    (ES Modules 新架构 + 传统全局 JS 双轨)     │
+│    (React 19 + TypeScript + Vite)           │
 │  暗色主题 UI / 中英双语 / 响应式布局          │
 └─────────────────────────────────────────────┘
 ```
@@ -87,12 +101,15 @@ processor  constants.py
 |------|------|
 | 桌面窗口 | PyWebView 4.x（嵌入 Chromium WebView） |
 | API 服务 | Flask 2.x + Flask-CORS（`http://127.0.0.1:5000`，threaded 模式） |
+| 移动接入 | Flask 2.x（独立端口 8900-8999，与主 API 隔离） |
+| 局域网发现 | Zeroconf (mDNS) |
 | 数据库 | SQLAlchemy 2.x + SQLite（`.config/photo_manager.db`） |
 | 图像处理 | Pillow 9.x + pillow-heif（HEIC 格式支持） |
 | 视频处理 | FFmpeg / ffprobe（可选，bundled 或 PATH） |
+| 移动端 | Flutter 3.44+ (Android / iOS / 平板) |
 | 打包 | PyInstaller（`BlurArc.spec`） |
-| 前端 | HTML5 + CSS3 + Vanilla JS（ES Modules 双轨制） |
-| 国际化 | 中英双语（`js/i18n.js`） |
+| 前端 | React 19 + TypeScript + Vite + Tailwind CSS |
+| 国际化 | 中英双语（`frontend/src/contexts/I18nContext.tsx`） |
 
 ### 3.2 目录结构
 
@@ -200,6 +217,51 @@ e:/BlurArc/
 |------|------|------|
 | GET | `/api/cache/stats` | 缓存统计 |
 | POST | `/api/cache/cleanup` | 清理缓存 |
+
+### 4.10 移动接入（主 API 桥接端点）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/mobile/status` | 查询移动服务状态（enabled/running/port/ip/paired_count） |
+| POST | `/api/mobile/enable` | 启动移动接入服务 |
+| POST | `/api/mobile/disable` | 停止移动接入服务 |
+| GET | `/api/mobile/qr` | 获取配对 QR 二维码 PNG |
+| GET | `/api/mobile/pending-request` | 查询待确认的配对请求 |
+| POST | `/api/mobile/confirm-pairing` | 确认/拒绝配对请求 |
+| GET | `/api/mobile/devices` | 获取已配对设备列表 |
+| POST | `/api/mobile/revoke` | 撤销单个设备令牌 |
+| POST | `/api/mobile/revoke-all` | 撤销所有设备令牌 |
+
+### 4.11 移动接入（直接端点，端口 8900-8999）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/pair` | 生成 6 位配对码 + QR 内容 |
+| POST | `/api/mobile/pair-request` | 手机端提交配对请求（code + device_name） |
+| GET | `/api/mobile/pair-status` | 查询配对状态（accepted/pending/expired/invalid） |
+| GET | `/api/mobile/verify` | 验证 Bearer token 有效性 |
+| GET | `/api/mobile/stats` | 获取相册统计 |
+| GET | `/api/mobile/tree` | 获取目录树 |
+| GET | `/api/mobile/photos` | 分页获取照片列表 |
+| GET | `/api/mobile/thumbnail` | 获取缩略图 |
+| GET | `/api/mobile/file` | 获取原始文件 |
+| GET | `/api/mobile/preview` | 获取预览图 |
+| GET | `/api/mobile/exif` | 获取 EXIF 数据 |
+| POST | `/api/mobile/upload` | 上传照片文件 |
+
+### 4.12 手机上传（端口 9800-9900）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/phone-upload/status` | 查询上传服务状态 |
+| POST | `/api/phone-upload/enable` | 启动上传服务 |
+| POST | `/api/phone-upload/disable` | 停止上传服务 |
+| POST | `/api/phone-upload/generate-pin` | 生成 6 位一次性 PIN |
+| GET | `/api/phone-upload/qr` | 获取 PIN 的 QR 二维码 |
+| POST | `/api/phone-upload/verify-pin` | 验证 PIN |
+| POST | `/api/phone-upload/upload` | 上传照片文件 |
+| POST | `/api/phone-upload/discard` | 丢弃 session（需 session_id 二次确认） |
+| GET | `/api/phone-upload/stats` | 获取上传统计 |
 
 ---
 

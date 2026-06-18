@@ -21,6 +21,9 @@ python-dateutil==2.8.2
 # 二维码生成
 qrcode>=7.4
 
+# mDNS 服务广播（手机配对零配置发现）
+zeroconf>=0.132.0
+
 # 数据库 ORM
 SQLAlchemy==2.0.30
 

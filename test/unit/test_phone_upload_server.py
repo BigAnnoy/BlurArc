@@ -1,9 +1,14 @@
 """PhoneUploadServer 单元测试"""
 import json
+import os
+import struct
 import time
 import pytest
 from pathlib import Path
-from backend.phone_upload_server import PhoneUploadServer, UploadSession, UPLOAD_ROOT
+from backend.phone_upload_server import (
+    PhoneUploadServer, UploadSession, UPLOAD_ROOT,
+    MAGIC_BYTES_WHITELIST, PIN_LENGTH,
+)
 
 
 class TestUploadSession:
@@ -46,9 +51,17 @@ class TestPhoneUploadServerLifecycle:
         assert "upload_url" in info
         assert info["port"] >= 9800
         assert info["port"] <= 9900
+        # PIN 码应在返回中
+        assert "pin" in info
+        assert len(info["pin"]) == PIN_LENGTH
+        assert info["pin"].isdigit()
+        # URL 应包含 PIN 参数
+        assert "pin=" in info["upload_url"]
         server.stop()
         assert server._session is not None
         assert not server._session.is_active
+        # 停止后 PIN 应被清除
+        assert server._pin is None
 
     def test_get_qr_png(self, monkeypatch, tmp_path):
         import backend.phone_upload_server as mod
@@ -62,6 +75,82 @@ class TestPhoneUploadServerLifecycle:
         # PNG 文件头
         assert png[:8] == b"\x89PNG\r\n\x1a\n"
         server.stop()
+
+    def test_pin_generated_on_start(self, monkeypatch, tmp_path):
+        """每次启动生成 PIN 码"""
+        import backend.phone_upload_server as mod
+        monkeypatch.setattr(mod, "UPLOAD_ROOT", tmp_path)
+        monkeypatch.setattr(mod, "SESSIONS_FILE", tmp_path / "sessions.json")
+        server = PhoneUploadServer()
+        assert server._pin is None
+        info1 = server.start()
+        assert server._pin is not None
+        assert server._pin == info1["pin"]
+        server.stop()
+        assert server._pin is None
+        # 再次启动生成新 PIN
+        info2 = server.start()
+        assert server._pin is not None
+        assert server._pin == info2["pin"]
+        server.stop()
+
+    def test_pin_cleared_on_stop(self, monkeypatch, tmp_path):
+        """停止后 PIN 被清除，防止 reuse"""
+        import backend.phone_upload_server as mod
+        monkeypatch.setattr(mod, "UPLOAD_ROOT", tmp_path)
+        monkeypatch.setattr(mod, "SESSIONS_FILE", tmp_path / "sessions.json")
+        server = PhoneUploadServer()
+        server.start()
+        assert server._pin is not None
+        server.stop()
+        assert server._pin is None
+
+
+class TestMagicBytesValidation:
+    """测试文件 magic bytes 校验"""
+
+    def test_jpeg_magic_bytes(self, tmp_path):
+        """JPEG 文件头部 \xff\xd8\xff 应被识别"""
+        f = tmp_path / "test.jpg"
+        f.write_bytes(b'\xff\xd8\xff\xe0' + b'\x00' * 100)
+        assert PhoneUploadServer._validate_magic_bytes(f) is True
+
+    def test_png_magic_bytes(self, tmp_path):
+        """PNG 文件头部应被识别"""
+        f = tmp_path / "test.png"
+        f.write_bytes(b'\x89PNG\r\n\x1a\n' + b'\x00' * 100)
+        assert PhoneUploadServer._validate_magic_bytes(f) is True
+
+    def test_mp4_ftyp_magic_bytes(self, tmp_path):
+        """MP4 ftyp 在 offset 4 应被识别"""
+        f = tmp_path / "test.mp4"
+        # MP4: 4-byte size + "ftyp" + brand
+        f.write_bytes(struct.pack('>I', 32) + b'ftypisom' + b'\x00' * 100)
+        assert PhoneUploadServer._validate_magic_bytes(f) is True
+
+    def test_invalid_file_rejected(self, tmp_path):
+        """恶意伪装文件（.jpg.exe）应被拒绝"""
+        f = tmp_path / "malware.jpg"
+        f.write_bytes(b'MZ\x90\x00' + b'\x00' * 100)  # PE executable header
+        assert PhoneUploadServer._validate_magic_bytes(f) is False
+
+    def test_empty_file_rejected(self, tmp_path):
+        """空文件应被拒绝"""
+        f = tmp_path / "empty.jpg"
+        f.write_bytes(b'')
+        assert PhoneUploadServer._validate_magic_bytes(f) is False
+
+    def test_gif_magic_bytes(self, tmp_path):
+        """GIF 文件头部应被识别"""
+        f = tmp_path / "test.gif"
+        f.write_bytes(b'GIF89a' + b'\x00' * 100)
+        assert PhoneUploadServer._validate_magic_bytes(f) is True
+
+    def test_webm_magic_bytes(self, tmp_path):
+        """MKV/WebM 文件头部应被识别"""
+        f = tmp_path / "test.webm"
+        f.write_bytes(b'\x1a\x45\xdf\xa3' + b'\x00' * 100)
+        assert PhoneUploadServer._validate_magic_bytes(f) is True
 
 
 class TestSessionPersistence:

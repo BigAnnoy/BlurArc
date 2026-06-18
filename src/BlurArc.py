@@ -282,6 +282,19 @@ def start_flask_server():
     except Exception as e:
         logger.error(f"❌ Flask 服务器：启动失败: {e}", exc_info=True)
 
+def _start_mobile_service():
+    """根据配置自动启动移动接入服务"""
+    try:
+        from backend.config_manager import ConfigManager
+        cm = ConfigManager()
+        if cm.get_setting('mobile_service_enabled', False):
+            from backend.mobile_access_server import MobileAccessServer
+            server = MobileAccessServer()
+            info = server.start()
+            logger.info(f"移动接入服务已自动启动: {info}")
+    except Exception as e:
+        logger.warning(f"自动启动移动接入服务失败: {e}")
+
 def main():
     """主程序"""
     logger.info("=" * 60)
@@ -312,6 +325,10 @@ def main():
                 break
         except OSError:
             time.sleep(0.2)
+    
+    # 根据配置自动启动移动接入服务
+    if flask_ready:
+        _start_mobile_service()
     
     # 构建本地等待页面（Flask 未就绪时显示）
     # 此页面不依赖 Flask，独立运行，轮询 /api/health 成功后自动跳转

@@ -323,12 +323,58 @@ export const api = {
       body: JSON.stringify({ session_id: sessionId }),
     }),
 
-  discardPhoneSession: () =>
-    fetchJson<{ status: string }>(`${API_BASE}/phone-upload/discard`, { method: 'POST' }),
+  discardPhoneSession: (sessionId: string) =>
+    fetchJson<{ status: string }>(`${API_BASE}/phone-upload/discard`, {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
 
   // File operations
   openFile: (path: string) => {
     window.open(`${API_BASE}/album/file?path=${encodeURIComponent(path)}`, '_blank');
     return Promise.resolve({ success: true });
   },
+
+  // Mobile access service
+  getMobileStatus: () =>
+    fetchJson<{ enabled: boolean; running: boolean; port: number | null; local_ip: string | null; paired_count: number }>(`${API_BASE}/mobile/status`),
+
+  enableMobileService: () =>
+    fetchJson<{ status: string; port: number; local_ip: string }>(`${API_BASE}/mobile/enable`, { method: 'POST' }),
+
+  disableMobileService: () =>
+    fetchJson<{ status: string }>(`${API_BASE}/mobile/disable`, { method: 'POST' }),
+
+  getMobileQr: () => `${API_BASE}/mobile/qr`,
+
+  getMobilePendingRequest: () =>
+    fetchJson<{ hasPending: boolean; pairing_code?: string; device_name?: string }>(`${API_BASE}/mobile/pending-request`),
+
+  confirmMobilePairing: (pairingCode: string, action: 'accept' | 'reject') =>
+    fetchJson<{ status: string }>(`${API_BASE}/mobile/confirm-pairing`, { method: 'POST', body: JSON.stringify({ pairing_code: pairingCode, action }) }),
+
+  getMobileDevices: () =>
+    fetchJson<{ devices: { device_name: string; paired_at: string; token: string }[] }>(`${API_BASE}/mobile/devices`),
+
+  revokeMobileDevice: (token: string) =>
+    fetchJson<{ status: string }>(`${API_BASE}/mobile/revoke`, { method: 'POST', body: JSON.stringify({ token }) }),
+
+  revokeAllMobileDevices: () =>
+    fetchJson<{ status: string }>(`${API_BASE}/mobile/revoke-all`, { method: 'POST' }),
+
+  // 配对模式管理（新流程：mDNS 发现）
+  startPairingMode: () =>
+    fetchJson<{ status: string; hostname: string }>(`${API_BASE}/mobile/pairing/start`, { method: 'POST' }),
+
+  stopPairingMode: () =>
+    fetchJson<{ status: string }>(`${API_BASE}/mobile/pairing/stop`, { method: 'POST' }),
+
+  getPairingPending: () =>
+    fetchJson<{ status: string; device_name?: string; requested_at?: number }>(`${API_BASE}/mobile/pairing/pending`),
+
+  confirmPairing: () =>
+    fetchJson<{ status: string; pairing_code: string; expires_in: number }>(`${API_BASE}/mobile/pairing/confirm`, { method: 'POST' }),
+
+  rejectPairing: () =>
+    fetchJson<{ status: string }>(`${API_BASE}/mobile/pairing/reject`, { method: 'POST' }),
 };

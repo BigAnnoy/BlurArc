@@ -57,6 +57,7 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
 
   // 记录用户是从哪个步骤进入 checking 的（用于预览页面的返回按钮）
   const [sourceStep, setSourceStep] = useState<ImportStep>('select-mode');
+  const [phoneSessionId, setPhoneSessionId] = useState<string | null>(null);
 
   // 重置状态
   const resetState = useCallback(() => {
@@ -126,7 +127,7 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
           clearInterval(interval);
           showToast(t('importing.complete'), 'success');
           if (sourceStep === 'phone-upload') {
-            api.discardPhoneSession().catch(() => {});
+            if (phoneSessionId) api.discardPhoneSession(phoneSessionId).catch(() => {});
           }
           onComplete();
         } else if (progress.status === 'failed' || progress.status === 'error') {
@@ -148,8 +149,9 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
   }, [step, importId, finalStatus, onComplete, onClose, showToast, t]);
 
   // 开始检查（从手机导入直接传入 sourcePath）
-  const handleStartCheckFromPhone = async (phoneSourcePath: string) => {
+  const handleStartCheckFromPhone = async (phoneSourcePath: string, sessionId?: string) => {
     setSourcePath(phoneSourcePath);
+    if (sessionId) setPhoneSessionId(sessionId);
     setSourceStep('phone-upload');
     setStep('checking');
     setCheckProgress({ status: 'queued', progress: 0, stage: 'queued', detail: t('import.checkingStatus') });
@@ -387,9 +389,9 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
       case 'phone-upload':
         return (
           <PhoneImportPanel
-            onStartImport={(uploadDir: string) => {
+            onStartImport={(uploadDir: string, sessionId: string) => {
               setSourcePath(uploadDir);
-              handleStartCheckFromPhone(uploadDir);
+              handleStartCheckFromPhone(uploadDir, sessionId);
             }}
             onBack={() => setStep('select-mode')}
           />

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/版本-v0.5.1-gold?style=flat-square" />
+  <img src="https://img.shields.io/badge/版本-v0.5.2-gold?style=flat-square" />
   <img src="https://img.shields.io/badge/Python-3.8+-blue?style=flat-square&logo=python" />
   <img src="https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square" />
   <img src="https://img.shields.io/badge/许可证-MIT-lightgrey?style=flat-square" />
@@ -26,6 +26,7 @@
 | **视频支持** | FFmpeg 集成，HTTP Range 拖拽播放，自动提取时长与编码信息 |
 | **全格式预览** | HEIC / TIFF / BMP / RAW 自动转 JPEG 缩略图 |
 | **批量操作** | 多选删除、复制/移动导入、右键菜单、键盘快捷键 |
+| **手机互联** | Flutter 移动端 App，局域网无线浏览相册、推送照片（mDNS 发现 + 安全配对） |
 
 ## 快速开始
 
@@ -61,8 +62,10 @@ python scripts/download_ffmpeg.py
 | 窗口 | PyWebView 6.1+ |
 | 后端 | Flask 2.3+ / SQLAlchemy / SQLite |
 | 前端 | React 19 / TypeScript / Vite / Tailwind CSS |
+| 移动端 | Flutter 3.44+ (Android / iOS / 平板) |
 | 图像 | Pillow / pillow-heif |
 | 视频 | FFmpeg 8.1.1 |
+| 局域网发现 | Zeroconf (mDNS) |
 
 ## 项目结构
 
@@ -71,12 +74,15 @@ BlurArc/
 ├── src/BlurArc.py                 # 主入口
 ├── backend/
 │   ├── api_server.py              # REST API（35+ 端点）
+│   ├── mobile_access_server.py     # 移动接入服务（独立端口）
+│   ├── zeroconf_publisher.py     # mDNS 局域网广播
 │   ├── import_manager.py          # 异步导入 + 两阶段去重
 │   ├── thumbnail_manager.py       # 缩略图生成与缓存
 │   ├── video_processor.py         # FFmpeg 视频处理
 │   ├── database.py                # 数据模型
 │   └── config_manager.py          # 配置管理
 ├── frontend/                      # React + TypeScript 前端
+├── blurarc_app/                   # Flutter 移动端 App
 ├── docs/                          # 文档与落地页
 ├── scripts/                       # FFmpeg 下载、发布脚本
 ├── installer/                     # NSIS Windows 安装包

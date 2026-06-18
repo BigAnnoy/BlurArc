@@ -46,7 +46,18 @@ except ImportError:
 
 # 创建 Flask 应用
 app = Flask(__name__)
-CORS(app)  # 允许跨域请求
+# CORS：仅允许 PyWebView 和 localhost origin，防止恶意网站 CSRF
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "http://localhost:5000",
+            "http://127.0.0.1:5000",
+            # PyWebView 使用特殊 origin，允许所有 PyWebView 请求
+            "https://pywebview",
+        ],
+        "supports_credentials": False,
+    },
+})
 
 # ============================================================================
 # 辅助函数
@@ -1301,33 +1312,187 @@ def phone_upload_resume():
 
 @app.route('/api/phone-upload/discard', methods=['POST'])
 def phone_upload_discard():
-    """放弃未完成的会话并清理文件"""
+    """放弃未完成的会话并清理文件（需提供 session_id 作为二次确认）"""
     try:
         from .phone_upload_server import UPLOAD_ROOT, SESSIONS_FILE
     except ImportError:
         from phone_upload_server import UPLOAD_ROOT, SESSIONS_FILE
 
+    # 二次确认：必须提供 session_id，防止误触/CSRF 删除
+    data = request.get_json(force=True, silent=True) or {}
+    session_id = data.get('session_id', '')
+    if not session_id:
+        return jsonify({'error': '缺少 session_id 参数'}), 400
+
     try:
         server = _get_phone_upload_server()
         incomplete = server.has_incomplete_session()
-        if incomplete:
+        if incomplete and incomplete.get("id") == session_id:
             session_dir = UPLOAD_ROOT / incomplete["upload_dir"]
             if session_dir.exists():
                 shutil.rmtree(session_dir, ignore_errors=True)
             # Remove from sessions.json
             if SESSIONS_FILE.exists():
-                data = json.loads(SESSIONS_FILE.read_text(encoding="utf-8"))
-                data["sessions"] = [
-                    s for s in data.get("sessions", [])
-                    if s.get("id") != incomplete.get("id")
+                data_json = json.loads(SESSIONS_FILE.read_text(encoding="utf-8"))
+                data_json["sessions"] = [
+                    s for s in data_json.get("sessions", [])
+                    if s.get("id") != session_id
                 ]
                 SESSIONS_FILE.write_text(
-                    json.dumps(data, indent=2, ensure_ascii=False),
+                    json.dumps(data_json, indent=2, ensure_ascii=False),
                     encoding="utf-8",
                 )
+        else:
+            return jsonify({'error': '会话不存在或 session_id 不匹配'}), 404
         return jsonify({'status': 'discarded'})
     except Exception as e:
         logger.error(f'[API] 放弃上传会话失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# 移动接入 API
+# ============================================================================
+
+_mobile_access_server = None
+
+def _get_mobile_server():
+    global _mobile_access_server
+    if _mobile_access_server is None:
+        try:
+            from .mobile_access_server import MobileAccessServer
+        except ImportError:
+            from mobile_access_server import MobileAccessServer
+        _mobile_access_server = MobileAccessServer()
+    return _mobile_access_server
+
+
+@app.route('/api/mobile/status', methods=['GET'])
+def mobile_status():
+    """获取移动接入服务状态"""
+    try:
+        server = _get_mobile_server()
+        cm = get_config_manager()
+        enabled = cm.get_setting('mobile_service_enabled', False) if cm else False
+        return jsonify({
+            'enabled': bool(enabled),
+            'running': server.port is not None,
+            'port': server.port,
+            'local_ip': server._local_ip if server.port else None,
+            'paired_count': len(server.token_manager.get_paired_devices()) if server.port else 0,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/enable', methods=['POST'])
+def mobile_enable():
+    """启用移动接入服务"""
+    try:
+        server = _get_mobile_server()
+        info = server.start()
+        cm = get_config_manager()
+        if cm:
+            cm.update_setting('mobile_service_enabled', True)
+        return jsonify({'status': 'enabled', **info})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/disable', methods=['POST'])
+def mobile_disable():
+    """停止移动接入服务并撤销所有令牌"""
+    try:
+        server = _get_mobile_server()
+        # 撤销所有已配对设备的令牌，防止服务停止后 token 仍有效
+        server.token_manager.revoke_all()
+        server.stop()
+        cm = get_config_manager()
+        if cm:
+            cm.update_setting('mobile_service_enabled', False)
+        return jsonify({'status': 'disabled', 'tokens_revoked': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/qr', methods=['GET'])
+def mobile_qr():
+    """获取移动配对二维码 PNG"""
+    try:
+        from .mobile_access_server import generate_mobile_qr
+        server = _get_mobile_server()
+        code, _ = server.token_manager.generate_pairing_code()
+        png = generate_mobile_qr(code, server._local_ip, server.port)
+        return send_file(io.BytesIO(png), mimetype='image/png')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/pending-request', methods=['GET'])
+def mobile_pending_request():
+    """获取当前待配对请求"""
+    try:
+        server = _get_mobile_server()
+        code = server.token_manager.get_pending_pair_code()
+        if code:
+            device_name = server.token_manager.get_pending_device_name(code)
+            return jsonify({'hasPending': True, 'pairing_code': code, 'device_name': device_name})
+        return jsonify({'hasPending': False})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/confirm-pairing', methods=['POST'])
+def mobile_confirm_pairing():
+    """确认或拒绝配对请求"""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        code = data.get('pairing_code', '')
+        action = data.get('action', '')
+        server = _get_mobile_server()
+        if action == 'accept':
+            token = server.token_manager.confirm_pair_request(code)
+            if token:
+                return jsonify({'status': 'accepted'})
+            return jsonify({'error': '配对码无效或已过期'}), 400
+        else:
+            server.token_manager.reject_pair_request(code)
+            return jsonify({'status': 'rejected'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/devices', methods=['GET'])
+def mobile_devices():
+    """获取已配对设备列表"""
+    try:
+        server = _get_mobile_server()
+        devices = server.token_manager.get_paired_devices()
+        return jsonify({'devices': [{'device_name': d['device_name'], 'paired_at': d['paired_at'], 'token': d['token'][:8]+'...'} for d in devices]})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/revoke', methods=['POST'])
+def mobile_revoke():
+    """撤销指定设备的令牌"""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        server = _get_mobile_server()
+        server.token_manager.revoke_token(data.get('token', ''))
+        return jsonify({'status': 'revoked'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/revoke-all', methods=['POST'])
+def mobile_revoke_all():
+    """撤销所有已配对设备的令牌"""
+    try:
+        server = _get_mobile_server()
+        server.token_manager.revoke_all()
+        return jsonify({'status': 'revoked_all'})
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
@@ -2372,6 +2537,87 @@ def cache_cleanup():
         logger.error(f"API 错误 POST /api/cache/cleanup: {e}")
         return jsonify({'error': str(e)}), 500
 
+
+
+# ============================================================================
+# 配对模式管理 API（桥接移动接入服务）
+# ============================================================================
+
+@app.route('/api/mobile/pairing/start', methods=['POST'])
+def mobile_pairing_start():
+    """开启配对模式（启动 mDNS 广播）"""
+    try:
+        server = _get_mobile_server()
+        if server is None:
+            return jsonify({'error': '移动接入服务未启动'}), 400
+        result = server.start_pairing_mode()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f'[API] 开启配对模式失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/pairing/stop', methods=['POST'])
+def mobile_pairing_stop():
+    """停止配对模式"""
+    try:
+        server = _get_mobile_server()
+        if server:
+            server.stop_pairing_mode()
+        return jsonify({'status': 'stopped'})
+    except Exception as e:
+        logger.error(f'[API] 停止配对模式失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/pairing/pending', methods=['GET'])
+def mobile_pairing_pending():
+    """PC 端轮询待确认配对请求"""
+    try:
+        server = _get_mobile_server()
+        if server is None:
+            return jsonify({'status': 'none'})
+        pending = server._pairing.get_pending()
+        if pending is None:
+            return jsonify({'status': 'none'})
+        return jsonify({
+            'status': 'pending',
+            'device_name': pending.device_name,
+            'requested_at': pending.requested_at,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/pairing/confirm', methods=['POST'])
+def mobile_pairing_confirm():
+    """PC 端确认配对 → 返回配对码"""
+    try:
+        server = _get_mobile_server()
+        if server is None:
+            return jsonify({'error': '移动接入服务未启动'}), 400
+        code = server._pairing.confirm_pending()
+        return jsonify({
+            'status': 'confirmed',
+            'pairing_code': code,
+            'expires_in': 120,
+        })
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/pairing/reject', methods=['POST'])
+def mobile_pairing_reject():
+    """PC 端拒绝配对"""
+    try:
+        server = _get_mobile_server()
+        if server:
+            server._pairing.reject_pending()
+        return jsonify({'status': 'rejected'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

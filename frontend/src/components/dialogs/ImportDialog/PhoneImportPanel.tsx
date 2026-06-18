@@ -10,7 +10,7 @@ interface UploadedFileInfo {
 }
 
 interface PhoneImportPanelProps {
-  onStartImport: (sourcePath: string) => void;
+  onStartImport: (sourcePath: string, sessionId: string) => void;
   onBack: () => void;
 }
 
@@ -51,6 +51,7 @@ export function PhoneImportPanel({ onStartImport, onBack }: PhoneImportPanelProp
     return () => {
       api.stopPhoneUpload().catch(() => {});
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startServer = async () => {
@@ -89,20 +90,28 @@ export function PhoneImportPanel({ onStartImport, onBack }: PhoneImportPanelProp
   useEffect(() => {
     if (serverStatus !== 'running') return;
 
+    let pollErrorCount = 0;
     const interval = setInterval(async () => {
       try {
         const status = await api.getPhoneUploadStatus();
+        pollErrorCount = 0; // Reset on success
         setFiles(status.files || []);
         setCompletedFiles(status.completed_files);
         setTotalFiles(status.total_files);
         setTotalBytes(status.total_bytes_uploaded);
       } catch {
-        // Server may have been stopped, ignore polling errors
+        pollErrorCount++;
+        // 连续 5 次轮询失败后提示用户
+        if (pollErrorCount >= 5) {
+          clearInterval(interval);
+          setServerStatus('error');
+          setErrorMessage(t('phoneImport.serverError'));
+        }
       }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [serverStatus]);
+  }, [serverStatus, t]);
 
   // Handle resume
   const handleResumeContinue = async () => {
@@ -121,8 +130,10 @@ export function PhoneImportPanel({ onStartImport, onBack }: PhoneImportPanelProp
   const handleResumeDiscard = async () => {
     setShowResume(false);
     try {
-      await api.discardPhoneSession();
-    } catch {}
+      await api.discardPhoneSession(resumeSession!.id);
+    } catch {
+      // Discard 失败也继续 — 后端可能有残留，但不阻塞新会话
+    }
     await doStartServer();
   };
 
@@ -138,7 +149,7 @@ export function PhoneImportPanel({ onStartImport, onBack }: PhoneImportPanelProp
   const handleStartImport = useCallback(() => {
     if (!connectionInfo) return;
     if (completedFiles === 0) return;
-    onStartImport(connectionInfo.upload_dir);
+    onStartImport(connectionInfo.upload_dir, connectionInfo.session_id);
   }, [connectionInfo, completedFiles, onStartImport]);
 
   // Format file size

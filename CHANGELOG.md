@@ -5,6 +5,52 @@
 
 ---
 
+## [0.5.2] — 2026-06-18
+
+### 新增
+- **Flutter 移动端 App**：支持 Android / iOS / 平板，局域网无线浏览相册、推送照片
+- **移动接入服务** (`MobileAccessServer`)：独立 Flask 服务（端口 8900-8999），与主 API 隔离
+- **mDNS 局域网发现** (`ZeroconfPublisher`)：手机自动发现 PC 端服务，无需手动输入 IP
+- **安全配对流程**：6 位配对码 + 设备管理 + Bearer Token 认证
+- **移动端 API**（12 个端点）：相册统计、目录树、照片列表、缩略图、原始文件、EXIF、上传
+- **PC 端管理界面** (`MobileDeviceManager`)：配对模式开关、QR 二维码、待确认设备列表、撤销设备
+- **Token 持久化**：移动端令牌保存到 `.config/mobile_tokens.json`，重启不丢失
+- **速率限制**：`/pair` 端点添加 IP 级限流（10 次/分钟），防止暴力破解
+- **上传安全控制**：`MAX_CONTENT_LENGTH=500MB` + content-length 预检 + session 文件数限制（2000）
+
+### 变更
+- 版本号更新至 v0.5.2
+- `backend/api_server.py` 新增 15 个桥接端点（`/api/mobile/*` 和 `/api/mobile/pairing/*`）
+- `src/BlurArc.py` 新增 `_start_mobile_service()` 自动启动逻辑
+- `frontend/src/services/api.ts` 新增 14 个移动 API 方法
+- `frontend/src/contexts/I18nContext.tsx` 新增 22 组中英 i18n 字符串
+- `requirements.txt` 新增 `qrcode>=7.4`、`flask-cors>=4.0`、`zeroconf>=0.132.0`
+
+### 修复
+- **C1** 缩略图/预览端点类型错误：`Path` 对象改为 `send_file(str(path))`
+- **C2** PairingManager 线程安全：添加 `threading.Lock()`，9 个方法全部加锁
+- **C3** 上传端点安全控制：添加 `MAX_CONTENT_LENGTH`、`secrets` 生成配对码、过期清理
+- **I1** `device_name` 输入验证：空字符串拒绝 + 50 字符限制 + 非法字符过滤
+- **I2** 路径校验统一：抽取 `_is_path_safe()` 方法，Windows 大小写不敏感比较
+- **I3** `mobile_photos()` 空路径检查：避免 `Path("").resolve()` 返回 CWD
+- **I4** `stop_pairing_mode()` 异常处理：捕获 `consume_code()` 可能的异常
+- `multicast_dns` API 问题：暂时 stub 处理，使用手动输入 IP 兜底
+- Flutter 编译错误：修复 `saveConnection()` 参数个数、`AlbumScreen` 导入、`host`/`port` 公有 getter
+
+### 安全
+- 所有文件操作使用 `relative_to()` 路径校验，防止路径穿越
+- Token 使用 `secrets.token_urlsafe(32)` 生成，128 位熵
+- 配对码使用 `secrets.choice()` 生成，避免 `random` 弱随机数
+- 过期 pending 码自动清理（60 秒超时）
+
+### 测试
+- 新增 `test/unit/test_mobile_access_server.py`：17 个单元测试
+- 新增 `test/unit/test_phone_upload_server.py`：18 个单元测试
+- 所有 35 个移动相关测试全部通过 ✅
+- Flutter `flutter analyze`：0 issues ✅
+
+---
+
 ## [0.5.1] — 2026-06-18
 
 ### 新增
