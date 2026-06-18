@@ -224,6 +224,28 @@ const translations: Record<Language, Record<string, string>> = {
     'app.connectionFailed': '连接服务器失败，请重启应用',
     'app.loadPhotosFailed': '加载照片失败',
 
+    // Phone Import
+    'phoneImport.title': '从手机导入',
+    'phoneImport.subtitle': '扫码无线传输',
+    'phoneImport.ensureWifi': '确保手机和电脑在同一 WiFi 网络',
+    'phoneImport.scanQr': '手机扫码或浏览器访问以下地址',
+    'phoneImport.starting': '正在启动上传服务...',
+    'phoneImport.receiving': '等待手机上传...',
+    'phoneImport.filesUploaded': '已上传 {count} 个文件，共 {size}',
+    'phoneImport.stopReceiving': '停止接收',
+    'phoneImport.startImport': '开始导入',
+    'phoneImport.noFiles': '请先上传至少一个文件',
+    'phoneImport.serverError': '上传服务启动失败，请检查防火墙设置',
+    'phoneImport.entry': '从手机导入',
+    'phoneImport.localImport': '本地导入',
+    'phoneImport.localImportDesc': '从本地磁盘/U盘/移动硬盘选择文件夹',
+    'phoneImport.selectMode': '请选择导入方式',
+    'common.retry': '重试',
+    'phoneImport.resumeTitle': '发现上次未完成的导入',
+    'phoneImport.resumeDetail': '{date} — {count} 个文件 ({size})',
+    'phoneImport.resumeContinue': '继续上传',
+    'phoneImport.resumeDiscard': '放弃，重新开始',
+
     // Welcome Screen
     'welcome.title': '欢迎使用 Blur Arc',
     'welcome.subtitle': '让我们开始设置您的相册',
@@ -448,6 +470,28 @@ const translations: Record<Language, Record<string, string>> = {
     // App initialization
     'app.connectionFailed': 'Failed to connect to server, please restart the app',
     'app.loadPhotosFailed': 'Failed to load photos',
+
+    // Phone Import
+    'phoneImport.title': 'Import from Phone',
+    'phoneImport.subtitle': 'Scan to transfer wirelessly',
+    'phoneImport.ensureWifi': 'Make sure phone and PC are on the same WiFi',
+    'phoneImport.scanQr': 'Scan QR code or visit the address below',
+    'phoneImport.starting': 'Starting upload service...',
+    'phoneImport.receiving': 'Waiting for uploads...',
+    'phoneImport.filesUploaded': '{count} files uploaded, {size} total',
+    'phoneImport.stopReceiving': 'Stop Receiving',
+    'phoneImport.startImport': 'Start Import',
+    'phoneImport.noFiles': 'Please upload at least one file first',
+    'phoneImport.serverError': 'Failed to start upload service, check firewall',
+    'phoneImport.entry': 'Import from Phone',
+    'phoneImport.localImport': 'Local Import',
+    'phoneImport.localImportDesc': 'Select a folder from local disk / USB drive',
+    'phoneImport.selectMode': 'Choose import method',
+    'common.retry': 'Retry',
+    'phoneImport.resumeTitle': 'Incomplete import found',
+    'phoneImport.resumeDetail': '{date} — {count} files ({size})',
+    'phoneImport.resumeContinue': 'Continue Upload',
+    'phoneImport.resumeDiscard': 'Discard & Start Over',
 
     // Welcome Screen
     'welcome.title': 'Welcome to Blur Arc',

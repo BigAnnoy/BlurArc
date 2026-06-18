@@ -1,7 +1,7 @@
 // 导入弹窗类型定义
 
 export type ImportMode = 'copy' | 'move';
-export type ImportStep = 'select' | 'checking' | 'preview' | 'importing';
+export type ImportStep = 'select-mode' | 'select-path' | 'phone-upload' | 'checking' | 'preview' | 'importing';
 
 // 照片信息
 export interface ImportPhoto {

@@ -285,6 +285,50 @@ export const api = {
 
   getRebuildProgress: (taskId: string) => fetchJson<{ status: string; progress: number; message: string }>(`${API_BASE}/settings/rebuild-progress/${taskId}`),
 
+  // Phone upload
+  startPhoneUpload: () =>
+    fetchJson<{
+      port: number;
+      local_ip: string;
+      upload_url: string;
+      session_id: string;
+      upload_dir: string;
+    }>(`${API_BASE}/phone-upload/start`, { method: 'POST' }),
+
+  stopPhoneUpload: () =>
+    fetchJson<{ status: string }>(`${API_BASE}/phone-upload/stop`, { method: 'POST' }),
+
+  getPhoneUploadStatus: () =>
+    fetchJson<{
+      total_files: number;
+      completed_files: number;
+      current_file: string;
+      current_progress: number;
+      current_speed_mbps: number;
+      total_bytes_uploaded: number;
+      files: { name: string; size: number; status: string; error?: string }[];
+    }>(`${API_BASE}/phone-upload/status`),
+
+  getPhoneUploadQr: () => `${API_BASE}/phone-upload/qr`,
+
+  getIncompletePhoneSession: () =>
+    fetchJson<{ session: { id: string; upload_dir: string; file_count: number; total_bytes: number; created_at: number } | null }>(`${API_BASE}/phone-upload/incomplete`),
+
+  resumePhoneSession: (sessionId: string) =>
+    fetchJson<{
+      port: number;
+      local_ip: string;
+      upload_url: string;
+      session_id: string;
+      upload_dir: string;
+    }>(`${API_BASE}/phone-upload/resume`, {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+
+  discardPhoneSession: () =>
+    fetchJson<{ status: string }>(`${API_BASE}/phone-upload/discard`, { method: 'POST' }),
+
   // File operations
   openFile: (path: string) => {
     window.open(`${API_BASE}/album/file?path=${encodeURIComponent(path)}`, '_blank');
