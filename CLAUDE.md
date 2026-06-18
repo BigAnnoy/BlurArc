@@ -107,6 +107,11 @@ python scripts/download_ffmpeg.py
 - 打包使用 PyInstaller，配置在 `BlurArc.spec`
 - 修改 `_import_file()` 时需注意 `md5_cache` 参数传递
 
+## 工作约定
+
+- **方案/设计阶段不提交 git**：讨论和修改 spec 文档时只写文件，不 commit。等方案最终确认后一次性提交。实现阶段正常提交。
+- 设计方案文档放在 `docs/superpowers/specs/` 目录下。
+
 ## 前端开发
 
 ```bash
