@@ -1,0 +1,1558 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blur Arc — 五种设计风格</title>
+<style>
+  /* ── 基础配色 (来自 tailwind.config.js) ── */
+  :root {
+    --primary:     #0891b2;
+    --primary-h:   #0e7490;
+    --primary-l:   #e0f7fa;
+    --primary-g:   #22d3ee;
+    --page:        #f4f7f9;
+    --card:        #ffffff;
+    --border:      #d8e2e8;
+    --border-s:    #b8c8d4;
+    --text-p:      #1a2a3a;
+    --text-s:      #5a6a7a;
+    --text-t:      #8a9aaa;
+    --dark:        #0c1117;
+    --dark-card:   #151d26;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', -apple-system, 'Microsoft YaHei', sans-serif;
+    background: #1a1a1a;
+    color: var(--text-p);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── 容器 ── */
+  .design-container {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    padding: 40px;
+    background: #1a1a1a;
+  }
+
+  .design-section {
+    background: #2a2a2a;
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .design-title {
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    padding-left: 12px;
+    border-left: 3px solid var(--primary);
+  }
+
+  /* ── 每个设计画布 1080×1440 ── */
+  .promo {
+    width: 1080px;
+    min-height: 1440px;
+    margin: 0 auto;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     设计一：极简卡片风格 (Minimal Cards)
+     大量留白，简洁几何，功能卡片为主
+  ═══════════════════════════════════════════════════════════════ */
+  .design-1 {
+    background: var(--page);
+  }
+
+  .d1-top-bar {
+    height: 4px;
+    background: var(--primary);
+    flex-shrink: 0;
+  }
+
+  .d1-header {
+    padding: 48px 80px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-shrink: 0;
+  }
+
+  .d1-logo {
+    font-size: 28px;
+    font-weight: 700;
+  }
+  .d1-logo-b { color: var(--text-p); }
+  .d1-logo-a { color: var(--primary); }
+
+  .d1-version {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-t);
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+  }
+
+  .d1-hero {
+    padding: 80px 80px 60px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .d1-hero-title {
+    font-size: 72px;
+    font-weight: 300;
+    color: var(--text-p);
+    letter-spacing: -3px;
+    margin-bottom: 24px;
+  }
+
+  .d1-hero-title strong {
+    font-weight: 700;
+    color: var(--primary);
+  }
+
+  .d1-hero-sub {
+    font-size: 18px;
+    color: var(--text-s);
+    letter-spacing: 2px;
+  }
+
+  .d1-cards {
+    padding: 0 80px 80px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    flex-shrink: 0;
+  }
+
+  .d1-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px 32px;
+    text-align: center;
+  }
+
+  .d1-card-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 24px;
+    border-radius: 50%;
+    background: var(--primary-l);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: var(--primary);
+  }
+
+  .d1-card-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-p);
+    margin-bottom: 12px;
+  }
+
+  .d1-card-desc {
+    font-size: 14px;
+    color: var(--text-s);
+    line-height: 1.6;
+  }
+
+  .d1-shot-area {
+    padding: 0 80px 60px;
+    flex-shrink: 0;
+  }
+
+  .d1-shot-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .d1-shot-inner {
+    height: 320px;
+    background: var(--page);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .d1-shot-label {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    background: var(--primary);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+
+  .d1-ui-mini {
+    width: 90%;
+    height: 85%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+  }
+
+  .d1-ui-sidebar {
+    width: 160px;
+    background: var(--page);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+  }
+
+  .d1-ui-stat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .d1-ui-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--primary);
+  }
+
+  .d1-ui-lbl {
+    font-size: 11px;
+    color: var(--text-t);
+  }
+
+  .d1-ui-content {
+    flex: 1;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  .d1-thumb {
+    border-radius: 4px;
+    aspect-ratio: 1;
+  }
+
+  .th-a { background: linear-gradient(135deg, #cce8f0, #a8d4e8); }
+  .th-b { background: linear-gradient(135deg, #d5e8f5, #b0d8e8); }
+  .th-c { background: linear-gradient(135deg, #e0eef5, #c0dce8); }
+  .th-d { background: linear-gradient(135deg, #cce0f0, #a8c8e4); }
+  .th-e { background: linear-gradient(135deg, #d8e8f2, #b4d4e8); }
+
+  .d1-footer {
+    padding: 40px 80px;
+    text-align: center;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .d1-footer-text {
+    font-size: 13px;
+    color: var(--text-t);
+  }
+
+  .d1-footer-link {
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     设计二：杂志封面风格 (Magazine Cover)
+     大标题戏剧性排版，视觉冲击力强
+  ═══════════════════════════════════════════════════════════════ */
+  .design-2 {
+    background: var(--text-p);
+    color: white;
+  }
+
+  .d2-hero {
+    padding: 120px 80px 80px;
+    flex-shrink: 0;
+  }
+
+  .d2-title-main {
+    font-size: 140px;
+    font-weight: 900;
+    line-height: 0.9;
+    letter-spacing: -8px;
+    color: white;
+    margin-bottom: 20px;
+  }
+
+  .d2-title-main span {
+    color: var(--primary-g);
+  }
+
+  .d2-title-sub {
+    font-size: 32px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.7);
+    letter-spacing: 8px;
+    margin-bottom: 40px;
+  }
+
+  .d2-tagline {
+    font-size: 18px;
+    color: var(--primary-g);
+    padding: 12px 24px;
+    border: 1px solid var(--primary-g);
+    border-radius: 30px;
+    display: inline-block;
+  }
+
+  .d2-features {
+    padding: 0 80px 80px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 40px;
+    flex-shrink: 0;
+  }
+
+  .d2-feature {
+    border-left: 4px solid var(--primary-g);
+    padding-left: 32px;
+  }
+
+  .d2-feature-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 64px;
+    font-weight: 700;
+    color: var(--primary-g);
+    line-height: 1;
+    margin-bottom: 12px;
+  }
+
+  .d2-feature-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 8px;
+  }
+
+  .d2-feature-desc {
+    font-size: 16px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.5;
+  }
+
+  .d2-shot {
+    padding: 0 80px 60px;
+    flex-shrink: 0;
+  }
+
+  .d2-shot-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 32px;
+  }
+
+  .d2-shot-inner {
+    height: 280px;
+    background: var(--page);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .d2-ui-box {
+    width: 85%;
+    height: 90%;
+    background: var(--card);
+    border-radius: 8px;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .d2-ui-left {
+    width: 180px;
+    background: var(--page);
+    border-right: 1px solid var(--border);
+    padding: 20px;
+  }
+
+  .d2-ui-right {
+    flex: 1;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  .d2-footer {
+    padding: 60px 80px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
+  }
+
+  .d2-footer-brand {
+    font-size: 24px;
+    font-weight: 700;
+  }
+
+  .d2-footer-brand span { color: var(--primary-g); }
+
+  .d2-footer-info {
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+    text-align: right;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     设计三：功能展示风格 (Feature Grid)
+     以功能模块为主，技术感，网格布局
+  ═══════════════════════════════════════════════════════════════ */
+  .design-3 {
+    background: var(--page);
+  }
+
+  .d3-header {
+    padding: 32px 60px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .d3-logo {
+    font-size: 24px;
+    font-weight: 700;
+  }
+  .d3-logo-a { color: var(--primary); }
+
+  .d3-nav {
+    display: flex;
+    gap: 32px;
+    font-size: 14px;
+    color: var(--text-s);
+  }
+
+  .d3-nav-item.active {
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .d3-hero {
+    padding: 60px 60px 40px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .d3-hero-left h1 {
+    font-size: 56px;
+    font-weight: 700;
+    color: var(--text-p);
+    line-height: 1.1;
+    margin-bottom: 20px;
+  }
+
+  .d3-hero-left h1 span {
+    color: var(--primary);
+  }
+
+  .d3-hero-left p {
+    font-size: 18px;
+    color: var(--text-s);
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }
+
+  .d3-hero-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--primary);
+    color: white;
+    padding: 16px 32px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .d3-hero-right {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .d3-hero-shot-label {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--primary-l);
+    color: var(--primary);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .d3-ui-preview {
+    width: 92%;
+    height: 88%;
+    background: var(--page);
+    border-radius: 6px;
+    display: flex;
+  }
+
+  .d3-ui-side {
+    width: 140px;
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    padding: 12px;
+  }
+
+  .d3-ui-main {
+    flex: 1;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+
+  .d3-grid {
+    padding: 0 60px 60px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, auto);
+    gap: 20px;
+    flex-shrink: 0;
+  }
+
+  .d3-grid-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    position: relative;
+  }
+
+  .d3-grid-item.large {
+    grid-column: span 2;
+  }
+
+  .d3-grid-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--primary);
+    border-radius: 0 2px 2px 0;
+  }
+
+  .d3-grid-icon {
+    width: 40px;
+    height: 40px;
+    background: var(--primary-l);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: var(--primary);
+    margin-bottom: 16px;
+  }
+
+  .d3-grid-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-p);
+    margin-bottom: 8px;
+  }
+
+  .d3-grid-desc {
+    font-size: 13px;
+    color: var(--text-s);
+    line-height: 1.5;
+  }
+
+  .d3-stats {
+    padding: 0 60px 60px;
+    flex-shrink: 0;
+  }
+
+  .d3-stats-inner {
+    background: var(--primary);
+    border-radius: 12px;
+    padding: 40px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+  }
+
+  .d3-stat {
+    text-align: center;
+    color: white;
+  }
+
+  .d3-stat-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 48px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .d3-stat-num small {
+    font-size: 24px;
+    opacity: 0.7;
+  }
+
+  .d3-stat-lbl {
+    font-size: 14px;
+    opacity: 0.8;
+    margin-top: 8px;
+  }
+
+  .d3-stat-div {
+    width: 1px;
+    height: 60px;
+    background: rgba(255,255,255,0.2);
+  }
+
+  .d3-footer {
+    padding: 32px 60px;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .d3-footer-copy {
+    font-size: 13px;
+    color: var(--text-t);
+  }
+
+  .d3-footer-link {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--primary);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     设计四：故事叙述风格 (Story Narrative)
+     从问题到解决方案的叙事流程
+  ═══════════════════════════════════════════════════════════════ */
+  .design-4 {
+    background: linear-gradient(180deg, var(--page) 0%, var(--primary-l) 100%);
+  }
+
+  .d4-header {
+    padding: 40px 80px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .d4-logo {
+    font-size: 26px;
+    font-weight: 700;
+  }
+  .d4-logo-a { color: var(--primary); }
+
+  .d4-badge {
+    background: var(--primary);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 20px;
+  }
+
+  .d4-story {
+    padding: 60px 80px;
+    flex-shrink: 0;
+  }
+
+  .d4-chapter {
+    margin-bottom: 60px;
+    position: relative;
+  }
+
+  .d4-chapter-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--primary);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .d4-chapter-num::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .d4-chapter-title {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--text-p);
+    margin-bottom: 16px;
+    line-height: 1.2;
+  }
+
+  .d4-chapter-desc {
+    font-size: 18px;
+    color: var(--text-s);
+    line-height: 1.7;
+    max-width: 600px;
+  }
+
+  .d4-chapter-shot {
+    margin-top: 24px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  .d4-shot-inner {
+    height: 200px;
+    background: var(--page);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .d4-ui-demo {
+    width: 90%;
+    height: 85%;
+    background: var(--card);
+    border-radius: 6px;
+    display: flex;
+  }
+
+  .d4-ui-left {
+    width: 150px;
+    background: var(--page);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+  }
+
+  .d4-ui-right {
+    flex: 1;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .d4-solution {
+    padding: 60px 80px;
+    background: var(--primary);
+    color: white;
+    flex-shrink: 0;
+  }
+
+  .d4-solution-title {
+    font-size: 48px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+
+  .d4-solution-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+    margin-top: 40px;
+  }
+
+  .d4-solution-item {
+    text-align: center;
+    padding: 32px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 12px;
+  }
+
+  .d4-solution-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+
+  .d4-solution-name {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .d4-solution-desc {
+    font-size: 14px;
+    opacity: 0.8;
+    line-height: 1.5;
+  }
+
+  .d4-footer {
+    padding: 40px 80px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .d4-footer-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--text-p);
+    color: white;
+    padding: 20px 48px;
+    border-radius: 12px;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 24px;
+  }
+
+  .d4-footer-text {
+    font-size: 14px;
+    color: var(--text-s);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     设计五：数据可视化风格 (Data Visualization)
+     强调数字和指标，仪表盘风格
+  ═══════════════════════════════════════════════════════════════ */
+  .design-5 {
+    background: var(--dark);
+    color: white;
+  }
+
+  .d5-header {
+    padding: 32px 60px;
+    background: var(--dark-card);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .d5-logo {
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .d5-logo-a { color: var(--primary-g); }
+
+  .d5-status {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--primary-g);
+  }
+
+  .d5-status-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--primary-g);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .d5-dashboard {
+    padding: 40px 60px;
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 32px;
+    flex-shrink: 0;
+  }
+
+  .d5-sidebar {
+    background: var(--dark-card);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  .d5-side-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 20px;
+    letter-spacing: 1px;
+  }
+
+  .d5-metric {
+    margin-bottom: 24px;
+  }
+
+  .d5-metric-label {
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 8px;
+  }
+
+  .d5-metric-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--primary-g);
+    line-height: 1;
+  }
+
+  .d5-metric-unit {
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+    margin-left: 4px;
+  }
+
+  .d5-metric-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+
+  .d5-metric-fill {
+    height: 100%;
+    background: var(--primary-g);
+    border-radius: 2px;
+  }
+
+  .d5-main {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .d5-main-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .d5-main-title {
+    font-size: 28px;
+    font-weight: 700;
+  }
+
+  .d5-main-title span { color: var(--primary-g); }
+
+  .d5-main-badge {
+    background: rgba(34,211,238,0.1);
+    border: 1px solid var(--primary-g);
+    color: var(--primary-g);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 20px;
+  }
+
+  .d5-chart-area {
+    background: var(--dark-card);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 24px;
+    height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .d5-chart-label {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+  }
+
+  .d5-chart-ui {
+    width: 94%;
+    height: 90%;
+    background: var(--page);
+    border-radius: 8px;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .d5-chart-left {
+    width: 160px;
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+  }
+
+  .d5-chart-right {
+    flex: 1;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  .d5-features {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .d5-feature {
+    background: var(--dark-card);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .d5-feature::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--primary-g);
+  }
+
+  .d5-feature-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .d5-feature-desc {
+    font-size: 13px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.4;
+  }
+
+  .d5-footer {
+    padding: 32px 60px;
+    background: var(--dark-card);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .d5-footer-left {
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+  }
+
+  .d5-footer-right {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--primary-g);
+  }
+
+</style>
+</head>
+<body>
+
+<div class="design-container">
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       设计一：极简卡片风格
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="design-section">
+    <div class="design-title">设计一：极简卡片风格 (Minimal Cards)</div>
+    <div class="promo design-1">
+
+      <div class="d1-top-bar"></div>
+
+      <div class="d1-header">
+        <div class="d1-logo">
+          <span class="d1-logo-b">Blur</span><span class="d1-logo-a">Arc</span>
+        </div>
+        <div class="d1-version">v 0.5.0</div>
+      </div>
+
+      <div class="d1-hero">
+        <div class="d1-hero-title">让照片<strong>回归秩序</strong></div>
+        <div class="d1-hero-sub">LOCAL · PRIVATE · DEDUP</div>
+      </div>
+
+      <div class="d1-cards">
+        <div class="d1-card">
+          <div class="d1-card-icon">🔒</div>
+          <div class="d1-card-title">本地运行</div>
+          <div class="d1-card-desc">数据不离机<br/>零云端依赖</div>
+        </div>
+        <div class="d1-card">
+          <div class="d1-card-icon">🛡️</div>
+          <div class="d1-card-title">隐私零泄露</div>
+          <div class="d1-card-desc">不上传不分析<br/>数据主权在你</div>
+        </div>
+        <div class="d1-card">
+          <div class="d1-card-icon">⚡</div>
+          <div class="d1-card-title">智能去重</div>
+          <div class="d1-card-desc">MD5精确比对<br/>减少99%无效I/O</div>
+        </div>
+      </div>
+
+      <div class="d1-shot-area">
+        <div class="d1-shot-card">
+          <span class="d1-shot-label">主界面预览</span>
+          <div class="d1-shot-inner">
+            <div class="d1-ui-mini">
+              <div class="d1-ui-sidebar">
+                <div class="d1-ui-stat">
+                  <div class="d1-ui-num">42</div>
+                  <div class="d1-ui-lbl">文件</div>
+                </div>
+                <div class="d1-ui-stat">
+                  <div class="d1-ui-num">45MB</div>
+                  <div class="d1-ui-lbl">大小</div>
+                </div>
+              </div>
+              <div class="d1-ui-content">
+                <div class="d1-thumb th-a"></div>
+                <div class="d1-thumb th-b"></div>
+                <div class="d1-thumb th-c"></div>
+                <div class="d1-thumb th-d"></div>
+                <div class="d1-thumb th-e"></div>
+                <div class="d1-thumb th-a"></div>
+                <div class="d1-thumb th-b"></div>
+                <div class="d1-thumb th-c"></div>
+                <div class="d1-thumb th-d"></div>
+                <div class="d1-thumb th-e"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d1-footer">
+        <div class="d1-footer-text">
+          <span class="d1-footer-link">github.com/BigAnnoy/BlurArc</span> · Windows · macOS · Linux · MIT License
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       设计二：杂志封面风格
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="design-section">
+    <div class="design-title">设计二：杂志封面风格 (Magazine Cover)</div>
+    <div class="promo design-2">
+
+      <div class="d2-hero">
+        <div class="d2-title-main">BLUR<span>ARC</span></div>
+        <div class="d2-title-sub">让照片回归秩序</div>
+        <div class="d2-tagline">本地 · 隐私 · 去重 · 归档</div>
+      </div>
+
+      <div class="d2-features">
+        <div class="d2-feature">
+          <div class="d2-feature-num">01</div>
+          <div class="d2-feature-title">本地运行</div>
+          <div class="d2-feature-desc">所有操作在本机完成，无需上传云端，无需账号登录</div>
+        </div>
+        <div class="d2-feature">
+          <div class="d2-feature-num">02</div>
+          <div class="d2-feature-title">隐私零泄露</div>
+          <div class="d2-feature-desc">不上传、不分析、不收集任何数据，数据主权在你</div>
+        </div>
+        <div class="d2-feature">
+          <div class="d2-feature-num">03</div>
+          <div class="d2-feature-title">智能去重</div>
+          <div class="d2-feature-desc">文件大小预筛 + MD5精确比对，减少99%无效I/O</div>
+        </div>
+        <div class="d2-feature">
+          <div class="d2-feature-num">04</div>
+          <div class="d2-feature-title">按日期归档</div>
+          <div class="d2-feature-desc">读取EXIF拍摄时间，自动整理至YYYY/YYYY-MM目录</div>
+        </div>
+      </div>
+
+      <div class="d2-shot">
+        <div class="d2-shot-card">
+          <div class="d2-shot-inner">
+            <div class="d2-ui-box">
+              <div class="d2-ui-left">
+                <div class="d1-ui-stat">
+                  <div class="d1-ui-num">42</div>
+                  <div class="d1-ui-lbl">文件</div>
+                </div>
+              </div>
+              <div class="d2-ui-right">
+                <div class="d1-thumb th-a"></div>
+                <div class="d1-thumb th-b"></div>
+                <div class="d1-thumb th-c"></div>
+                <div class="d1-thumb th-d"></div>
+                <div class="d1-thumb th-a"></div>
+                <div class="d1-thumb th-b"></div>
+                <div class="d1-thumb th-c"></div>
+                <div class="d1-thumb th-d"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d2-footer">
+        <div class="d2-footer-brand">Blur<span>Arc</span></div>
+        <div class="d2-footer-info">
+          github.com/BigAnnoy/BlurArc<br/>
+          Windows · macOS · Linux
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       设计三：功能展示风格
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="design-section">
+    <div class="design-title">设计三：功能展示风格 (Feature Grid)</div>
+    <div class="promo design-3">
+
+      <div class="d3-header">
+        <div class="d3-logo">
+          Blur<span class="d3-logo-a">Arc</span>
+        </div>
+        <div class="d3-nav">
+          <span class="d3-nav-item active">功能</span>
+          <span class="d3-nav-item">截图</span>
+          <span class="d3-nav-item">下载</span>
+        </div>
+      </div>
+
+      <div class="d3-hero">
+        <div class="d3-hero-left">
+          <h1>让照片<span>回归秩序</span></h1>
+          <p>完全本地运行的照片/视频管理器——数据不离机，按拍摄日期自动归档，导入时智能去重。</p>
+          <div class="d3-hero-btn">
+            下载 Blur Arc →
+          </div>
+        </div>
+        <div class="d3-hero-right">
+          <span class="d3-hero-shot-label">主界面</span>
+          <div class="d3-ui-preview">
+            <div class="d3-ui-side">
+              <div class="d1-ui-stat">
+                <div class="d1-ui-num">42</div>
+                <div class="d1-ui-lbl">文件</div>
+              </div>
+            </div>
+            <div class="d3-ui-main">
+              <div class="d1-thumb th-a"></div>
+              <div class="d1-thumb th-b"></div>
+              <div class="d1-thumb th-c"></div>
+              <div class="d1-thumb th-d"></div>
+              <div class="d1-thumb th-a"></div>
+              <div class="d1-thumb th-b"></div>
+              <div class="d1-thumb th-c"></div>
+              <div class="d1-thumb th-d"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d3-grid">
+        <div class="d3-grid-item large">
+          <div class="d3-grid-icon">🔒</div>
+          <div class="d3-grid-title">本地运行</div>
+          <div class="d3-grid-desc">所有操作在本机完成，无需上传云端，无需账号登录。零云端依赖，离线可用。</div>
+        </div>
+        <div class="d3-grid-item">
+          <div class="d3-grid-icon">🛡️</div>
+          <div class="d3-grid-title">隐私零泄露</div>
+          <div class="d3-grid-desc">不上传、不分析、不收集任何数据。</div>
+        </div>
+        <div class="d3-grid-item">
+          <div class="d3-grid-icon">⚡</div>
+          <div class="d3-grid-title">智能去重</div>
+          <div class="d3-grid-desc">MD5精确比对，减少99%无效I/O。</div>
+        </div>
+        <div class="d3-grid-item">
+          <div class="d3-grid-icon">📁</div>
+          <div class="d3-grid-title">按日期归档</div>
+          <div class="d3-grid-desc">自动整理至YYYY-MM目录结构。</div>
+        </div>
+        <div class="d3-grid-item">
+          <div class="d3-grid-icon">🎬</div>
+          <div class="d3-grid-title">视频支持</div>
+          <div class="d3-grid-desc">FFmpeg集成，HTTP Range拖拽播放。</div>
+        </div>
+        <div class="d3-grid-item">
+          <div class="d3-grid-icon">🖼️</div>
+          <div class="d3-grid-title">全格式预览</div>
+          <div class="d3-grid-desc">HEIC/TIFF/BMP/RAW自动转JPEG缩略图。</div>
+        </div>
+      </div>
+
+      <div class="d3-stats">
+        <div class="d3-stats-inner">
+          <div class="d3-stat">
+            <div class="d3-stat-num">100<small>%</small></div>
+            <div class="d3-stat-lbl">本地运行</div>
+          </div>
+          <div class="d3-stat-div"></div>
+          <div class="d3-stat">
+            <div class="d3-stat-num">0</div>
+            <div class="d3-stat-lbl">隐私泄露风险</div>
+          </div>
+          <div class="d3-stat-div"></div>
+          <div class="d3-stat">
+            <div class="d3-stat-num">99<small>%</small></div>
+            <div class="d3-stat-lbl">无效I/O减少</div>
+          </div>
+          <div class="d3-stat-div"></div>
+          <div class="d3-stat">
+            <div class="d3-stat-num">v0.5</div>
+            <div class="d3-stat-lbl">当前版本</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d3-footer">
+        <div class="d3-footer-copy">© 2026 Blur Arc · MIT License</div>
+        <div class="d3-footer-link">github.com/BigAnnoy/BlurArc</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       设计四：故事叙述风格
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="design-section">
+    <div class="design-title">设计四：故事叙述风格 (Story Narrative)</div>
+    <div class="promo design-4">
+
+      <div class="d4-header">
+        <div class="d4-logo">
+          Blur<span class="d4-logo-a">Arc</span>
+        </div>
+        <div class="d4-badge">v0.5.0</div>
+      </div>
+
+      <div class="d4-story">
+        <div class="d4-chapter">
+          <div class="d4-chapter-num">01 / 问题</div>
+          <div class="d4-chapter-title">照片管理，为什么这么难？</div>
+          <div class="d4-chapter-desc">
+            云端工具依赖网络、隐私堪忧；本地工具要么停止维护，要么功能简陋。<br/>
+            重复照片堆积、目录混乱、导入繁琐……
+          </div>
+        </div>
+
+        <div class="d4-chapter">
+          <div class="d4-chapter-num">02 / 解决方案</div>
+          <div class="d4-chapter-title">Blur Arc：让照片回归秩序</div>
+          <div class="d4-chapter-desc">
+            完全本地运行的照片/视频管理器——数据不离机，按拍摄日期自动归档，导入时智能去重。
+          </div>
+          <div class="d4-chapter-shot">
+            <div class="d4-shot-inner">
+              <div class="d4-ui-demo">
+                <div class="d4-ui-left">
+                  <div class="d1-ui-stat">
+                    <div class="d1-ui-num">42</div>
+                    <div class="d1-ui-lbl">文件</div>
+                  </div>
+                </div>
+                <div class="d4-ui-right">
+                  <div class="d1-thumb th-a"></div>
+                  <div class="d1-thumb th-b"></div>
+                  <div class="d1-thumb th-c"></div>
+                  <div class="d1-thumb th-d"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d4-solution">
+        <div class="d4-solution-title">核心能力</div>
+        <div class="d4-solution-grid">
+          <div class="d4-solution-item">
+            <div class="d4-solution-icon">🔒</div>
+            <div class="d4-solution-name">本地运行</div>
+            <div class="d4-solution-desc">数据不离机<br/>零云端依赖</div>
+          </div>
+          <div class="d4-solution-item">
+            <div class="d4-solution-icon">🛡️</div>
+            <div class="d4-solution-name">隐私零泄露</div>
+            <div class="d4-solution-desc">不上传不分析<br/>数据主权在你</div>
+          </div>
+          <div class="d4-solution-item">
+            <div class="d4-solution-icon">⚡</div>
+            <div class="d4-solution-name">智能去重</div>
+            <div class="d4-solution-desc">MD5精确比对<br/>减少99%无效I/O</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d4-footer">
+        <div class="d4-footer-btn">
+          下载 Blur Arc →
+        </div>
+        <div class="d4-footer-text">
+          github.com/BigAnnoy/BlurArc · Windows · macOS · Linux · MIT License
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       设计五：数据可视化风格
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="design-section">
+    <div class="design-title">设计五：数据可视化风格 (Data Visualization)</div>
+    <div class="promo design-5">
+
+      <div class="d5-header">
+        <div class="d5-logo">
+          Blur<span class="d5-logo-a">Arc</span>
+        </div>
+        <div class="d5-status">
+          <div class="d5-status-dot"></div>
+          本地运行中
+        </div>
+      </div>
+
+      <div class="d5-dashboard">
+        <div class="d5-sidebar">
+          <div class="d5-side-title">METRICS</div>
+
+          <div class="d5-metric">
+            <div class="d5-metric-label">本地运行率</div>
+            <div class="d5-metric-value">100<span class="d5-metric-unit">%</span></div>
+            <div class="d5-metric-bar">
+              <div class="d5-metric-fill" style="width:100%"></div>
+            </div>
+          </div>
+
+          <div class="d5-metric">
+            <div class="d5-metric-label">隐私泄露风险</div>
+            <div class="d5-metric-value">0</div>
+            <div class="d5-metric-bar">
+              <div class="d5-metric-fill" style="width:0%"></div>
+            </div>
+          </div>
+
+          <div class="d5-metric">
+            <div class="d5-metric-label">无效I/O减少</div>
+            <div class="d5-metric-value">99<span class="d5-metric-unit">%</span></div>
+            <div class="d5-metric-bar">
+              <div class="d5-metric-fill" style="width:99%"></div>
+            </div>
+          </div>
+
+          <div class="d5-metric">
+            <div class="d5-metric-label">当前版本</div>
+            <div class="d5-metric-value">v0.5</div>
+          </div>
+        </div>
+
+        <div class="d5-main">
+          <div class="d5-main-header">
+            <div class="d5-main-title">让照片<span>回归秩序</span></div>
+            <div class="d5-main-badge">LOCAL · PRIVATE · DEDUP</div>
+          </div>
+
+          <div class="d5-chart-area">
+            <div class="d5-chart-label">主界面预览</div>
+            <div class="d5-chart-ui">
+              <div class="d5-chart-left">
+                <div class="d1-ui-stat">
+                  <div class="d1-ui-num">42</div>
+                  <div class="d1-ui-lbl">文件</div>
+                </div>
+                <div class="d1-ui-stat">
+                  <div class="d1-ui-num">45MB</div>
+                  <div class="d1-ui-lbl">大小</div>
+                </div>
+              </div>
+              <div class="d5-chart-right">
+                <div class="d1-thumb th-a"></div>
+                <div class="d1-thumb th-b"></div>
+                <div class="d1-thumb th-c"></div>
+                <div class="d1-thumb th-d"></div>
+                <div class="d1-thumb th-e"></div>
+                <div class="d1-thumb th-a"></div>
+                <div class="d1-thumb th-b"></div>
+                <div class="d1-thumb th-c"></div>
+                <div class="d1-thumb th-d"></div>
+                <div class="d1-thumb th-e"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="d5-features">
+            <div class="d5-feature">
+              <div class="d5-feature-title">本地运行</div>
+              <div class="d5-feature-desc">数据不离机，零云端依赖</div>
+            </div>
+            <div class="d5-feature">
+              <div class="d5-feature-title">隐私零泄露</div>
+              <div class="d5-feature-desc">不上传不分析，数据主权在你</div>
+            </div>
+            <div class="d5-feature">
+              <div class="d5-feature-title">智能去重</div>
+              <div class="d5-feature-desc">MD5精确比对，减少99%无效I/O</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d5-footer">
+        <div class="d5-footer-left">© 2026 Blur Arc · MIT License</div>
+        <div class="d5-footer-right">github.com/BigAnnoy/BlurArc</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

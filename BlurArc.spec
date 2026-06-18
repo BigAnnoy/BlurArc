@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(SPECPATH)
 SQLITE3_DLL = Path(sys.prefix) / 'Library' / 'bin' / 'sqlite3.dll'
+PYTHON_DLL = Path(sys.prefix) / 'python313.dll'
 
 import importlib.util, site
 def _pkg_dir(name):
@@ -59,6 +60,8 @@ excludes = [
 
 ANACONDA_BASE = Path(sys.prefix) / 'Library' / 'bin'
 
+PYTHON_DLL_TARGET = str(PYTHON_DLL.name)
+
 a = Analysis(
     [str(ROOT / 'src' / 'BlurArc.py')],
     pathex=[str(ROOT)],
@@ -69,7 +72,7 @@ a = Analysis(
         (str(ANACONDA_BASE / 'ffi-7.dll'), '.'),
         (str(ANACONDA_BASE / 'ffi.dll'), '.'),
     ] if SQLITE3_DLL.exists() else [],
-    datas=datas,
+    datas=datas + [(str(PYTHON_DLL), '.')] if PYTHON_DLL.exists() else datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
@@ -103,7 +106,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon='docs/icon.ico',
 )
 
 if sys.platform == 'darwin':
@@ -124,3 +127,11 @@ else:
         ],
         name='BlurArc',
     )
+
+import shutil
+dist_dir = ROOT / 'dist' / 'BlurArc'
+src_dll = dist_dir / '_internal' / 'python313.dll'
+dst_dll = dist_dir / 'python313.dll'
+if src_dll.exists():
+    shutil.copy2(str(src_dll), str(dst_dll))
+    print(f"Copied python313.dll to {dst_dll}")

@@ -1,748 +1,780 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Blur Arc v0.5.0 — 让照片回归秩序</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Noto+Serif+SC:wght@300;400;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blur Arc — 让照片回归秩序</title>
+<style>
+  /* ── 来自 frontend/tailwind.config.js 的真实配色 ── */
+  :root {
+    --primary:     #0891b2;
+    --primary-h:   #0e7490;
+    --primary-l:   #e0f7fa;
+    --page:        #f4f7f9;
+    --card:        #ffffff;
+    --border:      #d8e2e8;
+    --border-s:    #b8c8d4;
+    --text-p:      #1a2a3a;
+    --text-s:      #5a6a7a;
+    --text-t:      #8a9aaa;
+  }
 
-    :root {
-      --ink:       #0d0d0f;
-      --paper:     #f5f2ed;
-      --gold:      #c9a84c;
-      --gold-lt:   #e8cc7a;
-      --silver:    #9ca3af;
-      --glass-bg:  rgba(255,255,255,0.04);
-      --glass-bd:  rgba(255,255,255,0.10);
-      --red-acc:   #e05a4e;
-    }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html { scroll-behavior: smooth; }
+  body {
+    font-family: 'IBM Plex Sans', -apple-system, 'Microsoft YaHei', sans-serif;
+    background: var(--page);
+    color: var(--text-p);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
 
-    body {
-      background-color: var(--ink);
-      color: var(--paper);
-      font-family: 'Noto Serif SC', serif;
-      overflow-x: hidden;
-      line-height: 1.7;
-    }
+  /* ── 布局容器 1080×1440 ── */
+  .promo {
+    width: 1080px;
+    min-height: 1440px;
+    margin: 0 auto;
+    background: var(--page);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
 
-    /* ── grain overlay ── */
-    body::before {
-      content: '';
-      position: fixed; inset: 0;
-      pointer-events: none;
-      z-index: 999;
-      opacity: .025;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-      background-size: 128px;
-    }
+  /* ── 顶部装饰光晕 ── */
+  .glow-tl {
+    position: absolute; top: -120px; left: -80px;
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(8,145,178,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .glow-tr {
+    position: absolute; top: 0; right: -60px;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(8,145,178,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .glow-bl {
+    position: absolute; bottom: 80px; left: -100px;
+    width: 450px; height: 450px;
+    background: radial-gradient(circle, rgba(8,145,178,0.05) 0%, transparent 70%);
+    pointer-events: none;
+  }
 
-    /* ── NAV ── */
-    nav {
-      position: fixed; top: 0; left: 0; right: 0;
-      z-index: 100;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 20px 60px;
-      backdrop-filter: blur(20px);
-      background: rgba(13,13,15,0.7);
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-    }
-    .nav-logo {
-      display: flex; align-items: center; gap: 10px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px; letter-spacing: .12em;
-      color: var(--gold);
-    }
-    .nav-logo-dot {
-      width: 8px; height: 8px;
-      background: var(--gold);
-      border-radius: 50%;
-      animation: pulse 2.4s ease-in-out infinite;
-    }
-    .nav-ver {
-      font-size: 11px; color: var(--silver);
-      font-family: 'JetBrains Mono', monospace;
-      letter-spacing: .08em;
-    }
-    .nav-cta {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px; letter-spacing: .15em;
-      text-transform: uppercase;
-      color: var(--paper);
-      text-decoration: none;
-      border: 1px solid rgba(255,255,255,0.25);
-      padding: 8px 22px;
-      border-radius: 2px;
-      transition: all .3s ease;
-    }
-    .nav-cta:hover {
-      background: var(--gold);
-      border-color: var(--gold);
-      color: var(--ink);
-    }
+  /* ── 顶部主色条 ── */
+  .top-bar {
+    height: 6px;
+    background: linear-gradient(90deg, var(--primary-h) 0%, var(--primary) 60%, #22d3ee 100%);
+    flex-shrink: 0;
+  }
 
-    /* ── HERO ── */
-    .hero {
-      min-height: 100vh;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      padding: 120px 60px 80px;
-      position: relative;
-      overflow: hidden;
-      text-align: center;
-    }
+  /* ── 顶部品牌区 ── */
+  .header {
+    padding: 28px 72px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .logo {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .logo-blur { color: var(--text-p); }
+  .logo-arc  { color: var(--primary); }
+  .version-badge {
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 14px;
+    color: var(--text-t);
+    background: var(--page);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 16px;
+  }
 
-    /* background grid lines */
-    .hero::after {
-      content: '';
-      position: absolute; inset: 0;
-      background-image:
-        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
-      background-size: 60px 60px;
-      pointer-events: none;
-    }
+  /* ── 主标题区 ── */
+  .hero {
+    padding: 64px 72px 48px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .hero-title {
+    font-size: 80px;
+    font-weight: 700;
+    color: var(--text-p);
+    line-height: 1.1;
+    margin-bottom: 20px;
+    letter-spacing: -2px;
+  }
+  .hero-en {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 16px;
+    letter-spacing: 0.5px;
+  }
+  .hero-sub {
+    font-size: 20px;
+    color: var(--text-s);
+    margin-bottom: 8px;
+  }
+  .hero-tags {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 18px;
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 20px;
+    font-size: 14px;
+    color: var(--text-s);
+  }
+  .tag-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--primary);
+    flex-shrink: 0;
+  }
 
-    /* large ambient glow */
-    .hero-glow {
-      position: absolute;
-      width: 700px; height: 700px;
-      background: radial-gradient(circle, rgba(201,168,76,.12) 0%, transparent 70%);
-      border-radius: 50%;
-      pointer-events: none;
-      animation: drift 8s ease-in-out infinite alternate;
-    }
+  /* ── 截图区 ── */
+  .screenshots {
+    padding: 0 72px 56px;
+    flex-shrink: 0;
+  }
+  .shots-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 24px;
+  }
+  .shot-card {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    position: relative;
+  }
+  .shot-card.main {
+    grid-column: 1 / -1;
+  }
+  .shot-inner {
+    background: var(--page);
+    position: relative;
+  }
+  .shot-label {
+    position: absolute;
+    top: 12px; left: 16px;
+    background: var(--primary);
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    z-index: 2;
+    letter-spacing: 0.5px;
+  }
+  .shot-label .num { opacity: 0.7; margin-right: 4px; }
 
-    .hero-eyebrow {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px; letter-spacing: .3em;
-      text-transform: uppercase;
-      color: var(--gold);
-      margin-bottom: 28px;
-      position: relative; z-index: 1;
-      opacity: 0; animation: fadeUp .8s .2s forwards;
-    }
+  /* ── 截图内 UI 模拟 ── */
+  .ui-win {
+    width: 100%;
+    background: var(--page);
+    position: relative;
+    overflow: hidden;
+  }
+  .ui-win-bar {
+    height: 36px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .ui-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border-s); }
+  .ui-dot.r { background: #ef4444; }
+  .ui-dot.y { background: #f59e0b; }
+  .ui-dot.g { background: #22c55e; }
+  .ui-win-title {
+    margin-left: 8px;
+    font-size: 12px;
+    color: var(--text-t);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ui-body {
+    display: flex;
+    height: 280px;
+  }
+  .ui-sidebar {
+    width: 180px;
+    flex-shrink: 0;
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    padding: 16px 12px;
+  }
+  .ui-stat-card {
+    background: var(--page);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  .ui-stat-num {
+    font-size: 22px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--primary);
+    font-weight: 700;
+  }
+  .ui-stat-lbl { font-size: 11px; color: var(--text-t); margin-top: 2px; }
+  .ui-month-list { margin-top: 12px; }
+  .ui-month-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-s);
+    margin-bottom: 4px;
+  }
+  .ui-month-row.active { background: var(--primary); color: white; }
+  .ui-month-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .ui-month-row.active .ui-month-count { color: rgba(255,255,255,0.8); }
+  .ui-import-btn {
+    margin-top: 12px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    font-family: inherit;
+    width: 100%;
+    cursor: default;
+  }
+  .ui-content {
+    flex: 1;
+    padding: 14px 16px;
+    overflow: hidden;
+  }
+  .ui-content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .ui-content-title { font-size: 14px; font-weight: 600; color: var(--text-p); }
+  .ui-select-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 14px;
+    font-size: 12px;
+    color: var(--text-s);
+    cursor: default;
+  }
+  .ui-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+  .ui-thumb {
+    border-radius: 6px;
+    aspect-ratio: 1;
+    overflow: hidden;
+  }
 
-    .hero-title {
-      font-family: 'Playfair Display', serif;
-      font-size: clamp(52px, 9vw, 120px);
-      font-weight: 900;
-      line-height: 1.0;
-      letter-spacing: -.02em;
-      position: relative; z-index: 1;
-      opacity: 0; animation: fadeUp .9s .35s forwards;
-    }
-    .hero-title em {
-      font-style: italic;
-      color: var(--gold);
-    }
+  /* 缩略图渐变色 */
+  .th-1 { background: linear-gradient(160deg, #cce8f0 0%, #a8d4e8 100%); }
+  .th-2 { background: linear-gradient(160deg, #d5e8f5 0%, #b0d8e8 100%); }
+  .th-3 { background: linear-gradient(160deg, #e0eef5 0%, #c0dce8 100%); }
+  .th-4 { background: linear-gradient(160deg, #cce0f0 0%, #a8c8e4 100%); }
+  .th-5 { background: linear-gradient(160deg, #d8e8f2 0%, #b4d4e8 100%); }
+  .th-6 { background: linear-gradient(160deg, #e4f0f5 0%, #c8dce8 100%); }
+  .th-7 { background: linear-gradient(160deg, #cce8f4 0%, #a8d0e8 100%); }
+  .th-8 { background: linear-gradient(160deg, #d0e4f0 0%, #aac8e4 100%); }
+  .th-9 { background: linear-gradient(160deg, #e0ecf4 0%, #bcd8e8 100%); }
+  .th-10 { background: linear-gradient(160deg, #d4e8f2 0%, #b0d0e8 100%); }
+  .th-11 { background: linear-gradient(160deg, #cce4f0 0%, #a8cce4 100%); }
+  .th-12 { background: linear-gradient(160deg, #dceaf4 0%, #b8d8e8 100%); }
+  .th-13 { background: linear-gradient(160deg, #cce0f4 0%, #a8c4e4 100%); }
+  .th-14 { background: linear-gradient(160deg, #d8ecf2 0%, #b4d4e8 100%); }
+  .th-15 { background: linear-gradient(160deg, #e0eaf4 0%, #bcdce8 100%); }
 
-    .hero-sub {
-      margin-top: 32px;
-      font-size: 18px; font-weight: 300;
-      color: rgba(245,242,237,.6);
-      max-width: 560px;
-      position: relative; z-index: 1;
-      opacity: 0; animation: fadeUp .9s .5s forwards;
-    }
+  /* ── 小截图内部 UI ── */
+  .ui-small { height: 200px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+  .ui-welcome-icon {
+    width: 72px; height: 52px;
+    background: var(--card);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ui-lens {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--primary-l);
+    border: 2.5px solid var(--primary);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ui-lens-inner {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--primary);
+  }
+  .ui-welcome-txt {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-p);
+  }
+  .ui-welcome-sub { font-size: 13px; color: var(--text-s); }
+  .ui-welcome-btn {
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: default;
+  }
 
-    .hero-actions {
-      margin-top: 52px;
-      display: flex; gap: 16px;
-      position: relative; z-index: 1;
-      opacity: 0; animation: fadeUp .9s .65s forwards;
-    }
-    .btn-primary-hero {
-      background: var(--gold);
-      color: var(--ink);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px; font-weight: 500;
-      letter-spacing: .12em; text-transform: uppercase;
-      border: none; padding: 16px 40px;
-      border-radius: 2px; cursor: pointer;
-      text-decoration: none;
-      transition: all .3s;
-    }
-    .btn-primary-hero:hover {
-      background: var(--gold-lt);
-      transform: translateY(-2px);
-      box-shadow: 0 12px 32px rgba(201,168,76,.3);
-    }
-    .btn-ghost-hero {
-      background: transparent;
-      color: var(--paper);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px; font-weight: 500;
-      letter-spacing: .12em; text-transform: uppercase;
-      border: 1px solid rgba(255,255,255,.2);
-      padding: 16px 40px;
-      border-radius: 2px; cursor: pointer;
-      text-decoration: none;
-      transition: all .3s;
-    }
-    .btn-ghost-hero:hover {
-      border-color: rgba(255,255,255,.5);
-      transform: translateY(-2px);
-    }
+  .ui-dialog {
+    width: 92%;
+    background: var(--card);
+    border: 1.5px solid var(--border-s);
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.10);
+    padding: 20px 24px;
+    position: relative;
+  }
+  .ui-dialog-hd {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+  }
+  .ui-dialog-title { font-size: 16px; font-weight: 700; color: var(--text-p); }
+  .ui-dialog-close {
+    width: 28px; height: 28px;
+    background: var(--page);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: var(--text-t);
+  }
+  .ui-dialog-stats {
+    display: flex; gap: 24px; margin-bottom: 14px;
+  }
+  .ui-stat-item { font-size: 12px; color: var(--text-s); }
+  .ui-stat-val { font-size: 16px; font-family: 'JetBrains Mono', monospace; color: var(--primary); font-weight: 700; margin-left: 6px; }
+  .ui-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .ui-tab { padding: 5px 14px; border-radius: 6px; font-size: 12px; color: var(--text-s); cursor: default; }
+  .ui-tab.active { background: var(--card); border: 1px solid var(--border); color: var(--primary); font-weight: 600; border-top: 2.5px solid var(--primary); }
+  .ui-tab-content { display: flex; gap: 12px; }
+  .ui-list-col { width: 140px; flex-shrink: 0; }
+  .ui-list-item {
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-s);
+    margin-bottom: 5px;
+    cursor: default;
+  }
+  .ui-list-item.active { background: var(--primary); color: white; }
+  .ui-preview-col { flex: 1; display: grid; grid-template-columns: repeat(5,1fr); gap: 6px; }
+  .ui-import-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+  .ui-btn-back { padding: 8px 20px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; color: var(--text-p); background: var(--card); cursor: default; }
+  .ui-btn-start { padding: 8px 20px; background: var(--primary); border: none; border-radius: 8px; font-size: 13px; color: white; cursor: default; }
 
-    .hero-scroll-hint {
-      position: absolute; bottom: 40px;
-      left: 50%; transform: translateX(-50%);
-      display: flex; flex-direction: column; align-items: center; gap: 8px;
-      z-index: 1;
-      opacity: 0; animation: fadeUp .8s 1.2s forwards;
-    }
-    .scroll-line {
-      width: 1px; height: 48px;
-      background: linear-gradient(to bottom, var(--gold), transparent);
-      animation: scrollLine 2s ease-in-out infinite;
-    }
-    .scroll-label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px; letter-spacing: .2em;
-      text-transform: uppercase; color: var(--silver);
-    }
+  /* ── 功能区 ── */
+  .features {
+    padding: 0 72px 56px;
+    flex-shrink: 0;
+  }
+  .feat-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .feat-dot {
+    width: 10px; height: 10px; border-radius: 50%; background: var(--primary); flex-shrink: 0;
+  }
+  .feat-title { font-size: 20px; font-weight: 700; color: var(--text-p); }
+  .feat-title-en { font-size: 14px; font-family: 'JetBrains Mono', monospace; color: var(--text-t); margin-left: auto; letter-spacing: 1px; }
 
-    /* ── STATS BAND ── */
-    .stats-band {
-      border-top: 1px solid rgba(255,255,255,.07);
-      border-bottom: 1px solid rgba(255,255,255,.07);
-      display: flex;
-      overflow: hidden;
-    }
-    .stat-item {
-      flex: 1;
-      padding: 40px 30px;
-      text-align: center;
-      border-right: 1px solid rgba(255,255,255,.07);
-      position: relative;
-      transition: background .3s;
-    }
-    .stat-item:last-child { border-right: none; }
-    .stat-item:hover { background: rgba(201,168,76,.04); }
-    .stat-num {
-      font-family: 'Playfair Display', serif;
-      font-size: 48px; font-weight: 700;
-      color: var(--gold);
-      line-height: 1;
-    }
-    .stat-unit {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px; color: var(--silver);
-      margin-top: 4px;
-    }
-    .stat-label {
-      font-size: 13px; color: rgba(245,242,237,.5);
-      margin-top: 6px; font-weight: 300;
-    }
+  .feat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  .feat-card {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.04);
+  }
+  .feat-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--primary);
+    border-radius: 0 2px 2px 0;
+  }
+  .feat-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .feat-name {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text-p);
+    margin-bottom: 12px;
+    line-height: 1.2;
+  }
+  .feat-desc {
+    font-size: 13px;
+    color: var(--text-s);
+    line-height: 1.7;
+    margin-bottom: 16px;
+  }
+  .feat-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .feat-pill {
+    display: inline-block;
+    padding: 4px 12px;
+    background: var(--primary-l);
+    border-radius: 20px;
+    font-size: 11px;
+    color: var(--primary);
+    font-weight: 500;
+  }
 
-    /* ── SECTION BASE ── */
-    section { padding: 100px 60px; }
-    .section-tag {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px; letter-spacing: .3em;
-      text-transform: uppercase; color: var(--gold);
-      margin-bottom: 16px;
-    }
-    .section-title {
-      font-family: 'Playfair Display', serif;
-      font-size: clamp(34px, 4vw, 56px);
-      font-weight: 700; line-height: 1.15;
-      margin-bottom: 20px;
-    }
-    .section-lead {
-      font-size: 16px; font-weight: 300;
-      color: rgba(245,242,237,.55);
-      max-width: 520px; line-height: 1.9;
-    }
+  /* ── 数据指标区 ── */
+  .stats-bar {
+    padding: 0 72px 56px;
+    flex-shrink: 0;
+  }
+  .stats-inner {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 40px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.04);
+  }
+  .stat-item { text-align: center; }
+  .stat-num {
+    font-size: 38px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--primary);
+    line-height: 1;
+  }
+  .stat-num span { font-size: 20px; opacity: 0.7; }
+  .stat-label { font-size: 13px; color: var(--text-s); margin-top: 6px; }
+  .stat-divider { width: 1px; height: 48px; background: var(--border); }
 
-    /* ── FEATURES ── */
-    .features {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 2px;
-      margin-top: 64px;
-    }
-    .feature-card {
-      background: var(--glass-bg);
-      border: 1px solid var(--glass-bd);
-      padding: 44px 36px;
-      position: relative;
-      overflow: hidden;
-      transition: all .4s;
-    }
-    .feature-card::before {
-      content: '';
-      position: absolute; top: 0; left: 0; right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, var(--gold), transparent);
-      transform: scaleX(0);
-      transition: transform .4s;
-    }
-    .feature-card:hover { background: rgba(255,255,255,.06); }
-    .feature-card:hover::before { transform: scaleX(1); }
+  /* ── CTA 区 ── */
+  .cta {
+    padding: 0 72px 56px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .cta-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 14px;
+    padding: 22px 56px;
+    font-size: 22px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: default;
+    box-shadow: 0 8px 32px rgba(8,145,178,0.28);
+    letter-spacing: 0.5px;
+  }
+  .cta-btn-sub {
+    display: block;
+    font-size: 13px;
+    font-weight: 400;
+    opacity: 0.8;
+    margin-top: 4px;
+    letter-spacing: 0;
+  }
+  .cta-arrow {
+    font-size: 28px;
+    font-weight: 300;
+  }
 
-    .feature-icon {
-      font-size: 32px; margin-bottom: 20px;
-      display: block;
-      filter: grayscale(.3);
-    }
-    .feature-title {
-      font-family: 'Playfair Display', serif;
-      font-size: 20px; font-weight: 700;
-      margin-bottom: 12px;
-    }
-    .feature-desc {
-      font-size: 14px; font-weight: 300;
-      color: rgba(245,242,237,.55);
-      line-height: 1.8;
-    }
-    .feature-tag {
-      display: inline-block;
-      margin-top: 18px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px; letter-spacing: .15em;
-      text-transform: uppercase;
-      color: var(--gold);
-      background: rgba(201,168,76,.1);
-      border: 1px solid rgba(201,168,76,.25);
-      padding: 3px 10px; border-radius: 2px;
-    }
-
-    /* ── WORKFLOW ── */
-    .workflow-section {
-      background: linear-gradient(135deg, rgba(201,168,76,.04) 0%, transparent 60%);
-      border-top: 1px solid rgba(255,255,255,.06);
-    }
-    .workflow-steps {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 0;
-      margin-top: 64px;
-      border: 1px solid rgba(255,255,255,.08);
-    }
-    .wf-step {
-      padding: 40px 30px;
-      border-right: 1px solid rgba(255,255,255,.08);
-      position: relative;
-    }
-    .wf-step:last-child { border-right: none; }
-    .wf-num {
-      font-family: 'Playfair Display', serif;
-      font-size: 64px; font-weight: 900;
-      color: rgba(201,168,76,.12);
-      line-height: 1; margin-bottom: 8px;
-    }
-    .wf-title {
-      font-size: 16px; font-weight: 600;
-      margin-bottom: 10px;
-    }
-    .wf-desc {
-      font-size: 13px; font-weight: 300;
-      color: rgba(245,242,237,.5);
-      line-height: 1.8;
-    }
-    .wf-arrow {
-      position: absolute; top: 50%; right: -14px;
-      transform: translateY(-50%);
-      width: 28px; height: 28px;
-      background: var(--ink);
-      border: 1px solid rgba(255,255,255,.15);
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 11px; color: var(--gold);
-      z-index: 2;
-    }
-    .wf-step:last-child .wf-arrow { display: none; }
-
-    /* ── TECH STACK ── */
-    .tech-section {
-      border-top: 1px solid rgba(255,255,255,.06);
-    }
-    .tech-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 40px 80px;
-      margin-top: 64px;
-    }
-    .tech-row {
-      display: flex; align-items: flex-start; gap: 20px;
-    }
-    .tech-num {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px; color: var(--gold);
-      padding-top: 4px; flex-shrink: 0;
-    }
-    .tech-name {
-      font-size: 16px; font-weight: 600; margin-bottom: 6px;
-    }
-    .tech-desc {
-      font-size: 13px; font-weight: 300;
-      color: rgba(245,242,237,.5); line-height: 1.7;
-    }
-    .tech-badge {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      background: rgba(255,255,255,.06);
-      border: 1px solid rgba(255,255,255,.1);
-      padding: 2px 8px;
-      border-radius: 2px;
-      margin-left: 8px;
-      color: var(--silver);
-      vertical-align: middle;
-    }
-
-    /* ── HIGHLIGHT BAND ── */
-    .highlight-band {
-      background: var(--gold);
-      padding: 80px 60px;
-      text-align: center;
-    }
-    .highlight-band .section-title {
-      color: var(--ink);
-      font-size: clamp(28px, 3vw, 44px);
-    }
-    .highlight-band .section-lead {
-      color: rgba(13,13,15,.65);
-      max-width: 600px; margin: 16px auto 0;
-    }
-    .highlight-band .btn-dark {
-      display: inline-block;
-      margin-top: 40px;
-      background: var(--ink);
-      color: var(--gold);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px; letter-spacing: .15em; text-transform: uppercase;
-      padding: 14px 36px; border-radius: 2px;
-      text-decoration: none;
-      transition: all .3s;
-    }
-    .highlight-band .btn-dark:hover {
-      background: rgba(13,13,15,.85);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(13,13,15,.4);
-    }
-
-    /* ── FOOTER ── */
-    footer {
-      border-top: 1px solid rgba(255,255,255,.07);
-      padding: 48px 60px;
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .footer-logo {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px; color: var(--gold);
-      letter-spacing: .1em;
-    }
-    .footer-copy {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px; color: var(--silver);
-      letter-spacing: .08em;
-    }
-    .footer-stack {
-      display: flex; gap: 20px;
-    }
-    .footer-badge {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px; letter-spacing: .1em;
-      color: var(--silver);
-      background: rgba(255,255,255,.05);
-      border: 1px solid rgba(255,255,255,.08);
-      padding: 4px 12px; border-radius: 2px;
-    }
-
-    /* ── ANIMATIONS ── */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(24px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50%       { opacity: .5; transform: scale(.7); }
-    }
-    @keyframes drift {
-      from { transform: translate(-30px, -20px); }
-      to   { transform: translate(30px, 20px); }
-    }
-    @keyframes scrollLine {
-      0%   { transform: scaleY(1); transform-origin: top; }
-      50%  { transform: scaleY(.4); transform-origin: top; }
-      51%  { transform: scaleY(.4); transform-origin: bottom; }
-      100% { transform: scaleY(1); transform-origin: bottom; }
-    }
-
-    /* scroll reveal */
-    .reveal {
-      opacity: 0;
-      transform: translateY(32px);
-      transition: opacity .7s ease, transform .7s ease;
-    }
-    .reveal.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    /* ── RESPONSIVE ── */
-    @media (max-width: 900px) {
-      nav { padding: 16px 24px; }
-      .hero { padding: 100px 24px 70px; }
-      section { padding: 70px 24px; }
-      .features { grid-template-columns: 1fr; }
-      .workflow-steps { grid-template-columns: 1fr 1fr; }
-      .wf-step { border-bottom: 1px solid rgba(255,255,255,.08); }
-      .tech-grid { grid-template-columns: 1fr; gap: 28px; }
-      .stats-band { flex-wrap: wrap; }
-      .stat-item { min-width: 50%; }
-      footer { flex-direction: column; gap: 20px; text-align: center; }
-      .footer-stack { flex-wrap: wrap; justify-content: center; }
-    }
-  </style>
+  /* ── 底部信息 ── */
+  .footer {
+    padding: 24px 72px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    margin-top: auto;
+  }
+  .footer-brand { font-size: 18px; font-weight: 700; color: var(--text-p); }
+  .footer-desc { font-size: 12px; color: var(--text-t); margin-top: 3px; }
+  .footer-link { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--primary); text-decoration: none; }
+  .footer-plat { font-size: 12px; color: var(--text-t); text-align: right; }
+  .footer-copy { font-size: 12px; color: var(--text-t); text-align: center; padding: 12px 72px 20px; flex-shrink: 0; }
+</style>
 </head>
 <body>
+<div class="promo">
 
-  <!-- NAV -->
-  <nav>
-    <div class="nav-logo">
-      <span class="nav-logo-dot"></span>
-      PhotoManager
-    </div>
-    <span class="nav-ver">v 0.3</span>
-    <a href="#start" class="nav-cta">立即开始</a>
-  </nav>
+  <!-- 装饰光晕 -->
+  <div class="glow-tl"></div>
+  <div class="glow-tr"></div>
+  <div class="glow-bl"></div>
 
-  <!-- HERO -->
-  <section class="hero" id="home">
-    <div class="hero-glow"></div>
-    <p class="hero-eyebrow">Blur Arc · v0.5.0 · PyWebView</p>
-    <h1 class="hero-title">
-      让照片<br/><em>回归秩序</em>
-    </h1>
-    <p class="hero-sub">
-      本地运行，零隐私泄露。自动按拍摄日期整理、智能去重、支持视频预览——把凌乱的照片变成井井有条的时间胶囊。
-    </p>
-    <div class="hero-actions">
-      <a href="#features" class="btn-primary-hero">探索功能</a>
-      <a href="#start" class="btn-ghost-hero">快速开始</a>
-    </div>
-    <div class="hero-scroll-hint">
-      <span class="scroll-label">向下滚动</span>
-      <span class="scroll-line"></span>
-    </div>
-  </section>
+  <!-- 顶部主色条 -->
+  <div class="top-bar"></div>
 
-  <!-- STATS -->
-  <div class="stats-band reveal">
-    <div class="stat-item">
-      <div class="stat-num">MD5</div>
-      <div class="stat-unit">双重去重</div>
-      <div class="stat-label">源文件夹内 + 相册内双重检测</div>
+  <!-- 顶部品牌 -->
+  <div class="header">
+    <div class="logo">
+      <span class="logo-blur">Blur</span><span class="logo-arc"> Arc</span>
     </div>
-    <div class="stat-item">
-      <div class="stat-num">20+</div>
-      <div class="stat-unit">格式支持</div>
-      <div class="stat-label">JPG · PNG · HEIC · MP4 · MOV…</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-num">0</div>
-      <div class="stat-unit">云端上传</div>
-      <div class="stat-label">完全本地运行，数据不离机</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-num">⚡</div>
-      <div class="stat-unit">异步导入</div>
-      <div class="stat-label">多线程 + 暂停/继续支持</div>
+    <div class="version-badge">v 0 . 5 . 0</div>
+  </div>
+
+  <!-- 主标题 -->
+  <div class="hero">
+    <div class="hero-title">让照片回归秩序</div>
+    <div class="hero-en">Your photos, in their place — locally, privately.</div>
+    <div class="hero-sub">完全本地运行 · 隐私零泄露 · 无云端依赖</div>
+    <div class="hero-tags">
+      <span class="tag"><span class="tag-dot"></span>本地运行</span>
+      <span class="tag"><span class="tag-dot"></span>隐私零泄露</span>
+      <span class="tag"><span class="tag-dot"></span>智能去重</span>
+      <span class="tag"><span class="tag-dot"></span>按日期归档</span>
+      <span class="tag"><span class="tag-dot"></span>视频支持</span>
     </div>
   </div>
 
-  <!-- FEATURES -->
-  <section id="features">
-    <p class="section-tag reveal">核心功能</p>
-    <h2 class="section-title reveal">为照片整理<br/>而生的每一个细节</h2>
-    <p class="section-lead reveal">从导入预检到相册浏览，从视频播放到批量删除，每个功能都经过精心打磨。</p>
+  <!-- 截图区 -->
+  <div class="screenshots">
+    <div class="shots-grid">
 
-    <div class="features">
-      <div class="feature-card reveal">
-        <span class="feature-icon">🗂</span>
-        <h3 class="feature-title">智能时间线整理</h3>
-        <p class="feature-desc">自动读取 EXIF 拍摄时间，按 <code>YYYY/YYYY-MM/</code> 目录结构存档。同秒连拍自动生成序号 <code>_001</code>、<code>_002</code>，不丢一张。</p>
-        <span class="feature-tag">EXIF 解析</span>
+      <!-- 主截图：相册浏览 -->
+      <div class="shot-card main">
+        <span class="shot-label"><span class="num">①</span> 主相册浏览界面</span>
+        <div class="ui-win">
+          <div class="ui-win-bar">
+            <div class="ui-dot r"></div><div class="ui-dot y"></div><div class="ui-dot g"></div>
+            <span class="ui-win-title">Blur Arc — 相册</span>
+          </div>
+          <div class="ui-body">
+            <div class="ui-sidebar">
+              <div class="ui-stat-card">
+                <div class="ui-stat-num">42</div>
+                <div class="ui-stat-lbl">文件</div>
+              </div>
+              <div class="ui-stat-card">
+                <div class="ui-stat-num">45 MB</div>
+                <div class="ui-stat-lbl">总大小</div>
+              </div>
+              <div class="ui-month-list">
+                <div class="ui-month-row active">
+                  <span>六月</span><span class="ui-month-count">42</span>
+                </div>
+                <div class="ui-month-row">
+                  <span>五月</span><span class="ui-month-count">18</span>
+                </div>
+                <div class="ui-month-row">
+                  <span>四月</span><span class="ui-month-count">7</span>
+                </div>
+              </div>
+              <button class="ui-import-btn">导入照片</button>
+            </div>
+            <div class="ui-content">
+              <div class="ui-content-header">
+                <span class="ui-content-title">照片 · 42 张</span>
+                <span class="ui-select-btn">选择</span>
+              </div>
+              <div class="ui-grid">
+                <div class="ui-thumb th-1"></div><div class="ui-thumb th-2"></div><div class="ui-thumb th-3"></div><div class="ui-thumb th-4"></div><div class="ui-thumb th-5"></div>
+                <div class="ui-thumb th-6"></div><div class="ui-thumb th-7"></div><div class="ui-thumb th-8"></div><div class="ui-thumb th-9"></div><div class="ui-thumb th-10"></div>
+                <div class="ui-thumb th-11"></div><div class="ui-thumb th-12"></div><div class="ui-thumb th-13"></div><div class="ui-thumb th-14"></div><div class="ui-thumb th-15"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="feature-card reveal">
-        <span class="feature-icon">🔍</span>
-        <h3 class="feature-title">两阶段去重引擎</h3>
-        <p class="feature-desc">预检阶段先用 (文件大小 + EXIF 时间) 快速筛选候选，再对命中项计算 MD5 精确比对。大幅减少 I/O，数万张照片也流畅。</p>
-        <span class="feature-tag">MD5 + 特征索引</span>
+
+      <!-- 截图2：欢迎页 -->
+      <div class="shot-card">
+        <span class="shot-label"><span class="num">②</span> 首次启动引导</span>
+        <div class="ui-small">
+          <div class="ui-welcome-icon">
+            <div class="ui-lens">
+              <div class="ui-lens-inner"></div>
+            </div>
+          </div>
+          <div class="ui-welcome-txt">欢迎使用 Blur Arc</div>
+          <div class="ui-welcome-sub">让我们开始设置您的相册</div>
+          <button class="ui-welcome-btn">选择相册文件夹</button>
+        </div>
       </div>
-      <div class="feature-card reveal">
-        <span class="feature-icon">▶️</span>
-        <h3 class="feature-title">视频原生播放</h3>
-        <p class="feature-desc">HTTP Range 支持视频随意 Seek，自动提取时长/分辨率/编码信息。HEIC、BMP 等特殊格式自动转 JPEG 预览，无格式障碍。</p>
-        <span class="feature-tag">FFmpeg · HTTP Range</span>
+
+      <!-- 截图3：导入预览 -->
+      <div class="shot-card">
+        <span class="shot-label"><span class="num">③</span> 智能导入预检</span>
+        <div class="ui-small" style="height:220px; justify-content:center;">
+          <div class="ui-dialog">
+            <div class="ui-dialog-hd">
+              <span class="ui-dialog-title">预览导入</span>
+              <div class="ui-dialog-close">×</div>
+            </div>
+            <div class="ui-dialog-stats">
+              <span class="ui-stat-item">总文件个数<strong class="ui-stat-val">42</strong></span>
+              <span class="ui-stat-item">总大小<strong class="ui-stat-val">45.3 MB</strong></span>
+            </div>
+            <div class="ui-tabs">
+              <span class="ui-tab active">时间线</span>
+              <span class="ui-tab">已在相册</span>
+              <span class="ui-tab">文件夹内重复</span>
+            </div>
+            <div class="ui-tab-content">
+              <div class="ui-list-col">
+                <div class="ui-list-item active">2026-06 <span style="float:right">42</span></div>
+                <div class="ui-list-item">2026-05 <span style="float:right">18</span></div>
+                <div class="ui-list-item">2026-04 <span style="float:right">7</span></div>
+              </div>
+              <div class="ui-preview-col">
+                <div class="ui-thumb th-1"></div><div class="ui-thumb th-2"></div><div class="ui-thumb th-3"></div><div class="ui-thumb th-4"></div><div class="ui-thumb th-5"></div>
+                <div class="ui-thumb th-6"></div><div class="ui-thumb th-7"></div><div class="ui-thumb th-8"></div><div class="ui-thumb th-9"></div><div class="ui-thumb th-10"></div>
+              </div>
+            </div>
+            <div class="ui-import-row">
+              <span class="ui-btn-back">返回</span>
+              <span class="ui-btn-start">开始导入</span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="feature-card reveal">
-        <span class="feature-icon">☑️</span>
-        <h3 class="feature-title">多选批量操作</h3>
-        <p class="feature-desc">长按或点击勾选框进入多选模式。相册主页、导入预检三个 Tab 全支持批量选择，一键删除附带确认对话框，防误操作。</p>
-        <span class="feature-tag">长按 · 勾选框</span>
-      </div>
-      <div class="feature-card reveal">
-        <span class="feature-icon">⏸</span>
-        <h3 class="feature-title">可暂停异步导入</h3>
-        <p class="feature-desc">多线程导入，实时进度轮询。随时暂停/继续，不丢失进度。复制还是移动？点击「开始导入」时弹窗二选一，清晰直观。</p>
-        <span class="feature-tag">threading.Event</span>
-      </div>
-      <div class="feature-card reveal">
-        <span class="feature-icon">🖱</span>
-        <h3 class="feature-title">右键菜单 + 快捷键</h3>
-        <p class="feature-desc">右键照片卡片弹出上下文菜单：预览 / 打开文件 / 删除。键盘 ← → 翻页，ESC 关闭预览，「3/12」索引徽标随时知晓位置。</p>
-        <span class="feature-tag">UX 细节</span>
-      </div>
+
     </div>
-  </section>
-
-  <!-- WORKFLOW -->
-  <section class="workflow-section" id="workflow">
-    <p class="section-tag reveal">使用流程</p>
-    <h2 class="section-title reveal">四步完成<br/>照片归档</h2>
-    <p class="section-lead reveal">从导入到整理，整个流程不超过四步，新手也能轻松上手。</p>
-
-    <div class="workflow-steps">
-      <div class="wf-step reveal">
-        <div class="wf-num">01</div>
-        <h3 class="wf-title">选择源文件夹</h3>
-        <p class="wf-desc">点击"导入照片"，选择相机/手机导入的源文件夹，支持深层嵌套目录。</p>
-        <span class="wf-arrow">→</span>
-      </div>
-      <div class="wf-step reveal">
-        <div class="wf-num">02</div>
-        <h3 class="wf-title">预检 &amp; 查重</h3>
-        <p class="wf-desc">自动扫描所有媒体文件，在时间线/目标重复/源重复三个 Tab 中清晰呈现。</p>
-        <span class="wf-arrow">→</span>
-      </div>
-      <div class="wf-step reveal">
-        <div class="wf-num">03</div>
-        <h3 class="wf-title">选择导入方式</h3>
-        <p class="wf-desc">点击"开始导入"弹出选择弹窗：复制（保留源文件）或移动（导入后删除源文件）。</p>
-        <span class="wf-arrow">→</span>
-      </div>
-      <div class="wf-step reveal">
-        <div class="wf-num">04</div>
-        <h3 class="wf-title">浏览 &amp; 管理</h3>
-        <p class="wf-desc">在 Blur Arc 页面按目录树浏览、多选批量删除、右键菜单快速操作，一切尽在掌控。</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- TECH STACK -->
-  <section class="tech-section" id="tech">
-    <p class="section-tag reveal">技术架构</p>
-    <h2 class="section-title reveal">轻量、本地、<br/>开放的技术栈</h2>
-    <p class="section-lead reveal">没有 Electron 的臃肿，没有云依赖的不安。纯 Python + Web 技术，可随时审查、随时修改。</p>
-
-    <div class="tech-grid">
-      <div class="tech-row reveal">
-        <span class="tech-num">01</span>
-        <div>
-          <div class="tech-name">PyWebView <span class="tech-badge">窗口层</span></div>
-          <div class="tech-desc">原生系统窗口包裹 Web UI，调用系统文件对话框，无 Electron 依赖，内存占用极低。</div>
-        </div>
-      </div>
-      <div class="tech-row reveal">
-        <span class="tech-num">02</span>
-        <div>
-          <div class="tech-name">Flask REST API <span class="tech-badge">后端</span></div>
-          <div class="tech-desc">33KB 核心 API 服务，20+ 端点，含缩略图缓存、视频元数据、文件操作全覆盖。</div>
-        </div>
-      </div>
-      <div class="tech-row reveal">
-        <span class="tech-num">03</span>
-        <div>
-          <div class="tech-name">原生 HTML/CSS/JS <span class="tech-badge">前端</span></div>
-          <div class="tech-desc">零框架依赖，模块化 JS 设计（API / 相册浏览 / 导入对话框 / 照片多选各司其职）。</div>
-        </div>
-      </div>
-      <div class="tech-row reveal">
-        <span class="tech-num">04</span>
-        <div>
-          <div class="tech-name">SQLite + SQLAlchemy <span class="tech-badge">数据层</span></div>
-          <div class="tech-desc">本地 SQLite 数据库存储配置与元数据；JSON 记录文件追踪已导入 MD5，双重保险。</div>
-        </div>
-      </div>
-      <div class="tech-row reveal">
-        <span class="tech-num">05</span>
-        <div>
-          <div class="tech-name">Pillow + pillow-heif <span class="tech-badge">图像处理</span></div>
-          <div class="tech-desc">缩略图生成、HEIC/TIFF 格式转换、调色板透明图处理，全部本地计算，不上传任何图片。</div>
-        </div>
-      </div>
-      <div class="tech-row reveal">
-        <span class="tech-num">06</span>
-        <div>
-          <div class="tech-name">FFmpeg <span class="tech-badge">视频</span></div>
-          <div class="tech-desc">视频缩略图提取、时长/分辨率/编码元数据读取，HTTP Range 协议支持任意 Seek。</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA BAND -->
-  <div class="highlight-band" id="start">
-    <h2 class="section-title">准备好了吗？</h2>
-    <p class="section-lead">
-      一行命令启动，照片整理从此不再拖延。
-    </p>
-    <div style="margin-top:32px; background:rgba(13,13,15,.12); border-radius:4px; display:inline-block; padding:14px 32px; font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--ink); letter-spacing:.05em;">
-      python src/BlurArc.py
-    </div>
-    <br/>
-    <a href="#home" class="btn-dark">回到顶部 ↑</a>
   </div>
 
-  <!-- FOOTER -->
-  <footer>
-    <span class="footer-logo">📷 Blur Arc v0.5.0</span>
-    <div class="footer-stack">
-      <span class="footer-badge">Python</span>
-      <span class="footer-badge">PyWebView</span>
-      <span class="footer-badge">Flask</span>
-      <span class="footer-badge">SQLite</span>
-      <span class="footer-badge">FFmpeg</span>
+  <!-- 功能亮点 -->
+  <div class="features">
+    <div class="feat-header">
+      <div class="feat-dot"></div>
+      <span class="feat-title">核心能力</span>
+      <span class="feat-title-en">CORE CAPABILITIES</span>
     </div>
-    <span class="footer-copy">2026 · 本地运行 · 零隐私泄露</span>
-  </footer>
+    <div class="feat-grid">
 
-  <script>
-    // Scroll reveal
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry, i) => {
-        if (entry.isIntersecting) {
-          // stagger siblings slightly
-          const siblings = [...entry.target.parentElement.children];
-          const idx = siblings.indexOf(entry.target);
-          setTimeout(() => {
-            entry.target.classList.add('visible');
-          }, idx * 80);
-          observer.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.12 });
+      <div class="feat-card">
+        <div class="feat-tag">LOCAL · 本地运行</div>
+        <div class="feat-name">数据不离机</div>
+        <div class="feat-desc">所有操作在本机完成，按拍摄日期自动归档到 <code style="background:#e0f7fa;padding:1px 5px;border-radius:4px;font-size:12px;">YYYY-MM</code> 目录结构，无需上传云端，无需账号登录。</div>
+        <div class="feat-pills">
+          <span class="feat-pill">零云端依赖</span>
+          <span class="feat-pill">离线可用</span>
+        </div>
+      </div>
 
-    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+      <div class="feat-card">
+        <div class="feat-tag">PRIVATE · 隐私</div>
+        <div class="feat-name">隐私零泄露</div>
+        <div class="feat-desc">不上传、不分析、不收集任何数据。照片不会离开你的设备，真正做到数据主权在你手中。</div>
+        <div class="feat-pills">
+          <span class="feat-pill">无需账号</span>
+          <span class="feat-pill">不联网使用</span>
+        </div>
+      </div>
 
-    // Smooth nav shrink on scroll
-    window.addEventListener('scroll', () => {
-      const nav = document.querySelector('nav');
-      if (window.scrollY > 60) {
-        nav.style.padding = '12px 60px';
-      } else {
-        nav.style.padding = '20px 60px';
-      }
-    });
-  </script>
+      <div class="feat-card">
+        <div class="feat-tag">DEDUP · 去重</div>
+        <div class="feat-name">智能去重</div>
+        <div class="feat-desc">文件大小预筛 + MD5 精确比对，减少 99% 无效 I/O。导入时实时检测，重复文件一目了然。</div>
+        <div class="feat-pills">
+          <span class="feat-pill">实时预检</span>
+          <span class="feat-pill">MD5 精确比对</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 数据指标 -->
+  <div class="stats-bar">
+    <div class="stats-inner">
+      <div class="stat-item">
+        <div class="stat-num">100<span>%</span></div>
+        <div class="stat-label">本地运行</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-num">0</div>
+        <div class="stat-label">隐私泄露风险</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-num">99<span>%</span></div>
+        <div class="stat-label">无效 I/O 减少</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-num">v0.5</div>
+        <div class="stat-label">当前版本</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta">
+    <div class="cta-btn">
+      下载 Blur Arc · 让照片回归秩序
+      <span class="cta-arrow">→</span>
+      <span class="cta-btn-sub">免费 · 开源 · MIT License</span>
+    </div>
+  </div>
+
+  <!-- 底部 -->
+  <div class="footer">
+    <div>
+      <div class="footer-brand">Blur Arc</div>
+      <div class="footer-desc">本地运行 · 隐私零泄露 · 智能去重 · 按拍摄日期自动归档</div>
+    </div>
+    <div style="text-align:right">
+      <div class="footer-link">github.com/BigAnnoy/BlurArc</div>
+      <div class="footer-plat">Windows · macOS · Linux</div>
+    </div>
+  </div>
+
+  <div class="footer-copy">© 2026 Blur Arc · 让照片回归秩序 · 一份安静的本地归档工具</div>
+
+</div>
 </body>
 </html>

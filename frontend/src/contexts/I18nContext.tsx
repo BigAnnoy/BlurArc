@@ -237,6 +237,7 @@ const translations: Record<Language, Record<string, string>> = {
     'welcome.buildingIndex': '正在建立索引和缩略图...',
     'welcome.processing': '处理中',
     'welcome.rebuildFailed': '建立索引失败',
+    'welcome.rebuildTimeout': '建立索引超时',
   },
   en: {
     // Common
@@ -461,6 +462,7 @@ const translations: Record<Language, Record<string, string>> = {
     'welcome.buildingIndex': 'Building index and thumbnails...',
     'welcome.processing': 'Processing',
     'welcome.rebuildFailed': 'Failed to build index',
+    'welcome.rebuildTimeout': 'Building index timed out',
   },
 };
 
