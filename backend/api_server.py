@@ -13,7 +13,9 @@ Flask API 服务器 - Blur Arc 的 REST API 接口
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 import json
+import io
 import os
+import shutil
 import sys
 import urllib.parse
 from pathlib import Path
@@ -1291,7 +1293,7 @@ def phone_upload_resume():
         if not session:
             return jsonify({'error': '会话不存在或已完成'}), 404
 
-        info = server.start()
+        info = server.start(session=session)
         return jsonify(info)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

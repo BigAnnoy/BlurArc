@@ -17,8 +17,10 @@ from dataclasses import dataclass, field
 import qrcode
 from flask import Flask, request, jsonify, send_file
 from werkzeug.utils import secure_filename
+from werkzeug.serving import make_server
 
 from .config_manager import _get_app_data_dir
+from .constants import MEDIA_FORMATS
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +30,8 @@ SESSIONS_FILE = UPLOAD_ROOT / "sessions.json"
 MAX_SINGLE_FILE_BYTES = 500 * 1024 * 1024  # 500 MB
 MAX_FILES_PER_SESSION = 2000
 
-# 允许的扩展名（与 constants.py 对齐）
-ALLOWED_EXTENSIONS = {
-    '.jpg', '.jpeg', '.png', '.heic', '.webp', '.bmp', '.gif', '.tiff', '.tif',
-    '.mp4', '.mov', '.avi', '.mkv', '.m4v', '.3gp', '.wmv', '.flv', '.webm',
-}
+# 允许的扩展名（复用 constants.py 定义，保持与导入流程一致）
+ALLOWED_EXTENSIONS = MEDIA_FORMATS
 
 
 @dataclass
@@ -55,20 +54,15 @@ class UploadSession:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.upload_dir = UPLOAD_ROOT / f"{ts}_{self.session_id[:8]}"
         self.files: list[UploadedFile] = []
+        self.done_count: int = 0
         self.total_bytes: int = 0
         self.created_at: float = datetime.now().timestamp()
         self.is_active: bool = True
-        self.current_file: UploadedFile | None = None
-        self.current_progress: float = 0.0
-        self.current_speed_mbps: float = 0.0
 
     def to_dict(self) -> dict:
         return {
             "total_files": len(self.files),
-            "completed_files": sum(1 for f in self.files if f.status == "done"),
-            "current_file": self.current_file.original_name if self.current_file else "",
-            "current_progress": round(self.current_progress, 1),
-            "current_speed_mbps": round(self.current_speed_mbps, 2),
+            "completed_files": self.done_count,
             "total_bytes_uploaded": self.total_bytes,
             "files": [
                 {"name": f.original_name, "size": f.size, "status": f.status,
@@ -88,6 +82,7 @@ class PhoneUploadServer:
         self.app = Flask(__name__)
         self.port: int | None = None
         self._thread: threading.Thread | None = None
+        self._server = None
         self._session: UploadSession | None = None
         self._register_routes()
 
@@ -113,21 +108,21 @@ class PhoneUploadServer:
 
     # ============== 公开方法 ==============
 
-    def start(self) -> dict:
-        """启动服务器。返回 {port, local_ip, upload_url, session_id, upload_dir}"""
+    def start(self, session: UploadSession | None = None) -> dict:
+        """启动服务器。返回 {port, local_ip, upload_url, session_id, upload_dir}
+        如果传入 session 参数则复用（用于断点续传），否则创建新会话。"""
         self.port = self._find_free_port()
-        self._session = UploadSession()
+        if session:
+            self._session = session
+        else:
+            self._session = UploadSession()
         self._session.upload_dir.mkdir(parents=True, exist_ok=True)
-        self._write_sessions_json()
+        if not session:
+            self._write_sessions_json()
 
+        self._server = make_server(self.HOST, self.port, self.app, threaded=False)
         self._thread = threading.Thread(
-            target=self.app.run,
-            kwargs={
-                "host": self.HOST,
-                "port": self.port,
-                "debug": False,
-                "use_reloader": False,
-            },
+            target=self._server.serve_forever,
             daemon=True,
         )
         self._thread.start()
@@ -151,6 +146,8 @@ class PhoneUploadServer:
                 self._cleanup_session_dir()
             else:
                 self._update_session_status("incomplete")
+        if self._server:
+            self._server.shutdown()
         logger.info(f"[PhoneUpload] 服务器已停止 (port={self.port})")
 
     def get_session(self) -> UploadSession | None:
@@ -206,6 +203,7 @@ class PhoneUploadServer:
                         status="done",
                     )
                     session.files.append(uf)
+            session.done_count = len(session.files)
             session.total_bytes = sum(f.size for f in session.files)
         return session
 
@@ -230,8 +228,7 @@ class PhoneUploadServer:
             return jsonify({"error": "文件名为空"}), 400
 
         # 检查文件数量限制
-        done_count = sum(1 for f in self._session.files if f.status == "done")
-        if done_count >= MAX_FILES_PER_SESSION:
+        if self._session.done_count >= MAX_FILES_PER_SESSION:
             return jsonify({"error": f"已达到单次会话上限 ({MAX_FILES_PER_SESSION} 个)"}), 413
 
         # 检查扩展名
@@ -280,9 +277,8 @@ class PhoneUploadServer:
             status="done",
         )
         self._session.files.append(uploaded)
+        self._session.done_count += 1
         self._session.total_bytes += file_size
-
-        self._write_sessions_json()
         logger.info(f"[PhoneUpload] 文件已接收: {file.filename} ({file_size} bytes)")
 
         return jsonify({"status": "ok", "name": file.filename, "size": file_size})
@@ -320,7 +316,7 @@ class PhoneUploadServer:
         for s in sessions:
             if s["id"] == self._session.session_id:
                 s["status"] = status
-                s["file_count"] = sum(1 for f in self._session.files if f.status == "done")
+                s["file_count"] = self._session.done_count
                 s["total_bytes"] = self._session.total_bytes
                 break
         else:

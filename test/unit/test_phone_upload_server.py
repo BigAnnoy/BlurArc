@@ -28,13 +28,17 @@ class TestUploadSession:
                 size=1000, mime_type="image/jpeg", uploaded_at=time.time(),
             )
         ]
+        s.done_count = 1
         d = s.to_dict()
         assert d["total_files"] == 1
         assert d["completed_files"] == 1
 
 
 class TestPhoneUploadServerLifecycle:
-    def test_start_stop(self):
+    def test_start_stop(self, monkeypatch, tmp_path):
+        import backend.phone_upload_server as mod
+        monkeypatch.setattr(mod, "UPLOAD_ROOT", tmp_path)
+        monkeypatch.setattr(mod, "SESSIONS_FILE", tmp_path / "sessions.json")
         server = PhoneUploadServer()
         info = server.start()
         assert "port" in info
@@ -46,7 +50,10 @@ class TestPhoneUploadServerLifecycle:
         assert server._session is not None
         assert not server._session.is_active
 
-    def test_get_qr_png(self):
+    def test_get_qr_png(self, monkeypatch, tmp_path):
+        import backend.phone_upload_server as mod
+        monkeypatch.setattr(mod, "UPLOAD_ROOT", tmp_path)
+        monkeypatch.setattr(mod, "SESSIONS_FILE", tmp_path / "sessions.json")
         server = PhoneUploadServer()
         server.start()
         png = server.get_qr_png()

@@ -55,6 +55,9 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
   // 导入模式选择弹窗
   const [showModeDialog, setShowModeDialog] = useState(false);
 
+  // 记录用户是从哪个步骤进入 checking 的（用于预览页面的返回按钮）
+  const [sourceStep, setSourceStep] = useState<ImportStep>('select-mode');
+
   // 重置状态
   const resetState = useCallback(() => {
     setStep('select-mode');
@@ -66,6 +69,7 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
     setImportProgress({ step: 0, total: 0, current: '', status: 'idle' });
     setIsPaused(false);
     setFinalStatus(null);
+    setSourceStep('select-mode');
     setPreviewPhoto(null);
     setShowModeDialog(false);
   }, []);
@@ -143,6 +147,7 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
   // 开始检查（从手机导入直接传入 sourcePath）
   const handleStartCheckFromPhone = async (phoneSourcePath: string) => {
     setSourcePath(phoneSourcePath);
+    setSourceStep('phone-upload');
     setStep('checking');
     setCheckProgress({ status: 'queued', progress: 0, stage: 'queued', detail: t('import.checkingStatus') });
 
@@ -163,6 +168,7 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
       return;
     }
 
+    setSourceStep('select-path');
     setStep('checking');
     setCheckProgress({ status: 'queued', progress: 0, stage: 'queued', detail: t('import.checkingStatus') });
 
@@ -395,7 +401,7 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
             onPreviewPhoto={setPreviewPhoto}
             onDeleteFiles={handleDeleteFiles}
             onStartImport={handleStartImport}
-            onBack={() => setStep('select-mode')}
+            onBack={() => setStep(sourceStep)}
           />
         );
       case 'importing':

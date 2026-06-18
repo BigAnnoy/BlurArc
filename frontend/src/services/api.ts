@@ -302,9 +302,6 @@ export const api = {
     fetchJson<{
       total_files: number;
       completed_files: number;
-      current_file: string;
-      current_progress: number;
-      current_speed_mbps: number;
       total_bytes_uploaded: number;
       files: { name: string; size: number; status: string; error?: string }[];
     }>(`${API_BASE}/phone-upload/status`),
