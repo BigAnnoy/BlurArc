@@ -81,6 +81,7 @@ class PhoneUploadServer:
     def __init__(self):
         self.app = Flask(__name__)
         self.port: int | None = None
+        self._local_ip: str = "127.0.0.1"
         self._thread: threading.Thread | None = None
         self._server = None
         self._session: UploadSession | None = None
@@ -111,6 +112,7 @@ class PhoneUploadServer:
     def start(self, session: UploadSession | None = None) -> dict:
         """启动服务器。返回 {port, local_ip, upload_url, session_id, upload_dir}
         如果传入 session 参数则复用（用于断点续传），否则创建新会话。"""
+        self._local_ip = self._get_local_ip()
         self.port = self._find_free_port()
         if session:
             self._session = session
@@ -120,20 +122,19 @@ class PhoneUploadServer:
         if not session:
             self._write_sessions_json()
 
-        self._server = make_server(self.HOST, self.port, self.app, threaded=False)
+        self._server = make_server(self._local_ip, self.port, self.app, threaded=False)
         self._thread = threading.Thread(
             target=self._server.serve_forever,
             daemon=True,
         )
         self._thread.start()
 
-        local_ip = self._get_local_ip()
-        logger.info(f"[PhoneUpload] 服务器已启动: {local_ip}:{self.port}")
+        logger.info(f"[PhoneUpload] 服务器已启动: {self._local_ip}:{self.port}")
 
         return {
             "port": self.port,
-            "local_ip": local_ip,
-            "upload_url": f"http://{local_ip}:{self.port}",
+            "local_ip": self._local_ip,
+            "upload_url": f"http://{self._local_ip}:{self.port}",
             "session_id": self._session.session_id,
             "upload_dir": str(self._session.upload_dir),
         }
@@ -157,7 +158,7 @@ class PhoneUploadServer:
         """生成二维码 PNG 字节流"""
         if not self._session:
             raise RuntimeError("服务器未启动")
-        url = f"http://{self._get_local_ip()}:{self.port}"
+        url = f"http://{self._local_ip}:{self.port}"
         img = qrcode.make(url, box_size=10, border=2)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
