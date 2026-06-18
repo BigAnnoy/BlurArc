@@ -168,7 +168,7 @@ class PhoneUploadServer:
         """检查是否有未完成的会话，返回会话摘要或 None"""
         sessions = self._load_sessions_json()
         for s in sessions:
-            if s.get("status") == "incomplete":
+            if s.get("status") == "incomplete" and s.get("file_count", 0) > 0:
                 return s
         return None
 
@@ -627,7 +627,7 @@ function addFileItem(file, status, reason) {{
     el.innerHTML = '<span class="status">❌</span>' +
       '<div class="info"><div class="name">' + escapeHtml(file.name) + '</div>' +
       '<div class="size" style="color:var(--danger)">' + (reason || '上传失败') + '</div></div>' +
-      '<a class="retry" href="javascript:retryFile(\'' + file.name + '\')">重试</a>';
+      \'<a class="retry" href="javascript:retryFile(\\'\' + file.name + \'\\')">重试</a>\';
     document.getElementById('failedSection').style.display = 'block';
     document.getElementById('failedList').appendChild(el);
   }}
