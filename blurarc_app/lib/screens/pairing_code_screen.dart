@@ -125,13 +125,14 @@ class _PairingCodeScreenState extends State<PairingCodeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const BlurArcLogoWithText(logoSize: 20, fontSize: 14)),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
+      body: SingleChildScrollView(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
               if (_rejected) ...[
                 const Icon(Icons.cancel, size: 48, color: Colors.red),
                 const SizedBox(height: 16),
@@ -318,6 +319,7 @@ class _PairingCodeScreenState extends State<PairingCodeScreen> {
             ],
           ],
         ),
+      ),
       ),
       ),
     );

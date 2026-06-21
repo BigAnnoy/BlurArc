@@ -438,109 +438,128 @@ class MobileAccessServer:
 
         @self.app.route("/api/mobile/photos/sections")
         def mobile_photo_sections():
-            """按月分组返回照片列表（手机版相册主视图）"""
+            """按月分组返回照片列表（手机版相册主视图）
+
+            只返回月份列表和计数，不返回照片列表。
+            点击某个月份后调 /api/mobile/photos 获取该月照片。
+            """
             token = self._extract_token()
             if not token or not self.token_manager.validate_token(token):
                 return jsonify({"error": "令牌无效"}), 401
             try:
                 from .database import SessionLocal, Photo
                 from sqlalchemy import func
-                from datetime import datetime as _dt
-                import urllib.parse
 
                 page = request.args.get("page", 1, type=int)
                 page_size = request.args.get("page_size", 60, type=int)
 
                 session = SessionLocal()
                 try:
-                    # 获取所有有 media_date 的月份
+                    # 获取所有有 media_date 的月份及计数
                     months_with_date = session.query(
-                        func.strftime('%Y-%m', Photo.media_date).label('month')
+                        func.strftime('%Y-%m', Photo.media_date).label('month'),
+                        func.count(Photo.id).label('cnt')
                     ).filter(
                         Photo.media_date.isnot(None)
                     ).group_by('month').order_by(
                         func.strftime('%Y-%m', Photo.media_date).desc()
                     ).all()
 
-                    available_months = [row[0] for row in months_with_date]
+                    sections = []
+                    available_months = []
+                    for row in months_with_date:
+                        month_str = row[0]
+                        available_months.append(month_str)
+                        try:
+                            year_part, month_part = month_str.split('-')
+                            display = f"{year_part}年{int(month_part)}月"
+                        except ValueError:
+                            display = month_str
+                        sections.append({
+                            "month": month_str,
+                            "display": display,
+                            "count": row[1],
+                        })
 
-                    # 检查是否有无日期照片，若有则加入一个特殊 "no-date" 月份桶
+                    # 检查是否有无日期照片
                     no_date_count = session.query(func.count(Photo.id)).filter(
                         Photo.media_date.is_(None)
                     ).scalar() or 0
                     if no_date_count > 0:
                         available_months.append("no-date")
+                        sections.append({
+                            "month": "no-date",
+                            "display": "未知日期",
+                            "count": no_date_count,
+                        })
 
                     # 分页
                     start = (page - 1) * page_size
                     end = start + page_size
-                    page_months = available_months[start:end]
-
-                    sections = []
-                    if page_months:
-                        # 有日期的月份：一次查询
-                        date_months = [m for m in page_months if m != "no-date"]
-                        photos_by_month: dict[str, list] = {}
-
-                        if date_months:
-                            month_filter = func.strftime('%Y-%m', Photo.media_date)
-                            all_photos = session.query(Photo).filter(
-                                month_filter.in_(date_months)
-                            ).order_by(
-                                Photo.media_date.desc(), Photo.path
-                            ).all()
-
-                            for p in all_photos:
-                                if p.media_date:
-                                    m_str = p.media_date.strftime('%Y-%m') if isinstance(p.media_date, _dt) else str(p.media_date)[:7]
-                                    photos_by_month.setdefault(m_str, []).append(p)
-
-                        # 无日期照片：用文件 mtime 分组（降级策略）
-                        if "no-date" in page_months:
-                            no_date_photos = session.query(Photo).filter(
-                                Photo.media_date.is_(None)
-                            ).order_by(Photo.path).all()
-                            photos_by_month["no-date"] = no_date_photos
-
-                        # Build sections preserving page_months order, limit 100 per month
-                        for month_str in page_months:
-                            if month_str == "no-date":
-                                display = "未知日期"
-                            else:
-                                try:
-                                    year_part, month_part = month_str.split('-')
-                                    display = f"{year_part}年{int(month_part)}月"
-                                except ValueError:
-                                    display = month_str
-
-                            month_photos = photos_by_month.get(month_str, [])[:100]
-
-                            sections.append({
-                                "month": month_str,
-                                "display": display,
-                                "count": len(photos_by_month.get(month_str, [])),
-                                "photos": [
-                                    {
-                                        "path": p.path,
-                                        # 路径 URL 编码，避免 Windows 反斜杠等特殊字符问题
-                                        "thumbnail": f"/api/mobile/thumbnail?path={urllib.parse.quote(p.path, safe='')}",
-                                        "is_video": p.file_type == "video",
-                                        "filename": p.filename,
-                                    }
-                                    for p in month_photos
-                                ],
-                            })
+                    page_sections = sections[start:end]
                 finally:
                     session.close()
 
                 return jsonify({
-                    "sections": sections,
-                    "has_more": end < len(available_months),
+                    "sections": page_sections,
+                    "has_more": end < len(sections),
                     "available_months": available_months,
                 })
             except Exception as e:
                 logger.error(f"[Mobile] photos/sections 失败: {e}", exc_info=True)
                 return jsonify({"error": "获取分组照片失败"}), 500
+
+        @self.app.route("/api/mobile/photos/by-month")
+        def mobile_photos_by_month():
+            """按月获取照片列表（手机版：点击某月后加载）"""
+            token = self._extract_token()
+            if not token or not self.token_manager.validate_token(token):
+                return jsonify({"error": "令牌无效"}), 401
+            try:
+                import urllib.parse
+                from .database import SessionLocal, Photo
+
+                month = request.args.get("month", "")
+                page = request.args.get("page", 1, type=int)
+                page_size = request.args.get("page_size", 60, type=int)
+
+                session = SessionLocal()
+                try:
+                    query = session.query(Photo)
+                    if month == "no-date":
+                        query = query.filter(Photo.media_date.is_(None))
+                    else:
+                        from sqlalchemy import func as sa_func
+                        query = query.filter(
+                            sa_func.strftime('%Y-%m', Photo.media_date) == month
+                        )
+                    total = query.count()
+
+                    photos = query.order_by(
+                        Photo.media_date.desc(), Photo.path
+                    ).offset((page - 1) * page_size).limit(page_size).all()
+
+                    result = []
+                    for p in photos:
+                        result.append({
+                            "path": p.path,
+                            "thumbnail": f"/api/mobile/thumbnail?path={urllib.parse.quote(p.path, safe='')}",
+                            "is_video": p.file_type == "video",
+                            "filename": p.filename,
+                        })
+                finally:
+                    session.close()
+
+                return jsonify({
+                    "photos": result,
+                    "count": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+                })
+            except Exception as e:
+                logger.error(f"[Mobile] photos/by-month 失败: {e}", exc_info=True)
+                return jsonify({"error": "获取月份照片失败"}), 500
 
         @self.app.route("/api/mobile/folders")
         def mobile_folders():

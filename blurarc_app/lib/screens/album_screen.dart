@@ -1,16 +1,13 @@
-/// 相册页面
-/// 手机版：AppBar（日期跳转 + 文件夹入口）+ 分组网格
-/// 平板版：左侧边栏（分组列表）+ 主体（日期跳转 + 双指缩放网格）
+/// 相册页面（手机/平板）
+/// 显示月份列表 → 点击某月 → 跳转 MonthPhotoScreen 加载该月照片
 library;
 
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
-import '../models/photo.dart';
 import '../models/photo_section.dart';
-import '../widgets/month_calendar_sheet.dart';
 import '../widgets/tablet_sidebar.dart';
 import 'folder_screen.dart';
-import 'photo_preview_screen.dart';
+import 'month_photo_screen.dart';
 
 class AlbumScreen extends StatefulWidget {
   final ApiClient api;
@@ -23,21 +20,13 @@ class AlbumScreen extends StatefulWidget {
 
 class _AlbumScreenState extends State<AlbumScreen> {
   List<PhotoSection> _sections = [];
-  List<String> _availableMonths = [];
   bool _loading = true;
   bool _hasMore = true;
   int _page = 1;
-  String _displayMonth = '';
   final _scrollController = ScrollController();
-
-  // Pre-built flat list for PhotoPreviewScreen
-  List<Photo> _allPhotos = [];
 
   // Tablet state
   bool _sidebarCollapsed = false;
-  int _gridColumns = 5; // Tablet default columns
-  double _pinchStartScale = 1.0;
-  bool _pinchTriggered = false;
 
   @override
   void initState() {
@@ -61,23 +50,10 @@ class _AlbumScreenState extends State<AlbumScreen> {
     }
   }
 
-  /// Rebuild the flat photo list from sections (for PhotoPreviewScreen)
-  void _rebuildFlatList() {
-    _allPhotos = _sections.expand((section) => section.photos.map((sp) => Photo(
-      id: sp.path,
-      name: sp.filename,
-      path: sp.path,
-      size: 0,
-      date: section.month,
-      type: sp.isVideo ? 'video' : 'photo',
-    ))).toList();
-  }
-
   Future<void> _loadSections() async {
     setState(() => _loading = true);
     try {
       final data = await widget.api.getPhotoSections(page: 1);
-      _availableMonths = List<String>.from(data['available_months'] ?? []);
       final sections = (data['sections'] as List? ?? [])
           .map((s) => PhotoSection.fromJson(s as Map<String, dynamic>))
           .toList();
@@ -86,10 +62,6 @@ class _AlbumScreenState extends State<AlbumScreen> {
         _hasMore = data['has_more'] ?? false;
         _page = 1;
         _loading = false;
-        if (sections.isNotEmpty) {
-          _displayMonth = sections.first.display;
-        }
-        _rebuildFlatList();
       });
     } catch (e) {
       setState(() => _loading = false);
@@ -114,58 +86,22 @@ class _AlbumScreenState extends State<AlbumScreen> {
         _hasMore = data['has_more'] ?? false;
         _page += 1;
         _loading = false;
-        _rebuildFlatList();
       });
     } catch (e) {
       setState(() => _loading = false);
     }
   }
 
-  void _jumpToSection(String month) {
-    int sectionIndex = -1;
-    for (int i = 0; i < _sections.length; i++) {
-      if (_sections[i].month == month) {
-        sectionIndex = i;
-        break;
-      }
-    }
-    if (sectionIndex >= 0) {
-      final offset = _estimateSectionOffset(sectionIndex, _isTablet);
-      _scrollController.animateTo(
-        offset,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-      setState(() => _displayMonth = _sections[sectionIndex].display);
-    }
-  }
-
-  void _jumpToMonth(int year, int month) {
-    final target = '$year-${month.toString().padLeft(2, '0')}';
-    _jumpToSection(target);
-  }
-
-  double _estimateSectionOffset(int sectionIndex, bool isTablet) {
-    double offset = 0;
-    offset += 56; // toolbar height
-    final cols = isTablet ? _gridColumns : 3;
-    for (int i = 0; i < sectionIndex; i++) {
-      final photos = _sections[i].photos.length;
-      final rows = (photos / cols).ceil();
-      offset += 44; // header
-      offset += rows * 130; // row height
-    }
-    return offset;
-  }
-
-  void _showDatePicker() {
-    MonthCalendarSheet.show(
+  void _openMonth(PhotoSection section) {
+    Navigator.push(
       context,
-      availableMonths: _availableMonths,
-      selectedMonth: _displayMonth.isNotEmpty
-          ? _displayMonth.replaceAll('年', '-').replaceAll('月', '')
-          : null,
-      onSelect: _jumpToMonth,
+      MaterialPageRoute(
+        builder: (_) => MonthPhotoScreen(
+          api: widget.api,
+          month: section.month,
+          displayName: section.display,
+        ),
+      ),
     );
   }
 
@@ -174,28 +110,6 @@ class _AlbumScreenState extends State<AlbumScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => FolderScreen(api: widget.api),
-      ),
-    );
-  }
-
-  void _openPhoto(int sectionIndex, int photoIndex) {
-    // Find global index from pre-built flat list
-    int globalIndex = 0;
-    for (int si = 0; si < sectionIndex; si++) {
-      globalIndex += _sections[si].photos.length;
-    }
-    globalIndex += photoIndex;
-
-    if (globalIndex >= _allPhotos.length) return;
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PhotoPreviewScreen(
-          api: widget.api,
-          photos: _allPhotos,
-          initialIndex: globalIndex,
-        ),
       ),
     );
   }
@@ -212,32 +126,23 @@ class _AlbumScreenState extends State<AlbumScreen> {
 
   // ===== Mobile Layout =====
   Widget _buildMobileLayout() {
-    final theme = Theme.of(context);
     return Column(
       children: [
-        _buildAlbumToolbar(theme),
-        Expanded(child: _buildPhotoGrid()),
+        _buildAlbumToolbar(),
+        Expanded(child: _buildMonthList()),
       ],
     );
   }
 
-  Widget _buildAlbumToolbar(ThemeData theme) {
+  Widget _buildAlbumToolbar() {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _showDatePicker,
-              icon: const Icon(Icons.calendar_today, size: 16),
-              label: Text(_displayMonth.isNotEmpty ? _displayMonth : '选择月份'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                side: BorderSide(color: theme.dividerColor),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
+          const Text('相册',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          const Spacer(),
           SizedBox(
             width: 44,
             height: 44,
@@ -255,227 +160,69 @@ class _AlbumScreenState extends State<AlbumScreen> {
     );
   }
 
+  // ===== Month List =====
+  Widget _buildMonthList() {
+    if (_loading && _sections.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_sections.isEmpty) {
+      return const Center(child: Text('暂无照片'));
+    }
+    return RefreshIndicator(
+      onRefresh: _loadSections,
+      child: ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: _sections.length + (_hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index >= _sections.length) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            );
+          }
+          final section = _sections[index];
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor:
+                    Theme.of(context).colorScheme.primary.withAlpha(30),
+                child: Icon(Icons.photo_library,
+                    color: Theme.of(context).colorScheme.primary),
+              ),
+              title: Text(section.display,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text('${section.count} 张照片'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _openMonth(section),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   // ===== Tablet Layout =====
   Widget _buildTabletLayout() {
-    final theme = Theme.of(context);
     return Row(
       children: [
         if (!_sidebarCollapsed)
           TabletSidebar(
             sections: _sections,
-            activeSection: _displayMonth.replaceAll('年', '-').replaceAll('月', ''),
-            onSelectSection: _jumpToSection,
+            activeSection: '',
+            onSelectSection: (month) {
+              final found = _sections.where((s) => s.month == month);
+              if (found.isNotEmpty) _openMonth(found.first);
+            },
             onCollapse: () => setState(() => _sidebarCollapsed = true),
           ),
         if (_sidebarCollapsed)
           TabletSidebarExpandButton(
             onTap: () => setState(() => _sidebarCollapsed = false),
           ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Toolbar row (logo is in shared AppBar)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _showDatePicker,
-                        icon: const Icon(Icons.calendar_today, size: 16),
-                        label: Text(
-                          _displayMonth.isNotEmpty ? _displayMonth : '跳转月份',
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          side: BorderSide(color: theme.dividerColor),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: _buildPhotoGrid(isTablet: true),
-              ),
-            ],
-          ),
-        ),
+        Expanded(child: _buildMonthList()),
       ],
-    );
-  }
-
-  // ===== Photo Grid (shared) =====
-  Widget _buildPhotoGrid({bool isTablet = false}) {
-    final columns = isTablet ? _gridColumns : 3;
-
-    return _loading && _sections.isEmpty
-        ? const Center(child: CircularProgressIndicator())
-        : RefreshIndicator(
-            onRefresh: _loadSections,
-            child: GestureDetector(
-              onScaleStart: isTablet ? _handlePinchStart : null,
-              onScaleUpdate: isTablet ? _handlePinchZoom : null,
-              child: CustomScrollView(
-                controller: _scrollController,
-                slivers: [
-                  for (var si = 0; si < _sections.length; si++) ...[
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding:
-                            const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                        child: Row(
-                          children: [
-                            Text(
-                              _sections[si].display,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '(${_sections[si].count})',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SliverGrid(
-                      gridDelegate:
-                          SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: columns,
-                        crossAxisSpacing: 2,
-                        mainAxisSpacing: 2,
-                        childAspectRatio: 1,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final sectionIndex = si;
-                          final photo = _sections[sectionIndex]
-                              .photos[index];
-                          return _PhotoGridItem(
-                            photo: photo,
-                            api: widget.api,
-                            onTap: () =>
-                                _openPhoto(sectionIndex, index),
-                          );
-                        },
-                        childCount: _sections[si].photos.length,
-                      ),
-                    ),
-                  ],
-                  if (_loading && _sections.isNotEmpty)
-                    const SliverToBoxAdapter(
-                      child: Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2),
-                        ),
-                      ),
-                    ),
-                  const SliverToBoxAdapter(
-                    child: SizedBox(height: 80),
-                  ),
-                ],
-              ),
-            ),
-          );
-  }
-
-  /// 双指缩放：调整网格列数
-  void _handlePinchStart(ScaleStartDetails details) {
-    _pinchStartScale = 1.0;
-    _pinchTriggered = false;
-  }
-
-  /// 双指缩放：调整网格列数
-  void _handlePinchZoom(ScaleUpdateDetails details) {
-    if (_pinchTriggered) return; // 每次手势只触发一次
-    final delta = details.scale - _pinchStartScale;
-    if (delta < -0.3) {
-      // Zoom out → more columns
-      setState(() => _gridColumns = (_gridColumns + 1).clamp(3, 8));
-      _pinchTriggered = true;
-    } else if (delta > 0.3) {
-      // Zoom in → fewer columns
-      setState(() => _gridColumns = (_gridColumns - 1).clamp(3, 8));
-      _pinchTriggered = true;
-    }
-  }
-}
-
-/// 网格中的照片项
-class _PhotoGridItem extends StatelessWidget {
-  final SectionPhoto photo;
-  final ApiClient api;
-  final VoidCallback onTap;
-
-  const _PhotoGridItem({
-    required this.photo,
-    required this.api,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.network(
-            api.getThumbnailUrl(photo.path),
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: Theme.of(context).colorScheme.surface,
-              child: const Icon(Icons.broken_image, size: 32),
-            ),
-            loadingBuilder: (_, child, progress) {
-              if (progress == null) return child;
-              return Container(
-                color: Theme.of(context).colorScheme.surface,
-                child: const Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              );
-            },
-          ),
-          if (photo.isVideo)
-            Positioned(
-              right: 4,
-              bottom: 4,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.play_arrow,
-                        size: 12, color: Colors.white),
-                    SizedBox(width: 2),
-                    Text('视频',
-                        style: TextStyle(
-                            fontSize: 10, color: Colors.white)),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

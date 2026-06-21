@@ -1755,10 +1755,10 @@ def _perform_import_check(source_path: Path, progress_callback=None):
             from database import SessionLocal, Photo as PhotoModel
             db = SessionLocal()
             try:
-                db_photos = db.query(PhotoModel.path, PhotoModel.size, PhotoModel.media_date).all()
-                for p_path, p_size, p_media_date in db_photos:
+                db_photos = db.query(PhotoModel.path, PhotoModel.size, PhotoModel.media_date, PhotoModel.md5_hash).all()
+                for p_path, p_size, p_media_date, p_md5 in db_photos:
                     if p_path and p_size:
-                        target_media_files.append((Path(p_path), p_size, p_media_date))
+                        target_media_files.append((Path(p_path), p_size, p_media_date, p_md5))
             finally:
                 db.close()
         except Exception as e:
@@ -1779,13 +1779,15 @@ def _perform_import_check(source_path: Path, progress_callback=None):
                         continue
 
         total_prescan = len(target_media_files)
-        for idx, (file, size, media_date) in enumerate(target_media_files, 1):
-            # media_date 是 datetime 对象，统一用 isoformat() 作为 key
+        for idx, entry in enumerate(target_media_files, 1):
+            # entry: (file, size, media_date) from FS fallback, or (file, size, media_date, md5_hash) from DB
+            file, size, media_date = entry[0], entry[1], entry[2]
+            md5_hash = entry[3] if len(entry) > 3 else None
             exif_str = media_date.isoformat() if media_date else None
             key = (size, exif_str)
             if key not in prescan_index:
                 prescan_index[key] = []
-            prescan_index[key].append(file)
+            prescan_index[key].append((file, md5_hash))
             if total_prescan > 0:
                 stage_progress = 75 + int((idx / total_prescan) * 7)
                 emit(stage_progress, 'target_duplicates', f'建立预筛索引... {idx}/{total_prescan}')
@@ -1814,12 +1816,12 @@ def _perform_import_check(source_path: Path, progress_callback=None):
                         exif_str = exif_dt.isoformat() if exif_dt else None
                         key = (size, exif_str)
                         if key in missing_keys and key not in prescan_index:
-                            prescan_index[key] = [file]
+                            prescan_index[key] = [(file, None)]
                     except OSError:
                         continue
 
         # 只对与源文件特征匹配的相册文件计算 MD5
-        # 性能优化：并行计算 MD5
+        # 优先使用数据库缓存的 md5_hash，缺失时才执行 I/O 计算
         candidate_target_files = []
         for key in source_keys:
             if key in prescan_index:
@@ -1829,9 +1831,16 @@ def _perform_import_check(source_path: Path, progress_callback=None):
         total_candidates = len(candidate_target_files)
 
         if candidate_target_files:
-            def _compute_target_md5(file):
-                """计算相册文件的 MD5，返回 (file, md5_hash, file_size)"""
-                md5_hash = calculate_md5(file)
+            def _compute_target_md5(file_and_md5):
+                """计算相册文件的 MD5，优先使用数据库缓存
+
+                file_and_md5: (Path, str|None) — 文件路径和缓存的 md5_hash
+                """
+                file, cached_md5 = file_and_md5
+                if cached_md5:
+                    md5_hash = cached_md5
+                else:
+                    md5_hash = calculate_md5(file)
                 try:
                     file_size = file.stat().st_size
                 except OSError:
@@ -1840,7 +1849,7 @@ def _perform_import_check(source_path: Path, progress_callback=None):
 
             md5_results = []
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(_compute_target_md5, file): file for file in candidate_target_files}
+                futures = {executor.submit(_compute_target_md5, entry): entry for entry in candidate_target_files}
                 for future in concurrent.futures.as_completed(futures):
                     md5_computed = len(md5_results) + 1
                     if total_candidates > 0:

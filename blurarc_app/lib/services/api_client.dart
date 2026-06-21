@@ -222,11 +222,19 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
-  /// Get photos grouped by month (new sections API)
+  /// Get sections (month list with counts, no photos)
   Future<Map<String, dynamic>> getPhotoSections(
       {int page = 1, int pageSize = 60}) async {
     final res = await _dio.get('$baseUrl/api/mobile/photos/sections',
         queryParameters: {'page': page, 'page_size': pageSize});
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Get photos for a specific month (by-month endpoint)
+  Future<Map<String, dynamic>> getPhotosByMonth(String month,
+      {int page = 1, int pageSize = 60}) async {
+    final res = await _dio.get('$baseUrl/api/mobile/photos/by-month',
+        queryParameters: {'month': month, 'page': page, 'page_size': pageSize});
     return res.data as Map<String, dynamic>;
   }
 

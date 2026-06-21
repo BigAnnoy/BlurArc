@@ -20,7 +20,7 @@ set AVD_NAME=BlurArc_Test
 set APP_PACKAGE=com.example.blurarc_app
 :: ======================================================================
 
-cls
+cls 2>nul
 echo.
 echo  ==========================================
 echo             BlurArc Dev Launcher
