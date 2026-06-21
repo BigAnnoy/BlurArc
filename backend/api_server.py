@@ -54,6 +54,8 @@ CORS(app, resources={
             "http://127.0.0.1:5000",
             # PyWebView 使用特殊 origin，允许所有 PyWebView 请求
             "https://pywebview",
+            # Android 模拟器通过 10.0.2.2 访问宿主机
+            "http://10.0.2.2:5000",
         ],
         "supports_credentials": False,
     },
@@ -1356,6 +1358,20 @@ def phone_upload_discard():
 
 _mobile_access_server = None
 
+# Flutter App 上传通知 — mobile_access_server 调用此函数，前端轮询取
+_flutter_upload_sessions: dict[str, dict] = {}
+_flutter_upload_lock = threading.Lock()
+
+def _notify_flutter_upload(device_name: str, upload_dir: str, file_count: int):
+    """记录一次 Flutter App 文件上传事件，供前端轮询弹窗"""
+    with _flutter_upload_lock:
+        _flutter_upload_sessions[upload_dir] = {
+            "device_name": device_name,
+            "upload_dir": upload_dir,
+            "file_count": file_count,
+            "updated_at": datetime.now().isoformat(),
+        }
+
 def _get_mobile_server():
     global _mobile_access_server
     if _mobile_access_server is None:
@@ -1401,16 +1417,14 @@ def mobile_enable():
 
 @app.route('/api/mobile/disable', methods=['POST'])
 def mobile_disable():
-    """停止移动接入服务并撤销所有令牌"""
+    """停止移动接入服务（保留已配对设备的 token，下次开启时可继续使用）"""
     try:
         server = _get_mobile_server()
-        # 撤销所有已配对设备的令牌，防止服务停止后 token 仍有效
-        server.token_manager.revoke_all()
         server.stop()
         cm = get_config_manager()
         if cm:
             cm.update_setting('mobile_service_enabled', False)
-        return jsonify({'status': 'disabled', 'tokens_revoked': True})
+        return jsonify({'status': 'disabled'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1468,7 +1482,7 @@ def mobile_devices():
     try:
         server = _get_mobile_server()
         devices = server.token_manager.get_paired_devices()
-        return jsonify({'devices': [{'device_name': d['device_name'], 'paired_at': d['paired_at'], 'token': d['token'][:8]+'...'} for d in devices]})
+        return jsonify({'devices': [{'device_name': d['device_name'], 'paired_at': d['paired_at'], 'token': d['token'], 'token_display': d['token'][:8] + '...'} for d in devices]})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1479,7 +1493,11 @@ def mobile_revoke():
     try:
         data = request.get_json(force=True, silent=True) or {}
         server = _get_mobile_server()
-        server.token_manager.revoke_token(data.get('token', ''))
+        token = data.get('token', '')
+        if not token:
+            return jsonify({'error': '缺少 token'}), 400
+        if not server.token_manager.revoke_token(token):
+            return jsonify({'error': '令牌不存在或已撤销'}), 404
         return jsonify({'status': 'revoked'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1494,6 +1512,24 @@ def mobile_revoke_all():
         return jsonify({'status': 'revoked_all'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/pending-flutter-uploads', methods=['GET'])
+def pending_flutter_uploads():
+    """返回 Flutter App 上传的待导入会话列表"""
+    with _flutter_upload_lock:
+        sessions = list(_flutter_upload_sessions.values())
+    return jsonify({'sessions': sessions})
+
+
+@app.route('/api/mobile/pending-flutter-uploads/clear', methods=['POST'])
+def clear_flutter_upload():
+    """清除指定的 Flutter App 上传通知（导入开始后调用）"""
+    data = request.get_json(force=True, silent=True) or {}
+    upload_dir = data.get('upload_dir', '')
+    with _flutter_upload_lock:
+        _flutter_upload_sessions.pop(upload_dir, None)
+    return jsonify({'status': 'cleared'})
 
 
 # ============================================================================
@@ -2620,11 +2656,23 @@ def mobile_pairing_reject():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/mobile/pairing/cancel', methods=['POST'])
+def mobile_pairing_cancel():
+    """PC 端取消配对请求（桥接至移动接入服务）"""
+    try:
+        server = _get_mobile_server()
+        if server:
+            server._pairing.clear_pending()
+        return jsonify({'status': 'cancelled'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     # 启动 Flask 开发服务器
     logger.info("启动 Flask API 服务器...")
     app.run(
-        host='127.0.0.1',
+        host='0.0.0.0',
         port=5000,
         debug=False,
         use_reloader=False,  # 禁用重新加载器，避免 PyWebView 中的问题

@@ -5,6 +5,23 @@
 
 ---
 
+## [0.5.3] — 2026-06-21
+
+### 新增
+- **Flutter App 上传完成通知**：上传成功后 PC 端自动弹出 ImportDialog，支持一键导入
+- **上传通知 API**：`POST /api/mobile/upload/done`（App 主动通知）+ `GET /api/mobile/pending-flutter-uploads`（PC 前端轮询）
+- **PC exe 构建选项**：`dev-start.bat [5]` / `dev-start.ps1 build-exe` 一键构建 PyInstaller 打包
+
+### 修复
+- **上传 HTTP 500**（Critical）：`TokenManager` 缺少 `get_upload_root(token)` 方法，保存文件时抛 `AttributeError`
+- **双实例问题**：`start()` 添加防重入检查 + `_start_lock` 锁保护，已运行则直接返回
+- **并发阻塞**：`make_server(threaded=False)` → `threaded=True`，上传时其他端点不再被阻塞
+- **会话残留**：`stop()` 清理 `_upload_counts` + `_session_upload_dirs`，服务重启后重置状态
+
+### 变更
+- 版本号统一为 v0.5.3（之前各文件混用 0.5.0/0.5.1/0.5.2）
+- `dev-start.bat` / `dev-start.ps1` 移入 `scripts/` 目录，新增手机部署选项
+
 ## [0.5.2] — 2026-06-18
 
 ### 新增

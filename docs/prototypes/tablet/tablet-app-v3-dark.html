@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=860, initial-scale=1">
+<title>Blur Arc 平板 UI 原型 v4 暗色（可交互）</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg-page: #0c1117; --bg-card: #151d26; --bg-card-hover: #1a2533;
+    --bg-card-active: rgba(34,211,238,0.06);
+    --border: #1c2836; --border-light: #253040;
+    --primary: #22d3ee; --primary-hover: #67e8f9;
+    --text-primary: #e8f0f5; --text-secondary: #8aa0b0; --text-tertiary: #506070;
+    --danger: #ef4444;
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+    --overlay-bg: rgba(0,0,0,0.55);
+  }
+  body {
+    background: #1a1a2e; display: flex; justify-content: center; align-items: center;
+    min-height: 100vh; font-family: -apple-system, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
+    color: var(--text-primary);
+  }
+  .tablet {
+    width: 820px; height: 1180px; background: var(--bg-page);
+    border-radius: 24px; overflow: hidden; display: flex; flex-direction: column;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5); border: 3px solid #2a2a3e; position: relative;
+  }
+
+  /* Status bar */
+  .status-bar {
+    height: 44px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; font-size: 12px; color: var(--text-secondary); flex-shrink: 0;
+  }
+  .status-bar .time { font-weight: 600; color: var(--text-primary); }
+  .status-right { display: flex; align-items: center; gap: 12px; }
+
+  /* Tablet body */
+  .tablet-body { display: flex; flex:1; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 240px; flex-shrink: 0; background: var(--bg-card);
+    border-right: 0.5px solid var(--border); display: flex; flex-direction: column;
+    overflow: hidden; transition: width 0.25s, min-width 0.25s, opacity 0.2s;
+    position: relative;
+  }
+  .sidebar.hidden { width: 0; min-width: 0; border-right: none; opacity: 0; pointer-events: none; }
+  .sidebar.collapsed { width: 0; min-width: 0; border-right: none; }
+  .sidebar-header { padding: 16px 16px 8px; font-size: 12px; color: var(--text-tertiary);
+    text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
+  .sidebar-section { flex:1; overflow-y: auto; padding-bottom: 8px; }
+  .sidebar-section::-webkit-scrollbar { display: none; }
+  .sidebar-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    font-size: 14px; color: var(--text-secondary); cursor: pointer;
+    transition: all 0.15s; border-left: 3px solid transparent; user-select: none;
+  }
+  .sidebar-item:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+  .sidebar-item.active { color: var(--primary); background: var(--bg-card-active); border-left-color: var(--primary); }
+  .sidebar-item .icon { font-size: 18px; width: 22px; text-align: center; flex-shrink: 0; }
+  .sidebar-item .count { margin-left: auto; font-size: 11px; color: var(--text-tertiary); }
+
+  /* Sidebar footer (collapse button) */
+  .sidebar-footer {
+    flex-shrink: 0; padding: 8px 12px; border-top: 0.5px solid var(--border);
+    display: flex; align-items: center; justify-content: flex-end;
+  }
+  .sidebar-footer .collapse-btn {
+    background: none; border: 0.5px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text-tertiary); font-size: 13px; padding: 5px 10px; cursor: pointer;
+    display: flex; align-items: center; gap: 4px; transition: all 0.15s; user-select: none;
+  }
+  .sidebar-footer .collapse-btn:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+  .sidebar-footer .collapse-btn .arrow { font-size: 12px; transition: transform 0.25s; }
+  .sidebar.collapsed .sidebar-footer .collapse-btn .arrow { transform: rotate(180deg); }
+
+  /* Sidebar expand button (visible when collapsed, on the edge) */
+  .expand-btn-outside {
+    display: none; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    width: 20px; height: 48px; background: var(--bg-card); border: 0.5px solid var(--border);
+    border-left: none; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    cursor: pointer; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--text-tertiary); z-index: 10;
+    transition: all 0.15s; box-shadow: 2px 0 8px rgba(0,0,0,0.15);
+  }
+  .expand-btn-outside:hover { color: var(--primary); background: var(--bg-card-hover); }
+  .tablet-body .sidebar.collapsed ~ .expand-btn-outside,
+  .tablet-body .sidebar.collapsed + .expand-btn-outside { display: flex; }
+
+  /* Main area */
+  .main-area { flex:1; display: flex; flex-direction: column; overflow: hidden; }
+  .main-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 16px; flex-shrink: 0; border-bottom: 0.5px solid var(--border);
+  }
+  .main-toolbar .title { font-size: 18px; font-weight: 600; }
+  .main-toolbar .toolbar-actions { display: flex; gap: 8px; }
+  .main-toolbar .toolbar-actions button {
+    background: none; border: 0.5px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text-secondary); font-size: 13px; padding: 5px 12px; cursor: pointer;
+    display: flex; align-items: center; gap: 4px; transition: all 0.15s; user-select: none;
+  }
+  .main-toolbar .toolbar-actions button:hover { border-color: var(--text-tertiary); color: var(--text-primary); }
+  .main-toolbar .toolbar-actions button.active { border-color: var(--primary); color: var(--primary); }
+
+  .main-scroll { flex:1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .main-scroll::-webkit-scrollbar { display: none; }
+
+  .section-header {
+    padding: 16px 16px 8px; font-size: 14px; color: var(--text-secondary); font-weight: 500;
+  }
+  .photo-grid {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; padding: 0 4px;
+    transition: grid-template-columns 0.25s cubic-bezier(0.25,0.46,0.45,0.94);
+  }
+  .photo-cell {
+    aspect-ratio: 1; background: var(--bg-card); border-radius: 4px; overflow: hidden;
+    position: relative; cursor: pointer; transition: transform 0.15s;
+  }
+  .photo-cell:hover { transform: scale(0.97); }
+  .photo-cell:active { transform: scale(0.96); }
+  .photo-cell .placeholder {
+    width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+    font-size: 22px; color: var(--text-tertiary);
+  }
+  .photo-cell .video-badge {
+    position: absolute; bottom: 4px; right: 4px; background: rgba(0,0,0,0.55);
+    color: #fff; font-size: 9px; padding: 1px 4px; border-radius: 3px;
+  }
+  .scroll-hint { text-align: center; padding: 16px; font-size: 12px; color: var(--text-tertiary); }
+
+  /* Bottom tab bar */
+  .bottom-bar {
+    height: 52px; display: flex; justify-content: center; gap: 0;
+    border-top: 0.5px solid var(--border); flex-shrink: 0; background: var(--bg-page);
+  }
+  .bottom-bar button {
+    background: none; border: none; color: var(--text-tertiary); font-size: 10px;
+    cursor: pointer; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 2px; padding: 0 24px; transition: color 0.15s; position: relative;
+    user-select: none;
+  }
+  .bottom-bar button.active { color: var(--primary); }
+  .bottom-bar button.active::before {
+    content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 24px; height: 2px; background: var(--primary); border-radius: 0 0 2px 2px;
+  }
+  .bottom-bar button .icon { font-size: 20px; line-height: 1; }
+
+  /* Upload tab */
+  .upload-area {
+    display: none; flex-direction: column; padding: 24px 16px; gap: 16px; overflow-y: auto; flex:1;
+  }
+  .upload-dropzone {
+    border: 2px dashed var(--border); border-radius: var(--radius-lg);
+    padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.2s;
+  }
+  .upload-dropzone:hover { border-color: var(--primary); background: rgba(34,211,238,0.03); }
+  .upload-dropzone .icon { font-size: 40px; margin-bottom: 8px; }
+  .upload-dropzone .label { font-size: 15px; color: var(--text-primary); margin-bottom: 4px; }
+  .upload-dropzone .hint { font-size: 12px; color: var(--text-tertiary); }
+  .upload-list { display: flex; flex-direction: column; gap: 8px; }
+  .upload-item {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+    background: var(--bg-card); border-radius: var(--radius-md);
+  }
+  .upload-item .thumb { width: 40px; height: 40px; border-radius: 4px; background: var(--border); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .upload-item .info { flex:1; min-width: 0; }
+  .upload-item .info .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .upload-item .info .progress-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: 4px; }
+  .upload-item .info .progress-bar .fill { height: 100%; background: var(--primary); border-radius: 2px; transition: width 0.3s; }
+  .upload-item .status { font-size: 11px; color: var(--text-tertiary); flex-shrink: 0; }
+  .upload-actions { display: flex; gap: 8px; }
+  .upload-actions button {
+    flex:1; padding: 10px; border-radius: var(--radius-md); font-size: 14px; cursor: pointer;
+    transition: all 0.15s; user-select: none;
+  }
+  .btn-primary { background: var(--primary); color: #000; border: none; font-weight: 600; }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-secondary { background: none; border:1px solid var(--border); color: var(--text-secondary); }
+  .btn-secondary:hover { border-color: var(--text-tertiary); }
+
+  /* Settings tab */
+  .settings-area { display: none; flex-direction: column; padding: 16px; gap: 16px; overflow-y: auto; flex:1; }
+  .settings-card { background: var(--bg-card); border-radius: var(--radius-lg); overflow: hidden; }
+  .settings-item {
+    display: flex; align-items: center; padding: 14px 16px;
+    border-bottom: 0.5px solid var(--border); gap: 12px;
+  }
+  .settings-item:last-child { border-bottom: none; }
+  .settings-item .label { flex:1; font-size: 14px; }
+  .settings-item .value { font-size: 13px; color: var(--text-tertiary); }
+  .toggle { width: 44px; height: 26px; border-radius: 13px; background: var(--border);
+    position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+  .toggle.on { background: var(--primary); }
+  .toggle::after { content:''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+    border-radius: 50%; background: #fff; transition: left 0.2s; }
+  .toggle.on::after { left: 21px; }
+  .radio-group { display: flex; gap: 6px; }
+  .radio-btn { padding: 4px 12px; border-radius: 6px; font-size: 13px; cursor: pointer;
+    border:1px solid var(--border); color: var(--text-secondary); transition: all 0.15s; user-select: none; }
+  .radio-btn.active { border-color: var(--primary); color: var(--primary); background: var(--bg-card-active); }
+  .btn-danger {
+    display: block; width: 100%; padding: 12px; border-radius: var(--radius-md);
+    background: none; border:1px solid var(--danger); color: var(--danger);
+    font-size: 14px; cursor: pointer; transition: all 0.15s; user-select: none; text-align: center;
+  }
+  .btn-danger:hover { background: rgba(239,68,68,0.08); }
+
+  /* Date navigation overlay */
+  .overlay-bg {
+    display: none; position: absolute; inset: 0; background: var(--overlay-bg);
+    z-index: 100; justify-content: center; align-items: center;
+  }
+  .overlay-bg.show { display: flex; }
+  .date-panel {
+    background: var(--bg-card); border-radius: var(--radius-lg); padding: 20px;
+    width: 360px; box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+  }
+  .date-panel-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+  }
+  .date-panel-header .year-nav { display: flex; align-items: center; gap: 16px; }
+  .date-panel-header .year-nav button {
+    background: none; border: none; color: var(--text-secondary); font-size: 20px;
+    cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: background 0.15s; user-select: none;
+  }
+  .date-panel-header .year-nav button:hover { background: var(--bg-card-hover); }
+  .date-panel-header .year { font-size: 18px; font-weight: 600; min-width: 80px; text-align: center; }
+  .month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .month-cell {
+    padding: 10px 4px; text-align: center; border-radius: var(--radius-sm);
+    font-size: 13px; cursor: pointer; transition: all 0.15s; color: var(--text-secondary);
+    position: relative; user-select: none;
+  }
+  .month-cell:hover { background: var(--bg-card-hover); }
+  .month-cell.has-photos { color: var(--text-primary); font-weight: 500; }
+  .month-cell.has-photos::after {
+    content: attr(data-count); position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; color: var(--primary); font-weight: 600;
+  }
+  .month-cell.active { background: var(--bg-card-active); color: var(--primary); }
+  .month-cell.empty { visibility: hidden; }
+  .date-panel-cancel {
+    display: block; width: 100%; padding: 10px; margin-top: 16px; border-radius: var(--radius-md);
+    background: none; border:1px solid var(--border); color: var(--text-secondary);
+    font-size: 14px; cursor: pointer; transition: all 0.15s; user-select: none;
+  }
+  .date-panel-cancel:hover { border-color: var(--text-tertiary); }
+
+  /* Pinch-to-zoom hint */
+  .zoom-hint {
+    position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.7); color: #fff; font-size: 12px;
+    padding: 6px 12px; border-radius: 20px; pointer-events: none;
+    opacity: 0; transition: opacity 0.3s; z-index: 50;
+  }
+  .zoom-hint.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="tablet" id="app">
+  <!-- Status bar -->
+  <div class="status-bar"><span class="time">9:41</span> <div class="status-right"> <span style="font-size:14px;">&#128267;</span> <span>85%</span></div>
+  </div>
+
+  <!-- Body -->
+  <div class="tablet-body" id="tabletBody">
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-header">相册</div>
+      <div class="sidebar-section" id="sidebarList">
+        <div class="sidebar-item active" data-section="2026-06" onclick="selectSidebar(this)">
+          <span class="icon">&#128196;</span><span>2026年6月</span><span class="count">128</span>
+        </div>
+        <div class="sidebar-item" data-section="2026-05" onclick="selectSidebar(this)">
+          <span class="icon">&#128196;</span><span>2026年5月</span><span class="count">96</span>
+        </div>
+        <div class="sidebar-item" data-section="2026-04" onclick="selectSidebar(this)">
+          <span class="icon">&#128196;</span><span>2026年4月</span><span class="count">73</span>
+        </div>
+        <div class="sidebar-item" data-section="screenshots" onclick="selectSidebar(this)">
+          <span class="icon">&#128193;</span><span>Screenshots</span><span class="count">45</span>
+        </div>
+        <div class="sidebar-item" data-section="downloads" onclick="selectSidebar(this)">
+          <span class="icon">&#128193;</span><span>Downloads</span><span class="count">12</span>
+        </div>
+        <div class="sidebar-item" data-section="whatsapp" onclick="selectSidebar(this)">
+          <span class="icon">&#128193;</span><span>WhatsApp Images</span><span class="count">230</span>
+        </div>
+      </div>
+      <!-- Collapse button at bottom of sidebar -->
+      <div class="sidebar-footer">
+        <button class="collapse-btn" id="collapseBtn" onclick="toggleSidebar()" title="收起侧栏">
+          <span class="arrow">&#9664;</span>
+        </button>
+      </div>
+    </div>
+    <!-- Expand button (visible when sidebar collapsed) -->
+    <div class="expand-btn-outside" id="expandBtn" onclick="toggleSidebar()">&#9654;</div>
+
+    <!-- Main area -->
+    <div class="main-area">
+
+      <div class="main-app-bar" style="height:52px;display:flex;align-items:center;justify-content:center;gap:10px;border-bottom:0.5px solid var(--border);flex-shrink:0;">
+        <img src="../img/logo.svg" alt="Blur Arc Logo" style="width:28px;height:28px;" />
+        <span style="font-size:17px;font-weight:600;letter-spacing:0.3px;color:var(--text-primary);">Blur Arc</span>
+      </div>
+      <!-- Album content (default visible) -->
+      <div id="albumContent">
+        <div class="main-toolbar">
+          <span class="title" id="toolbarTitle">2026年6月</span>
+          <div class="toolbar-actions">
+            <button onclick="showDatePanel()">&#128197; 跳转月份 &#9660;</button>
+          </div>
+        </div>
+        <div class="main-scroll" id="mainScroll">
+          <div class="photo-grid" id="grid1"></div>
+          <div class="section-header">2026年5月</div>
+          <div class="photo-grid" id="grid2"></div>
+          <div class="section-header">2026年4月</div>
+          <div class="photo-grid" id="grid3"></div>
+          <div class="scroll-hint">向下滚动加载更多…</div>
+        </div>
+      </div>
+
+      <!-- Upload content -->
+      <div class="upload-area" id="uploadContent">
+        <div class="upload-dropzone" onclick="addUploadItem()">
+          <div class="icon">&#128247;</div>
+          <div class="label">选择照片</div>
+          <div class="hint">点击选择要上传的照片，支持 JPEG/PNG/HEIC/视频</div>
+        </div>
+        <div class="upload-list" id="uploadList"></div>
+        <div class="upload-actions">
+          <button class="btn-primary" onclick="startUpload()">开始上传</button>
+          <button class="btn-secondary" onclick="clearUploads()">全部取消</button>
+        </div>
+      </div>
+
+      <!-- Settings content -->
+      <div class="settings-area" id="settingsContent">
+        <div class="settings-card">
+          <div class="settings-item">
+            <span class="label">设备名称</span>
+            <span class="value">我的手机</span>
+          </div>
+          <div class="settings-item">
+            <span class="label">Token</span>
+            <span class="value" style="font-family:monospace; font-size:11px;">a1b2c3d4...</span>
+          </div>
+        </div>
+        <div class="settings-card">
+          <div class="settings-item">
+            <span class="label">主题</span>
+            <div class="radio-group">
+              <span class="radio-btn" onclick="selectTheme(this)">跟随系统</span>
+              <span class="radio-btn active" onclick="selectTheme(this)">深色</span>
+              <span class="radio-btn" onclick="selectTheme(this)">浅色</span>
+            </div>
+          </div>
+        </div>
+        <div style="padding:0 4px;">
+          <button class="btn-danger" onclick="confirmDisconnect()">断开连接</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div class="bottom-bar">
+    <button class="active" onclick="switchTab(this, 'album')"><span class="icon">&#128248;</span><span>相册</span></button>
+    <button onclick="switchTab(this, 'upload')"><span class="icon">&#8682;</span><span>上传</span></button>
+    <button onclick="switchTab(this, 'settings')"><span class="icon">&#9881;</span><span>设置</span></button>
+  </div>
+
+  <!-- Date navigation overlay -->
+  <div class="overlay-bg" id="dateOverlay" onclick="closeDatePanel(event)">
+    <div class="date-panel" onclick="event.stopPropagation()">
+      <div class="date-panel-header">
+        <div class="year-nav">
+          <button onclick="changeYear(-1)">&#8249;</button>
+          <span class="year" id="panelYear">2026</span>
+          <button onclick="changeYear(1)">&#8250;</button>
+        </div>
+      </div>
+      <div class="month-grid" id="monthGrid"></div>
+      <button class="date-panel-cancel" onclick="hideDatePanel()">取消</button>
+    </div>
+  </div>
+
+  <!-- Pinch-to-zoom hint -->
+  <div class="zoom-hint" id="zoomHint">双指缩放调整网格大小</div>
+</div>
+
+<script>
+// ===== State =====
+let currentTab = 'album';
+let currentYear = 2026;
+let gridCols = 5;
+let uploadCounter = 0;
+let sidebarCollapsed = false;
+
+const monthNames = ['','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+const monthData = {
+  '2026': { 4:{count:73}, 5:{count:96}, 6:{count:128} },
+  '2025': { 1:{count:50}, 2:{count:40}, 3:{count:60}, 6:{count:88}, 12:{count:30} },
+};
+
+// ===== Init =====
+function init() {
+  generateSection('grid1', 30, 0);
+  generateSection('grid2', 20, 30);
+  generateSection('grid3', 15, 50);
+  renderMonthGrid();
+
+  // Show pinch-to-zoom hint briefly
+  setTimeout(() => {
+    const hint = document.getElementById('zoomHint');
+    hint.classList.add('show');
+    setTimeout(() => hint.classList.remove('show'), 2000);
+  }, 1000);
+}
+
+// ===== Tab switching =====
+function switchTab(btn, tab) {
+  if (tab === currentTab) return;
+  currentTab = tab;
+  document.querySelectorAll('.bottom-bar button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  // Show/hide content areas
+  document.getElementById('albumContent').style.display = tab === 'album' ? '' : 'none';
+  document.getElementById('uploadContent').style.display = tab === 'upload' ? '' : 'none';
+  document.getElementById('settingsContent').style.display = tab === 'settings' ? '' : 'none';
+
+  // Show/hide sidebar based on tab
+  const sidebar = document.getElementById('sidebar');
+  const expandBtn = document.getElementById('expandBtn');
+  if (tab === 'album') {
+    sidebar.classList.remove('hidden');
+    // Restore collapse state
+    if (sidebarCollapsed) {
+      sidebar.classList.add('collapsed');
+      expandBtn.style.display = 'flex';
+    } else {
+      sidebar.classList.remove('collapsed');
+      expandBtn.style.display = 'none';
+    }
+  } else {
+    // Hide sidebar completely for non-album tabs
+    sidebar.classList.add('hidden');
+    sidebar.classList.remove('collapsed');
+    expandBtn.style.display = 'none';
+  }
+}
+
+// ===== Sidebar =====
+function selectSidebar(el) {
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  const name = el.querySelector('span:nth-child(2)').textContent;
+  document.getElementById('toolbarTitle').textContent = name;
+  const headers = document.querySelectorAll('.section-header');
+  const idx = [...document.querySelectorAll('.sidebar-item')].indexOf(el);
+  if (headers[idx]) {
+    headers[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+// ===== Sidebar toggle =====
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const expandBtn = document.getElementById('expandBtn');
+  const isCollapsed = sidebar.classList.contains('collapsed');
+
+  if (isCollapsed) {
+    sidebar.classList.remove('collapsed');
+    expandBtn.style.display = 'none';
+    sidebarCollapsed = false;
+  } else {
+    sidebar.classList.add('collapsed');
+    expandBtn.style.display = 'flex';
+    sidebarCollapsed = true;
+  }
+}
+
+// ===== Grid columns (controlled by pinch-to-zoom in real app) =====
+function setGridColumns(cols) {
+  gridCols = Math.max(3, Math.min(8, cols));
+  document.querySelectorAll('.photo-grid').forEach(g => {
+    g.style.gridTemplateColumns = `repeat(${gridCols}, 1fr)`;
+  });
+}
+
+// ===== Date panel =====
+function showDatePanel() {
+  document.getElementById('dateOverlay').classList.add('show');
+}
+function hideDatePanel() {
+  document.getElementById('dateOverlay').classList.remove('show');
+}
+function closeDatePanel(e) {
+  if (e.target === e.currentTarget || e.target.classList.contains('date-panel-cancel')) hideDatePanel();
+}
+function changeYear(delta) {
+  currentYear += delta;
+  document.getElementById('panelYear').textContent = currentYear;
+  renderMonthGrid();
+}
+function renderMonthGrid() {
+  const grid = document.getElementById('monthGrid');
+  grid.innerHTML = '';
+  const data = monthData[currentYear] || {};
+  for (let m = 1; m <= 12; m++) {
+    const cell = document.createElement('div');
+    cell.className = 'month-cell';
+    if (data[m]) {
+      cell.classList.add('has-photos');
+      cell.dataset.count = data[m].count;
+      cell.textContent = monthNames[m];
+      cell.onclick = () => selectMonth(currentYear, m);
+    } else {
+      cell.textContent = monthNames[m];
+      cell.style.opacity = '0.3';
+      cell.style.pointerEvents = 'none';
+    }
+    if (currentYear === 2026 && m === 6) cell.classList.add('active');
+    grid.appendChild(cell);
+  }
+}
+function selectMonth(year, month) {
+  hideDatePanel();
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  const key = `${year}-${String(month).padStart(2,'0')}`;
+  document.querySelectorAll('.sidebar-item').forEach(item => {
+    if (item.dataset.section === key) {
+      item.classList.add('active');
+      document.getElementById('toolbarTitle').textContent = item.querySelector('span:nth-child(2)').textContent;
+    }
+  });
+  const headers = document.querySelectorAll('.section-header');
+  if (headers[0]) headers[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ===== Photo generation =====
+const colors = ['#1a2533','#1e2940','#222e48','#18202b','#1c2432','#202a38'];
+const icons = ['\uD83D\uDCF7','\uD83C\uDF2C','\uD83D\uDCCE','\uD83D\uDCF9','\uD83C\uDF38'];
+function generateSection(id, n, off) {
+  const c = document.getElementById(id);
+  if (!c) return;
+  c.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'photo-cell';
+    cell.style.background = colors[(off+i)%colors.length];
+    cell.innerHTML = `<span class="placeholder">${icons[(off+i)%icons.length]}</span>`;
+    if (i%7===3) cell.innerHTML += '<span class="video-badge">3:24</span>';
+    c.appendChild(cell);
+  }
+}
+
+// ===== Upload =====
+function addUploadItem() {
+  uploadCounter++;
+  const list = document.getElementById('uploadList');
+  const item = document.createElement('div');
+  item.className = 'upload-item';
+  item.dataset.id = uploadCounter;
+  item.innerHTML = `
+    <div class="thumb">${icons[uploadCounter % icons.length]}</div>
+    <div class="info">
+      <div class="name">照片_${String(uploadCounter).padStart(3,'0')}.jpg</div>
+      <div class="progress-bar"><div class="fill" style="width:0%"></div></div>
+    </div>
+    <span class="status">等待</span>`;
+  list.appendChild(item);
+}
+function startUpload() {
+  document.querySelectorAll('.upload-item').forEach(item => {
+    const fill = item.querySelector('.fill');
+    const status = item.querySelector('.status');
+    status.textContent = '上传中...';
+    let w = 0;
+    const iv = setInterval(() => {
+      w += Math.random() * 15;
+      if (w >= 100) { w = 100; clearInterval(iv); status.textContent = '完成'; }
+      fill.style.width = w + '%';
+    }, 200);
+  });
+}
+function clearUploads() {
+  document.getElementById('uploadList').innerHTML = '';
+}
+
+// ===== Settings =====
+function selectTheme(el) {
+  el.parentElement.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+function confirmDisconnect() {
+  if (confirm('确定要断开与 PC 的连接吗？\n断开后需要重新配对才能使用。')) {
+    alert('已断开连接');
+  }
+}
+
+init();
+</script>
+</body>
+</html>

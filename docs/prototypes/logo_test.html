@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logo Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+        .test-case {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+        }
+        .dark-bg {
+            background: #0f1117;
+            color: white;
+        }
+        .light-bg {
+            background: #f8f9fb;
+            color: black;
+        }
+        img {
+            vertical-align: middle;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Logo Display Test</h1>
+    
+    <div class="test-case dark-bg">
+        <h2>Dark Theme (should show cyan/white logo)</h2>
+        <p>Original icon.ico color: RGB(12,17,23) - very dark blue-black</p>
+        <div>
+            <span>White logo (should be visible on dark bg):</span>
+            <img id="white-logo" src="" alt="White logo" style="width:28px;height:28px;border-radius:6px;" />
+        </div>
+        <div>
+            <span>Cyan logo #22d3ee (should be visible on dark bg):</span>
+            <img id="cyan-logo" src="" alt="Cyan logo" style="width:28px;height:28px;border-radius:6px;" />
+        </div>
+    </div>
+    
+    <div class="test-case light-bg">
+        <h2>Light Theme (should show dark logo)</h2>
+        <p>Original icon.ico color: RGB(12,17,23) - very dark blue-black</p>
+        <div>
+            <span>Dark logo (should be visible on light bg):</span>
+            <img id="dark-logo" src="" alt="Dark logo" style="width:28px;height:28px;border-radius:6px;" />
+        </div>
+    </div>
+    
+    <div class="test-case">
+        <h2>Debug Info</h2>
+        <p>Open browser console (F12) to see base64 lengths</p>
+    </div>
+
+    <script>
+        // Load logos and display them
+        async function loadLogos() {
+            // Load white logo
+            const whiteImg = document.getElementById('white-logo');
+            // Create a simple white rectangle as test
+            const canvas = document.createElement('canvas');
+            canvas.width = 28;
+            canvas.height = 28;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, 28, 28);
+            whiteImg.src = canvas.toDataURL();
+            
+            // Load cyan logo
+            const cyanImg = document.getElementById('cyan-logo');
+            const canvas2 = document.createElement('canvas');
+            canvas2.width = 28;
+            canvas2.height = 28;
+            const ctx2 = canvas2.getContext('2d');
+            ctx2.fillStyle = '#22d3ee';
+            ctx2.fillRect(0, 0, 28, 28);
+            cyanImg.src = canvas2.toDataURL();
+            
+            // Load dark logo
+            const darkImg = document.getElementById('dark-logo');
+            const canvas3 = document.createElement('canvas');
+            canvas3.width = 28;
+            canvas3.height = 28;
+            const ctx3 = canvas3.getContext('2d');
+            ctx3.fillStyle = '#0c1117';
+            ctx3.fillRect(0, 0, 28, 28);
+            darkImg.src = canvas3.toDataURL();
+        }
+        
+        loadLogos();
+    </script>
+</body>
+</html>

@@ -377,4 +377,17 @@ export const api = {
 
   rejectPairing: () =>
     fetchJson<{ status: string }>(`${API_BASE}/mobile/pairing/reject`, { method: 'POST' }),
+
+  cancelPairing: () =>
+    fetchJson<{ status: string }>(`${API_BASE}/mobile/pairing/cancel`, { method: 'POST' }),
+
+  // Flutter 上传通知
+  getPendingFlutterUploads: () =>
+    fetchJson<{ sessions: { device_name: string; upload_dir: string; file_count: number; updated_at: string }[] }>(`${API_BASE}/mobile/pending-flutter-uploads`),
+
+  clearPendingFlutterUpload: (uploadDir: string) =>
+    fetchJson<{ status: string }>(`${API_BASE}/mobile/pending-flutter-uploads/clear`, {
+      method: 'POST',
+      body: JSON.stringify({ upload_dir: uploadDir }),
+    }),
 };

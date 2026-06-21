@@ -106,6 +106,7 @@ python scripts/download_ffmpeg.py
 - FFmpeg 已集成到 `backend/ffmpeg_binaries/`，视频功能开箱即用
 - 打包使用 PyInstaller，配置在 `BlurArc.spec`
 - 修改 `_import_file()` 时需注意 `md5_cache` 参数传递
+- **UI 修改必须先设计原型**：任何 UI 变更，先在 `docs/prototypes/` 目录下用 HTML 设计原型，确认后再实施代码。详见 `docs/prototypes/README.md`。
 
 ## 前端开发
 
@@ -153,3 +154,13 @@ flutter build apk
 
 开发日志存放在 `docs/devlogs/` 目录，按 `YYYY-MM-DD-<topic>.md` 命名。
 每次实质性开发完成后自动新增或更新对应日志文件。查阅时直接读取该目录下列表即可。
+
+| 日期 | 主题 | 文件 |
+|------|------|------|
+| 2026-06-21 | 移动端 4 Bug 修复（上传Tab/图片401/配对码输入框/错误提示） | [devlog](.workbuddy/memory/2026-06-21.md) |
+| 2026-06-20 | 移动端 4 个 Bug 排查报告 | [plan](docs/plans/2026-06-20-mobile-bugs-analysis.md) |
+| 2026-06-19 | Flutter mDNS 自动发现实现 | [devlog](docs/devlogs/2026-06-19-mdns-discovery.md) |
+| 2026-06-19 | 移动端 UI 重设计技术实现方案 | [spec](docs/superpowers/specs/2026-06-19-mobile-ui-redesign.md) |
+| 2026-06-19 | 原型 Logo SVG 统一管理 + 手机 App 实施计划 | [devlog](docs/devlogs/2026-06-19-prototype-logo-plan.md) |
+| 2026-06-19 | 移动端 UI 重设计实施（7 Phase 完成） | [devlog](.workbuddy/memory/2026-06-19.md) |
+| 2026-06-18 | 移动接入功能（手机上传、配对流程） | [devlog](docs/devlogs/2026-06-18-mobile-access.md) |

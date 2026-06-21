@@ -15,9 +15,11 @@ interface ImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onComplete: () => void;
+  phoneSourcePath?: string;   // Flutter App 上传目录，自动触发导入检查
+  initialPhoneSessionId?: string;  // 对应的上传会话 ID（导入完成后丢弃临时文件）
 }
 
-export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps) {
+export function ImportDialog({ isOpen, onClose, onComplete, phoneSourcePath, initialPhoneSessionId }: ImportDialogProps) {
   const { t } = useI18n();
   const { showToast } = useToast();
 
@@ -79,8 +81,13 @@ export function ImportDialog({ isOpen, onClose, onComplete }: ImportDialogProps)
   useEffect(() => {
     if (isOpen) {
       resetState();
+      // Flutter App 上传：自动触发导入检查
+      if (phoneSourcePath) {
+        handleStartCheckFromPhone(phoneSourcePath, initialPhoneSessionId);
+      }
     }
-  }, [isOpen, resetState]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, phoneSourcePath, initialPhoneSessionId]);
 
   // 检查进度轮询
   useEffect(() => {

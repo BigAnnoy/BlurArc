@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=420, initial-scale=1">
+<title>Blur Arc 手机端 UI 原型 v4 亮色</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg-page: #f5f7fa;
+    --bg-card: #ffffff;
+    --bg-card-hover: #eef1f6;
+    --border: #e2e6ed;
+    --border-light: #d0d5df;
+    --primary: #0891b2;
+    --primary-hover: #0e7490;
+    --text-primary: #1a2332;
+    --text-secondary: #5a6a80;
+    --text-tertiary: #9aa5b5;
+    --danger: #dc2626;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+  }
+  body {
+    background: #e8ecf2;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh;
+    font-family: -apple-system, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
+    color: var(--text-primary);
+  }
+  .phone {
+    width: 390px; height: 844px;
+    background: var(--bg-page);
+    border-radius: 40px; overflow: hidden;
+    display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    border: 3px solid #c8cdd8;
+    position: relative;
+  }
+  .status-bar {
+    height: 44px; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 24px;
+    font-size: 12px; color: var(--text-secondary);
+    flex-shrink: 0; background: var(--bg-card);
+  }
+  .status-bar .time { font-weight: 600; color: var(--text-primary); }
+  .status-bar .icons { display: flex; gap: 6px; align-items: center; }
+  .status-bar .icons span {
+    display: inline-block; width: 16px; height: 10px;
+    border:1.5px solid var(--text-secondary); border-radius: 2px;
+    position: relative;
+  }
+  .status-bar .icons span::after {
+    content: ''; position: absolute;
+    right: -4px; top: 2px; width: 3px; height: 5px;
+    background: var(--text-secondary); border-radius: 0 2px 2px 0;
+  }
+  .app-bar {
+    height: 52px; display: flex; align-items: center;
+    justify-content: center; padding: 0 16px;
+    flex-shrink: 0; border-bottom: 0.5px solid var(--border);
+    background: var(--bg-card);
+  }
+  .app-bar .title { font-size: 17px; font-weight: 600; letter-spacing: 0.3px; }
+
+  /* Album toolbar (inside album tab only) */
+  .album-toolbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; flex-shrink: 0;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .album-toolbar .btn-date {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
+    padding: 7px 12px; background: var(--bg-card);
+    border: 0.5px solid var(--border); border-radius: var(--radius-md);
+    color: var(--text-secondary); font-size: 13px; cursor: pointer;
+    transition: all 0.15s; user-select: none;
+  }
+  .album-toolbar .btn-date:hover { border-color: var(--primary); color: var(--primary); }
+  .album-toolbar .btn-folder {
+    width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+    background: var(--bg-card); border: 0.5px solid var(--border);
+    border-radius: var(--radius-md); color: var(--text-secondary);
+    font-size: 18px; cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+    user-select: none;
+  }
+  .album-toolbar .btn-folder:hover { border-color: var(--primary); color: var(--primary); }
+
+  .content { flex:1; overflow-y:auto; -webkit-overflow-scrolling: touch; }
+  .content::-webkit-scrollbar { display: none; }
+
+  .bottom-nav {
+    height: 56px; display: flex;
+    border-top: 0.5px solid var(--border);
+    flex-shrink: 0; background: var(--bg-card);
+  }
+  .bottom-nav button {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px;
+    background: none; border: none;
+    color: var(--text-tertiary); font-size: 10px;
+    cursor: pointer; transition: color 0.15s; position: relative;
+  }
+  .bottom-nav button .icon { font-size: 20px; line-height: 1; }
+  .bottom-nav button.active { color: var(--primary); }
+  .bottom-nav button.active::before {
+    content: ''; position: absolute;
+    top: 0; left: 50%; transform: translateX(-50%);
+    width: 24px; height: 2px;
+    background: var(--primary); border-radius: 0 0 2px 2px;
+  }
+
+  .album-scroll { flex:1; overflow-y:auto; -webkit-overflow-scrolling: touch; }
+  .album-scroll::-webkit-scrollbar { display: none; }
+  .section-header {
+    padding: 14px 12px 8px; font-size: 13px;
+    color: var(--text-secondary); font-weight: 500; letter-spacing: 0.2px;
+  }
+  .photo-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 2px; padding: 0 4px;
+    transition: grid-template-columns 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .photo-cell {
+    aspect-ratio: 1; background: var(--bg-card);
+    border-radius: 3px; overflow: hidden; position: relative;
+    cursor: pointer; transition: transform 0.15s;
+  }
+  .photo-cell:active { transform: scale(0.96); }
+  .photo-cell .placeholder {
+    width: 100%; height: 100%; display: flex;
+    align-items: center; justify-content: center;
+    font-size: 22px; color: var(--text-tertiary);
+  }
+  .photo-cell .video-badge {
+    position: absolute; bottom: 3px; right: 3px;
+    background: rgba(0,0,0,0.55); color: #fff;
+    font-size: 9px; padding: 1px 4px; border-radius: 3px;
+  }
+  .scroll-hint { text-align: center; padding: 16px 12px 24px; font-size: 12px; color: var(--text-tertiary); }
+
+  /* Calendar sheet */
+  .calendar-sheet {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: var(--bg-card); border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    z-index: 30; transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    max-height: 70vh; display: flex; flex-direction: column;
+  }
+  .calendar-sheet.open { transform: translateY(0); }
+  .sheet-handle { width: 36px; height: 4px; background: var(--text-tertiary); border-radius: 2px; margin: 8px auto 4px; opacity: 0.4; flex-shrink: 0; }
+  .sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 12px; flex-shrink: 0; }
+  .sheet-header .year-nav { display: flex; align-items: center; gap: 12px; }
+  .sheet-header .year-btn {
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    background: none; border: 0.5px solid var(--border); border-radius: 50%;
+    color: var(--text-secondary); font-size: 14px; cursor: pointer; transition: all 0.15s;
+  }
+  .sheet-header .year-label { font-size: 18px; font-weight: 600; min-width: 72px; text-align: center; }
+  .sheet-header .close-btn {
+    background: none; border: none; color: var(--text-secondary);
+    font-size: 18px; cursor: pointer; width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm);
+  }
+  .month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 0 16px 20px; overflow-y: auto; }
+  .month-tile {
+    aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border-radius: var(--radius-md); cursor: pointer; transition: all 0.15s; border: 0.5px solid transparent; gap: 2px;
+  }
+  .month-tile .month-name { font-size: 13px; font-weight: 500; }
+  .month-tile .month-count { font-size: 10px; color: var(--text-tertiary); }
+  .month-tile:not(.active):hover { background: var(--bg-card-hover); }
+  .month-tile.active { background: rgba(8,145,178,0.08); border-color: var(--primary); }
+  .month-tile.active .month-name { color: var(--primary); }
+  .month-tile.empty { visibility: hidden; }
+  .sheet-backdrop {
+    position: absolute; top:0; left:0; right:0; bottom:0;
+    background: rgba(0,0,0,0.25); z-index: 29; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  }
+  .sheet-backdrop.open { opacity: 1; pointer-events: auto; }
+
+  /* Folder view */
+  .folder-view { padding: 4px 12px; }
+  .folder-breadcrumb {
+    display: flex; align-items: center; gap: 4px;
+    padding: 10px 0; font-size: 13px; color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+  .folder-breadcrumb span { cursor: pointer; transition: color 0.15s; }
+  .folder-breadcrumb span:hover { color: var(--primary); }
+  .folder-breadcrumb .sep { color: var(--text-tertiary); cursor: default; }
+  .folder-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 8px; border-radius: var(--radius-sm);
+    cursor: pointer; transition: background 0.15s; font-size: 14px;
+    color: var(--text-primary);
+  }
+  .folder-item:hover { background: var(--bg-card-hover); }
+  .folder-item .ficon { font-size: 20px; width: 24px; text-align: center; flex-shrink: 0; }
+  .folder-item .fcount { margin-left: auto; font-size: 11px; color: var(--text-tertiary); }
+
+  /* Upload */
+  .upload-content { padding: 20px 16px; }
+  .upload-area {
+    border: 1.5px dashed var(--border-light); border-radius: var(--radius-lg);
+    padding: 40px 20px; display: flex; flex-direction: column;
+    align-items: center; gap: 12px; cursor: pointer; transition: border-color 0.15s;
+  }
+  .upload-area:hover { border-color: var(--primary); }
+  .upload-area .icon { font-size: 40px; color: var(--text-tertiary); }
+  .upload-area .label { font-size: 15px; color: var(--text-primary); font-weight: 500; }
+  .upload-area .hint { font-size: 12px; color: var(--text-tertiary); }
+  .upload-list { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+  .upload-item {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+    background: var(--bg-card); border-radius: var(--radius-md); border: 0.5px solid var(--border);
+  }
+  .upload-item .thumb {
+    width: 44px; height: 44px; background: var(--bg-card-hover);
+    border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: var(--text-tertiary); flex-shrink: 0;
+  }
+  .upload-item .info { flex: 1; min-width: 0; }
+  .upload-item .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .upload-item .progress-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .upload-item .progress-fill { height: 100%; background: var(--primary); border-radius: 2px; width: 65%; transition: width 0.3s; }
+  .upload-item .status { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+  .upload-actions { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .btn-primary {
+    width: 100%; padding: 12px; background: var(--primary); color: #fff;
+    border: none; border-radius: var(--radius-md); font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-secondary {
+    width: 100%; padding: 12px; background: none; color: var(--text-secondary);
+    border: 0.5px solid var(--border); border-radius: var(--radius-md);
+    font-size: 15px; cursor: pointer; transition: all 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+
+  /* Settings */
+  .settings-content { padding: 16px; }
+  .settings-section { margin-bottom: 24px; }
+  .settings-section-title { font-size: 12px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; padding: 0 4px 8px; }
+  .settings-card { background: var(--bg-card); border-radius: var(--radius-lg); border: 0.5px solid var(--border); overflow: hidden; }
+  .settings-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; border-bottom: 0.5px solid var(--border); font-size: 14px;
+  }
+  .settings-item:last-child { border-bottom: none; }
+  .settings-item .label { color: var(--text-primary); }
+  .settings-item .value { color: var(--text-secondary); font-size: 13px; }
+  .settings-item .value.mono { font-family: monospace; font-size: 11px; }
+  .settings-item .toggle { width: 44px; height: 26px; background: var(--border-light); border-radius: 13px; position: relative; cursor: pointer; transition: background 0.2s; }
+  .settings-item .toggle.on { background: var(--primary); }
+  .settings-item .toggle::after {
+    content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+    background: #fff; border-radius: 50%; transition: left 0.2s;
+  }
+  .settings-item .toggle.on::after { left: 21px; }
+  .settings-item .radio-group { display: flex; gap: 6px; }
+  .settings-item .radio-btn {
+    padding: 4px 10px; border-radius: var(--radius-sm); font-size: 12px;
+    border: 0.5px solid var(--border); color: var(--text-secondary);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .settings-item .radio-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
+  .btn-danger { width: 100%; padding: 12px; background: none; color: var(--danger); border: 0.5px solid rgba(220,38,38,0.3); border-radius: var(--radius-md); font-size: 15px; cursor: pointer; transition: all 0.15s; }
+  .btn-danger:hover { background: rgba(220,38,38,0.08); }
+
+  /* Preview */
+  .preview-overlay {
+    position: absolute; top:0; left:0; right:0; bottom:0; background: #000;
+    z-index: 20; display: none; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .preview-overlay.show { display: flex; }
+  .preview-overlay .top-bar {
+    position: absolute; top: 44px; left:0; right:0; height: 52px;
+    display: flex; align-items: center; justify-content: space-between; padding: 0 16px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
+  }
+  .preview-overlay .top-bar button {
+    background: none; border: none; color: #fff; font-size: 20px; cursor: pointer;
+    width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  }
+  .preview-overlay .photo-frame {
+    width: 100%; height: 60%; display: flex; align-items: center; justify-content: center;
+    background: #111; border-radius: 8px; margin: 0 20px; color: #555; font-size: 48px;
+  }
+  .preview-overlay .nav-arrows {
+    position: absolute; top: 50%; left:0; right:0; display: flex;
+    justify-content: space-between; padding: 0 8px; transform: translateY(-50%);
+  }
+  .preview-overlay .nav-arrows button {
+    background: rgba(255,255,255,0.1); border: none; color: #fff; width: 36px; height: 36px;
+    border-radius: 50%; font-size: 18px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .home-indicator { height: 34px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .home-indicator::after { content: ''; width: 120px; height: 4px; background: var(--text-tertiary); border-radius: 2px; opacity: 0.4; }
+</style>
+</head>
+<body>
+
+<div class="phone" id="phone">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    
+    <span class="icons"><span></span> 85%</span>
+  </div>
+  <div class="app-bar" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:0 16px;">
+    <img src="../img/logo.svg" alt="Blur Arc Logo" style="width:28px;height:28px;" />
+    <span style="font-size:17px;font-weight:600;letter-spacing:0.3px;color:var(--text-primary);">Blur Arc</span>
+  </div>
+
+  <div class="content" id="contentArea">
+    <!-- Album tab -->
+    <div id="albumContent">
+      <div class="album-toolbar">
+        <button class="btn-date" onclick="openCalendar()">
+          <span>📅</span>
+          <span id="currentMonthLabel">2026年6月</span>
+          <span style="font-size:10px;opacity:0.5;">▾</span>
+        </button>
+        <button class="btn-folder" onclick="showFolderView()" title="文件夹">📁</button>
+      </div>
+      <div class="album-scroll" id="albumScrollArea">
+        <div class="section-header" data-month="2026-06">2026年6月</div>
+        <div class="photo-grid" id="grid1"></div>
+        <div class="section-header" data-month="2026-05">2026年5月</div>
+        <div class="photo-grid" id="grid2"></div>
+        <div class="section-header" data-month="Screenshots">Screenshots</div>
+        <div class="photo-grid" id="grid3"></div>
+        <div class="scroll-hint">向下滚动加载更多…</div>
+      </div>
+    </div>
+
+    <!-- Folder view -->
+    <div id="folderView" style="display:none; flex-direction:column; height:100%;">
+      <div class="folder-back-btn" onclick="hideFolderView()" style="padding:12px; cursor:pointer;">‹ 返回相册</div>
+      <div class="folder-breadcrumb" id="folderBreadcrumb" style="padding:0 12px 8px;"><span onclick="goFolderRoot()">相册根目录</span></div>
+      <div class="folder-view" id="folderList"></div>
+    </div>
+
+    <!-- Upload tab -->
+    <div id="uploadContent" style="display:none;">
+      <div class="upload-content">
+        <div class="upload-area" onclick="alert('选择照片（原型演示）')">
+          <div class="icon">📷</div>
+          <div class="label">选择照片</div>
+          <div class="hint">点击选择要上传的照片</div>
+        </div>
+        <div class="upload-list">
+          <div class="upload-item">
+            <div class="thumb">🖼</div>
+            <div class="info">
+              <div class="name">IMG_20260618_001.jpg</div>
+              <div class="progress-bar"><div class="progress-fill"></div></div>
+              <div class="status">上传中… 65%</div>
+            </div>
+          </div>
+          <div class="upload-item">
+            <div class="thumb">🖼</div>
+            <div class="info">
+              <div class="name">IMG_20260617_003.jpg</div>
+              <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+              <div class="status" style="color:var(--primary)">已完成</div>
+            </div>
+          </div>
+        </div>
+        <div class="upload-actions">
+          <button class="btn-primary">开始上传</button>
+          <button class="btn-secondary">全部取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings tab -->
+    <div id="settingsContent" style="display:none;">
+      <div class="settings-content">
+        <div class="settings-section">
+          <div class="settings-section-title">设备信息</div>
+          <div class="settings-card">
+            <div class="settings-item"><span class="label">设备名称</span><span class="value">iPhone 15 Pro</span></div>
+            <div class="settings-item"><span class="label">配对 Token</span><span class="value mono">abc123…def</span></div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title">显示</div>
+          <div class="settings-card">
+            <div class="settings-item">
+              <span class="label">主题</span>
+              <div class="radio-group">
+                <span class="radio-btn" onclick="selectTheme(this)">跟随系统</span>
+                <span class="radio-btn" onclick="selectTheme(this)">深色</span>
+                <span class="radio-btn active" onclick="selectTheme(this)">浅色</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title">上传</div>
+          <div class="settings-card">
+            <div class="settings-item"><span class="label">仅在 Wi-Fi 下上传</span><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <button class="btn-danger" onclick="alert('断开连接（原型演示）')">断开连接</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Calendar sheet -->
+  <div class="sheet-backdrop" id="sheetBackdrop" onclick="closeCalendar()"></div>
+  <div class="calendar-sheet" id="calendarSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div class="year-nav">
+        <button class="year-btn" onclick="changeYear(-1)">‹</button>
+        <span class="year-label" id="yearLabel">2026</span>
+        <button class="year-btn" onclick="changeYear(1)">›</button>
+      </div>
+      <button class="close-btn" onclick="closeCalendar()">✕</button>
+    </div>
+    <div class="month-grid" id="monthGrid"></div>
+  </div>
+
+  <div class="preview-overlay" id="previewOverlay" onclick="closePreview()">
+    <div class="top-bar"><button>✕</button><span style="color:#fff;font-size:14px;">IMG_20260618_001.jpg</span><button>↗</button></div>
+    <div class="photo-frame">📷</div>
+    <div class="nav-arrows"><button>‹</button><button>›</button></div>
+  </div>
+
+  <div class="bottom-nav" id="bottomNav">
+    <button class="active" data-tab="album" onclick="switchTab('album', this)"><span class="icon">🖼</span><span>相册</span></button>
+    <button data-tab="upload" onclick="switchTab('upload', this)"><span class="icon">📤</span><span>上传</span></button>
+    <button data-tab="settings" onclick="switchTab('settings', this)"><span class="icon">⚙</span><span>设置</span></button>
+  </div>
+  <div class="home-indicator"></div>
+</div>
+
+<script>
+const monthNames = ['','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+const sections = [
+  { id:'grid1', month:'2026-06', display:'2026年6月', count:128 },
+  { id:'grid2', month:'2026-05', display:'2026年5月', count:96 },
+  { id:'grid3', month:'Screenshots', display:'Screenshots', count:45 },
+];
+function generatePhotos(containerId, count, offset) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const colors = ['#e8ecf2','#dde3ed','#d1d9e8','#e0e6f0','#d5dce8','#e3e8f0'];
+  const icons = ['📷','🎬','🖼','📹','📸'];
+  for (let i = 0; i < count; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'photo-cell';
+    cell.style.background = colors[(offset+i)%colors.length];
+    cell.innerHTML = `<span class="placeholder">${icons[(offset+i)%icons.length]}</span>`;
+    if (i%7===3) cell.innerHTML += '<span class="video-badge">3:24</span>';
+    cell.onclick = () => openPreview();
+    container.appendChild(cell);
+  }
+}
+generatePhotos('grid1',12,0);
+generatePhotos('grid2',9,12);
+generatePhotos('grid3',6,21);
+
+let currentYear = 2026;
+const availableData = { '2026':[5,6],'2025':[1,2,3,4,5,6,7,8,9,10,11,12],'2024':[1,2,3,4,5,6,7,8,9,10,11,12] };
+function renderCalendar() {
+  const grid = document.getElementById('monthGrid');
+  grid.innerHTML = '';
+  const months = availableData[currentYear] || [];
+  for (let m = 1; m <= 12; m++) {
+    const tile = document.createElement('div');
+    tile.className = 'month-tile';
+    const isAvailable = months.includes(m);
+    const isActive = currentYear===2026 && m===6;
+    if (isAvailable) {
+      if (isActive) tile.classList.add('active');
+      tile.innerHTML = `<span class="month-name">${monthNames[m]}</span><span class="month-count">${m===6?128:m===5?96:'—'}</span>`;
+      tile.onclick = () => selectMonth(currentYear, m);
+    } else {
+      tile.classList.add('empty');
+      tile.innerHTML = `<span class="month-name" style="color:var(--text-tertiary);opacity:0.4">${monthNames[m]}</span>`;
+    }
+    grid.appendChild(tile);
+  }
+  document.getElementById('yearLabel').textContent = currentYear;
+}
+function changeYear(delta) { currentYear = Math.max(2020,Math.min(2030,currentYear+delta)); renderCalendar(); }
+function selectMonth(year, month) {
+  closeCalendar();
+  const monthStr = String(month).padStart(2,'0');
+  const target = sections.find(s => s.month === `${year}-${monthStr}`);
+  if (target) { document.getElementById(target.id).scrollIntoView({behavior:'smooth',block:'start'}); document.getElementById('currentMonthLabel').textContent = `${year}年${month}月`; }
+}
+function openCalendar() { renderCalendar(); document.getElementById('calendarSheet').classList.add('open'); document.getElementById('sheetBackdrop').classList.add('open'); }
+function closeCalendar() { document.getElementById('calendarSheet').classList.remove('open'); document.getElementById('sheetBackdrop').classList.remove('open'); }
+
+function switchTab(tab, btn) {
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active')); btn.classList.add('active');
+  document.getElementById('albumContent').style.display = 'none';
+  document.getElementById('folderView').style.display = 'none';
+  document.getElementById('uploadContent').style.display = 'none';
+  document.getElementById('settingsContent').style.display = 'none';
+  if (tab === 'album') document.getElementById('albumContent').style.display = '';
+  else if (tab === 'upload') document.getElementById('uploadContent').style.display = '';
+  else if (tab === 'settings') document.getElementById('settingsContent').style.display = '';
+}
+
+function selectTheme(el) { el.parentElement.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('active')); el.classList.add('active'); }
+function openPreview() { document.getElementById('previewOverlay').classList.add('show'); }
+function closePreview() { document.getElementById('previewOverlay').classList.remove('show'); }
+
+const folderData = [
+  { name:'2026', type:'folder', count: 297 },
+  { name:'2025', type:'folder', count: 1024 },
+  { name:'Screenshots', type:'folder', count: 45 },
+  { name:'Downloads', type:'folder', count: 12 },
+  { name:'WhatsApp Images', type:'folder', count: 230 },
+];
+function showFolderView() {
+  document.getElementById('albumContent').style.display = 'none';
+  document.getElementById('folderView').style.display = 'flex';
+  renderFolderList();
+}
+function hideFolderView() {
+  document.getElementById('folderView').style.display = 'none';
+  document.getElementById('albumContent').style.display = '';
+}
+function renderFolderList() {
+  const list = document.getElementById('folderList');
+  list.innerHTML = '';
+  folderData.forEach(f => {
+    const item = document.createElement('div');
+    item.className = 'folder-item';
+    item.innerHTML = `<span class="ficon">📁</span><span>${f.name}</span><span class="fcount">${f.count}</span>`;
+    item.onclick = () => alert('进入文件夹: ' + f.name + '（原型演示）');
+    list.appendChild(item);
+  });
+}
+function goFolderRoot() { renderFolderList(); }
+
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeCalendar(); });
+</script>
+</body>
+</html>

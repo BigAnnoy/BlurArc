@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTheme } from '../../hooks/useTheme';
 import { useI18n } from '../../contexts/I18nContext';
 import { Logo } from '../common/Logo';
 import { MobileDeviceManager } from '../dialogs/MobileDeviceManager';
+import { api } from '../../services/api';
 
 interface HeaderProps {
   onSettings?: () => void;
@@ -12,6 +13,22 @@ export function Header({ onSettings }: HeaderProps) {
   const { toggleTheme } = useTheme();
   const { t } = useI18n();
   const [mobileManagerOpen, setMobileManagerOpen] = useState(false);
+  const [mobileRunning, setMobileRunning] = useState(false);
+
+  // 轮询移动接入服务状态
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const status = await api.getMobileStatus();
+        setMobileRunning(status.running);
+      } catch {
+        // 静默处理
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <>
@@ -23,7 +40,9 @@ export function Header({ onSettings }: HeaderProps) {
         <div className="flex gap-1">
           <button
             onClick={() => setMobileManagerOpen(true)}
-            className="w-[34px] h-[34px] rounded-md border-none bg-transparent text-text-secondary cursor-pointer flex items-center justify-center hover:bg-page hover:text-primary transition-all duration-150"
+            className={`w-[34px] h-[34px] rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center hover:bg-page transition-all duration-150 ${
+              mobileRunning ? 'text-primary' : 'text-text-secondary hover:text-primary'
+            }`}
             title={t('mobileAccess.entry')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">

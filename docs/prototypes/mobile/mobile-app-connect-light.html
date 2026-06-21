@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blur Arc - 连接PC</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg: #f8f9fb;
+  --surface: #ffffff;
+  --surface2: #f0f1f3;
+  --border: #e2e4e8;
+  --text-primary: #1a1d27;
+  --text-secondary: #6b7280;
+  --accent: #0891b2;
+  --accent-dim: #0e7490;
+  --danger: #ef4444;
+  --success: #22c55e;
+}
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 状态栏 */
+.status-bar {
+  height: 24px;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* 标题栏 */
+.app-bar {
+  height: 52px;
+  background: var(--surface);
+  border-bottom: 0.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+.app-bar img {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+.app-bar span {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* 主内容区 */
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 16px;
+}
+
+/* 步骤指示器 */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: all 0.3s;
+}
+.step-dot.active {
+  background: var(--accent);
+  width: 24px;
+  border-radius: 4px;
+}
+.step-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  text-align: center;
+}
+
+/* 发现设备区域 */
+.section-title {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.device-item {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.device-item:hover {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.device-item.selected {
+  border-color: var(--accent);
+  background: rgba(34,211,238,0.08);
+}
+.device-icon {
+  width: 40px;
+  height: 40px;
+  background: var(--surface);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.device-info {
+  flex: 1;
+}
+.device-name {
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.device-ip {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.device-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+/* 手动输入区域 */
+.manual-input {
+  margin-bottom: 24px;
+}
+.input-group {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  transition: border-color 0.2s;
+}
+.input-group:focus-within {
+  border-color: var(--accent);
+}
+.input-group input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 15px;
+  padding: 12px;
+}
+.input-group input::placeholder {
+  color: var(--text-secondary);
+}
+.input-colon {
+  color: var(--text-secondary);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* 按钮 */
+.btn-primary {
+  width: 100%;
+  padding: 14px;
+  background: var(--accent);
+  color: #0f1117;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+.btn-primary:hover { background: var(--accent-dim); }
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 配对页面（默认隐藏） */
+.pair-page { display: none; }
+.pair-page.active { display: block; }
+
+.pair-status {
+  text-align: center;
+  padding: 32px 0;
+}
+.pair-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 20px;
+  background: var(--surface2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+}
+.pair-status-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.pair-status-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* 配对码输入 */
+.code-input-area {
+  margin: 24px 0;
+}
+.code-input-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.code-digit {
+  width: 44px;
+  height: 52px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.code-digit:focus {
+  border-color: var(--accent);
+}
+.code-hint {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.btn-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+.btn-secondary {
+  flex: 1;
+  padding: 14px;
+  background: var(--surface2);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-secondary:hover { background: var(--surface); }
+</style>
+</head>
+<body>
+
+<!-- 状态栏 -->
+<div class="status-bar">
+  <span>9:41</span>
+  <span>📶 100% 🔋</span>
+</div>
+
+<!-- 标题栏 -->
+<div class="app-bar">
+  <img src="../img/logo.svg" alt="Blur Arc Logo" style="width:28px;height:28px;" />
+  <span>Blur Arc</span>
+</div>
+
+<!-- 主内容区 -->
+<div class="main-content">
+
+  <!-- 页面1：连接设备 -->
+  <div class="connect-page" id="connectPage">
+    <div class="step-indicator">
+      <div class="step-dot active"></div>
+      <div class="step-dot"></div>
+    </div>
+    <div class="step-label">步骤 1/2：连接设备</div>
+
+    <!-- 发现的设备 -->
+    <div class="section-title">发现的设备</div>
+    <div class="device-list">
+      <div class="device-item" onclick="selectDevice(this)">
+        <div class="device-icon">💻</div>
+        <div class="device-info">
+          <div class="device-name">MyPC</div>
+          <div class="device-ip">192.168.1.100:8900</div>
+        </div>
+        <div class="device-status"></div>
+      </div>
+      <div class="device-item" onclick="selectDevice(this)">
+        <div class="device-icon">💻</div>
+        <div class="device-info">
+          <div class="device-name">WorkPC</div>
+          <div class="device-ip">192.168.1.101:8900</div>
+        </div>
+        <div class="device-status"></div>
+      </div>
+    </div>
+
+    <!-- 手动输入 -->
+    <div class="section-title">或手动输入</div>
+    <div class="manual-input">
+      <div class="input-group">
+        <input type="text" placeholder="IP 地址" value="192.168.1.100" id="ipInput" />
+        <span class="input-colon">:</span>
+        <input type="text" placeholder="端口" value="8900" style="width:60px;flex:none;" id="portInput" />
+      </div>
+    </div>
+
+    <button class="btn-primary" onclick="goToPair()">连接</button>
+  </div>
+
+  <!-- 页面2：输入配对码 -->
+  <div class="pair-page" id="pairPage">
+    <div class="step-indicator">
+      <div class="step-dot"></div>
+      <div class="step-dot active"></div>
+    </div>
+    <div class="step-label">步骤 2/2：输入配对码</div>
+
+    <div class="pair-status">
+      <div class="pair-icon">🔗</div>
+      <div class="pair-status-title">等待 PC 确认</div>
+      <div class="pair-status-desc">请在 PC 端确认此设备的连接请求<br>确认后会显示 6 位配对码</div>
+    </div>
+
+    <!-- 配对码输入 -->
+    <div class="code-input-area">
+      <div class="code-input-row">
+        <input type="text" class="code-digit" maxlength="1" value="1" />
+        <input type="text" class="code-digit" maxlength="1" value="2" />
+        <input type="text" class="code-digit" maxlength="1" value="3" />
+        <input type="text" class="code-digit" maxlength="1" value="4" />
+        <input type="text" class="code-digit" maxlength="1" value="5" />
+        <input type="text" class="code-digit" maxlength="1" value="6" />
+      </div>
+      <div class="code-hint">请在 PC 端确认后，输入显示的 6 位配对码</div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="goToConnect()">返回</button>
+      <button class="btn-primary" style="flex:1;">确认配对</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Logo 注入（暗色主题用浅色logo）
+const darkLogB64 = ""; // 运行时注入
+document.querySelectorAll('[data-logo-type="dark"]').forEach(img => {
+  // 使用浅色logo
+  img.src = "data:image/png;base64," + (darkLogB64 || "");
+});
+
+function selectDevice(el) {
+  document.querySelectorAll('.device-item').forEach(d => d.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function goToPair() {
+  document.getElementById('connectPage').style.display = 'none';
+  document.getElementById('pairPage').classList.add('active');
+}
+
+function goToConnect() {
+  document.getElementById('pairPage').classList.remove('active');
+  document.getElementById('connectPage').style.display = 'block';
+}
+</script>
+
+</body>
+</html>

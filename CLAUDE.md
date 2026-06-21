@@ -15,6 +15,12 @@ cd frontend && npm run build && cd .. && python src/BlurArc.py
 # 仅启动应用（前端未修改时）
 python src/BlurArc.py
 
+# 使用开发脚本启动后端
+.\scripts\dev-start.ps1 backend
+
+# 查看后端日志
+.\scripts\dev-start.ps1 log
+
 # 运行所有测试
 pytest
 
@@ -115,6 +121,7 @@ python scripts/download_ffmpeg.py
 
 - **方案/设计阶段不提交 git**：讨论和修改 spec 文档时只写文件，不 commit。等方案最终确认后一次性提交。实现阶段正常提交。
 - 设计方案文档放在 `docs/superpowers/specs/` 目录下。
+- **UI 修改必须先设计原型**：任何 UI 变更，先在 `docs/prototypes/` 目录下用 HTML 设计原型，确认后再实施代码。原型按 `docs/prototypes/<platform>/<feature>-v<version>[-<theme>].html` 命名，详见 `docs/prototypes/README.md`。
 
 ## 前端开发
 
@@ -156,7 +163,7 @@ flutter build apk
 
 **Flutter SDK 位置：** `E:\Applications\flutter`（已添加到用户 PATH）
 
-**注意：** 当前 `blurarc_app/` 只有 lib 源码和 pubspec.yaml，缺少完整的 android/ios 平台目录。如需编译运行，请先执行 `cd blurarc_app && flutter create .` 重新生成平台文件（会保留已有 lib/ 源码）。
+**注意：** `blurarc_app/` 包含完整的 android/ios 平台目录，可通过 `flutter run` 直接编译运行。手机/模拟器部署可使用 `.\scripts\dev-start.bat` 或 `.\scripts\dev-start.ps1 phone`。
 
 ---
 
@@ -164,4 +171,14 @@ flutter build apk
 
 开发日志存放在 `docs/devlogs/` 目录，按 `YYYY-MM-DD-<topic>.md` 命名。
 每次实质性开发完成后自动新增或更新对应日志文件。查阅时直接读取该目录下列表即可。
+
+| 日期 | 主题 | 文件 |
+|------|------|------|
+| 2026-06-21 | 移动接入 Bug 修复 + 上传通知导入 | [devlog](docs/devlogs/2026-06-21-upload-bug-fixes.md) |
+| 2026-06-20 | 移动端 4 个 Bug 排查报告 | [plan](docs/plans/2026-06-20-mobile-bugs-analysis.md) |
+| 2026-06-19 | Flutter mDNS 自动发现实现 | [devlog](docs/devlogs/2026-06-19-mdns-discovery.md) |
+| 2026-06-19 | 移动端 UI 重设计技术实现方案 | [spec](docs/superpowers/specs/2026-06-19-mobile-ui-redesign.md) |
+| 2026-06-19 | 原型 Logo SVG 统一管理 + 手机 App 实施计划 | [devlog](docs/devlogs/2026-06-19-prototype-logo-plan.md) |
+| 2026-06-19 | 移动端 UI 重设计实施（7 Phase 完成） | [devlog](.workbuddy/memory/2026-06-19.md) |
+| 2026-06-18 | 移动接入功能（手机上传、配对流程） | [devlog](docs/devlogs/2026-06-18-mobile-access.md) |
 

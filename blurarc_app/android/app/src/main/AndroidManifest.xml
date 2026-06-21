@@ -1,8 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 网络通信 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 网络状态检测 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Wi-Fi 状态检测 -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <!-- mDNS 组播接收（真机自动发现必需） -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
-        android:label="blurarc_app"
+        android:label="Blur Arc"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Blur Arc v0.5.0 - PyInstaller 打包配置
+Blur Arc v0.5.3 - PyInstaller 打包配置
 """
 
 import sys

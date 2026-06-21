@@ -56,6 +56,12 @@ function AppContent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState<Photo | null>(null);
   const [deletePaths, setDeletePaths] = useState<string[]>([]);
+  // Flutter App 上传自动导入
+  const [pendingFlutterSession, setPendingFlutterSession] = useState<{
+    upload_dir: string;
+    device_name: string;
+    file_count: number;
+  } | null>(null);
 
   // Initialize app
   useEffect(() => {
@@ -92,6 +98,32 @@ function AppContent() {
 
     init();
   }, [showToast]);
+
+  // 轮询 Flutter App 上传完成通知
+  useEffect(() => {
+    let polling = true;
+    const poll = async () => {
+      try {
+        const res = await api.getPendingFlutterUploads();
+        if (res.sessions.length > 0 && polling) {
+          const s = res.sessions[0];
+          // 立即清除后端通知，防止重复触发
+          api.clearPendingFlutterUpload(s.upload_dir).catch(() => {});
+          setPendingFlutterSession({
+            upload_dir: s.upload_dir,
+            device_name: s.device_name,
+            file_count: s.file_count,
+          });
+          setImportOpen(true);
+        }
+      } catch {
+        // 静默
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => { polling = false; clearInterval(interval); };
+  }, []);
 
   // Load photos when path changes
   const loadPhotos = useCallback(async (path: string, title: string, page: number = 1, append: boolean = false) => {
@@ -289,10 +321,15 @@ function AppContent() {
       {/* Dialogs */}
       <ImportDialog
         isOpen={importOpen}
-        onClose={() => setImportOpen(false)}
+        onClose={() => {
+          setImportOpen(false);
+          setPendingFlutterSession(null);
+        }}
         onComplete={() => {
+          setPendingFlutterSession(null);
           refreshAppData();
         }}
+        phoneSourcePath={pendingFlutterSession?.upload_dir}
       />
       <SettingsDialog isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} onDataRefresh={refreshAppData} />
       <PhotoPreview

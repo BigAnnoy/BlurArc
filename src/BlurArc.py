@@ -283,13 +283,13 @@ def start_flask_server():
         logger.error(f"❌ Flask 服务器：启动失败: {e}", exc_info=True)
 
 def _start_mobile_service():
-    """根据配置自动启动移动接入服务"""
+    """根据配置自动启动移动接入服务（复用 api_server 的单例）"""
     try:
         from backend.config_manager import ConfigManager
         cm = ConfigManager()
         if cm.get_setting('mobile_service_enabled', False):
-            from backend.mobile_access_server import MobileAccessServer
-            server = MobileAccessServer()
+            from backend import api_server
+            server = api_server._get_mobile_server()
             info = server.start()
             logger.info(f"移动接入服务已自动启动: {info}")
     except Exception as e:
@@ -424,7 +424,7 @@ def main():
         # 这样 PyWebView 能正确注入 API 对象
         logger.info("🪟 创建 PyWebView 窗口...")
         window = webview.create_window(
-            title='Blur Arc v0.5.1',
+            title='Blur Arc v0.5.3',
             url=_load_url,  # Flask 就绪则直接加载；未就绪则显示本地等待页面
             width=1400,
             height=900,

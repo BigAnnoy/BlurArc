@@ -274,6 +274,13 @@ const translations: Record<Language, Record<string, string>> = {
     'mobileAccess.revoke': '撤销',
     'mobileAccess.revokeAll': '撤销全部',
     'mobileAccess.entry': '移动设备',
+    'mobileAccess.noDevices': '暂无已配对设备',
+    'mobileAccess.revokeConfirmTitle': '撤销设备访问',
+    'mobileAccess.revokeConfirmDesc': '撤销后该设备将无法访问相册，需要重新配对。',
+    'mobileAccess.revokeAllConfirmTitle': '撤销全部设备',
+    'mobileAccess.revokeAllConfirmDesc': '所有已配对设备将失去访问权限，需要重新配对。',
+    'mobileAccess.revoking': '撤销中...',
+    'mobileAccess.serviceDesc': '开启后已配对的设备可以浏览相册和上传照片。关闭后所有连接将立即断开。',
 
     // Pairing Mode (新流程)
     'pairing.title': '配对模式',
@@ -289,6 +296,8 @@ const translations: Record<Language, Record<string, string>> = {
     'pairing.codeExpiresIn': '有效期: {seconds} 秒',
     'pairing.cancelPairing': '取消配对',
     'pairing.requestFrom': '{device} 请求配对',
+    'pairing.success': '配对成功',
+    'pairing.successDesc': '设备已成功配对，可以开始使用了',
   },
   en: {
     // Common
@@ -550,6 +559,13 @@ const translations: Record<Language, Record<string, string>> = {
     'mobileAccess.revoke': 'Revoke',
     'mobileAccess.revokeAll': 'Revoke All',
     'mobileAccess.entry': 'Mobile',
+    'mobileAccess.noDevices': 'No paired devices',
+    'mobileAccess.revokeConfirmTitle': 'Revoke Device Access',
+    'mobileAccess.revokeConfirmDesc': 'This device will lose access and need to pair again.',
+    'mobileAccess.revokeAllConfirmTitle': 'Revoke All Devices',
+    'mobileAccess.revokeAllConfirmDesc': 'All paired devices will lose access and need to pair again.',
+    'mobileAccess.revoking': 'Revoking...',
+    'mobileAccess.serviceDesc': 'When enabled, paired devices can browse photos and upload. Disabling will disconnect all devices immediately.',
 
     // Pairing Mode (新流程)
     'pairing.title': 'Pairing Mode',
@@ -565,6 +581,8 @@ const translations: Record<Language, Record<string, string>> = {
     'pairing.codeExpiresIn': 'Expires in {seconds}s',
     'pairing.cancelPairing': 'Cancel Pairing',
     'pairing.requestFrom': '{device} requests pairing',
+    'pairing.success': 'Pairing Successful',
+    'pairing.successDesc': 'Device is paired and ready to use',
   },
 };
 

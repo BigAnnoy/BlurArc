@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ================================================
-echo  Blur Arc Build Script v0.5.0
+echo  Blur Arc Build Script v0.5.3
 echo ================================================
 echo.
 

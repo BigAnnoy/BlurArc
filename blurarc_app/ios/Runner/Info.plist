@@ -66,5 +66,13 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- mDNS Bonjour 服务发现（iOS 14+ 必需） -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_blurarc._tcp</string>
+	</array>
+	<!-- 本地网络访问描述（iOS 14+ 必需） -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Blur Arc 需要访问本地网络来发现并连接到您的电脑</string>
 </dict>
 </plist>

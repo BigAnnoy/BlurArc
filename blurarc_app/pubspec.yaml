@@ -14,16 +14,27 @@ dependencies:
   video_player: ^2.8.0
   # mobile_scanner: ^5.0.0  # native-only, excluded for web compatibility
   shared_preferences: ^2.2.0
+  provider: ^6.1.1
   multicast_dns: ^0.3.2
   path_provider: ^2.1.0
   permission_handler: ^11.0.0
   image_picker: ^1.0.0
   intl: ^0.19.0
+  flutter_svg: ^2.0.10
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_icons:
+  android: "launcher"
+  ios: false
+  image_path: "assets/logo/icon_512.png"
+  min_sdk_android: 21
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/logo/
