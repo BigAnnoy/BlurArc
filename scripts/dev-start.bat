@@ -35,8 +35,8 @@ echo  [5] Build PC exe (npm build + PyInstaller)
 echo  [6] View backend log (last 50 lines)
 echo  [7] Deploy to tablet emulator (build APK + install to tablet AVD)
 echo  [8] Run PC app (frontend build + python BlurArc.py)
-echo  [9] Hot run phone emulator   (flutter run -d, hot reload supported)
-echo  [10] Hot run tablet emulator (flutter run -d, hot reload supported)
+echo  [9] Hot run phone emulator   (PC + AVD auto-start, hot reload)
+echo  [10] Hot run tablet emulator (PC + AVD auto-start, hot reload)
 echo  [11] Exit
 echo.
 
@@ -336,7 +336,17 @@ set DEPLOY_FINISH_MSG=Deploy to tablet finished!
 call :deploy_avd_common
 
 :: ====================== 热更新模式（手机 AVD） ======================
+:: 1. 自动启动 PC 端（前端构建 + BlurArc.py，含 mDNS 广播 + Flask + 移动接入）
+:: 2. 启动手机 AVD（若未运行）
+:: 3. flutter run 接上长连接，按 r 热更新
 :hotrun_emulator
+call :run_pc_app_core
+if !ERRORLEVEL! NEQ 0 (
+    echo [Hot run] PC 端启动失败，已中止
+    pause
+    exit /b 1
+)
+echo.
 set DEPLOY_AVD_NAME=%AVD_NAME%
 set DEPLOY_AVD_LABEL=phone emulator
 set DEPLOY_AVD_SKIN=
@@ -345,7 +355,15 @@ set DEPLOY_HOT=1
 call :deploy_avd_common
 
 :: ====================== 热更新模式（平板 AVD） ======================
+:: 流程同手机，仅 AVD 名称/skin 不同
 :hotrun_tablet_emulator
+call :run_pc_app_core
+if !ERRORLEVEL! NEQ 0 (
+    echo [Hot run] PC 端启动失败，已中止
+    pause
+    exit /b 1
+)
+echo.
 set DEPLOY_AVD_NAME=%AVD_TABLET_NAME%
 set DEPLOY_AVD_LABEL=tablet emulator
 set DEPLOY_AVD_SKIN=1280x800
@@ -353,22 +371,20 @@ set DEPLOY_WAIT_LABEL=Android Tablet Emulator
 set DEPLOY_HOT=1
 call :deploy_avd_common
 
-:: ====================== 启动 PC 端（前端构建 + BlurArc.py） ======================
-:run_pc_app
-echo.
+:: ====================== 启动 PC 端（核心步骤：前端构建 + BlurArc.py） ======================
+:: 不含 pause，供其他流程（如 hot run）静默调用。
+:: 失败直接 exit /b 1，调用方需自行处理。
+:run_pc_app_core
 if not exist "%PYTHON%" (
     echo ERROR: Python not found: %PYTHON%
-    pause
     exit /b 1
 )
 if not exist "%ROOT_DIR%\frontend\package.json" (
     echo ERROR: frontend/package.json not found: %ROOT_DIR%\frontend
-    pause
     exit /b 1
 )
 if not exist "%ROOT_DIR%\src\BlurArc.py" (
     echo ERROR: src/BlurArc.py not found: %ROOT_DIR%\src
-    pause
     exit /b 1
 )
 
@@ -377,7 +393,6 @@ cd /d "%ROOT_DIR%\frontend"
 call npm run build
 if !ERRORLEVEL! NEQ 0 (
     echo ERROR: Frontend build failed
-    pause
     exit /b 1
 )
 
@@ -385,6 +400,16 @@ echo [PC App] Step 2/2: Launch BlurArc.py
 cd /d "%ROOT_DIR%"
 start "BlurArc" "%PYTHON%" "%ROOT_DIR%\src\BlurArc.py"
 echo PC app launched.
+exit /b 0
+
+:: ====================== 启动 PC 端（菜单入口） ======================
+:run_pc_app
+echo.
+call :run_pc_app_core
+if !ERRORLEVEL! NEQ 0 (
+    pause
+    exit /b 1
+)
 echo.
 pause
 exit /b 0
