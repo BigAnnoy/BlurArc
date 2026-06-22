@@ -1787,7 +1787,8 @@ def _perform_import_check(source_path: Path, progress_callback=None):
             key = (size, exif_str)
             if key not in prescan_index:
                 prescan_index[key] = []
-            prescan_index[key].append((file, md5_hash))
+            # 携带 size：缓存命中时复用，避免 _compute_target_md5 重复 stat()
+            prescan_index[key].append((file, md5_hash, size))
             if total_prescan > 0:
                 stage_progress = 75 + int((idx / total_prescan) * 7)
                 emit(stage_progress, 'target_duplicates', f'建立预筛索引... {idx}/{total_prescan}')
@@ -1803,22 +1804,8 @@ def _perform_import_check(source_path: Path, progress_callback=None):
                 exif_str = exif_dt.isoformat() if exif_dt else None
                 source_keys.add((size, exif_str))
 
-        # 兜底：若存在未命中的源 key（DB 中没有对应记录，可能相册未被索引），
-        # 追加一次文件系统扫描补齐预筛索引，确保不漏检已在相册中但未入库的文件
-        missing_keys = {k for k in source_keys if k not in prescan_index}
-        if missing_keys:
-            logger.info(f"DB 预筛索引有 {len(missing_keys)} 个源 key 缺失，追加文件系统扫描补齐")
-            for file in album_path.rglob('*'):
-                if file.is_file() and file.suffix.lower() in MEDIA_FORMATS:
-                    try:
-                        size = file.stat().st_size
-                        exif_dt = _get_exif_datetime_fast(file)
-                        exif_str = exif_dt.isoformat() if exif_dt else None
-                        key = (size, exif_str)
-                        if key in missing_keys and key not in prescan_index:
-                            prescan_index[key] = [(file, None)]
-                    except OSError:
-                        continue
+        # 不再做 rglob 兜底：DB 没收录的相册文件视为非重复
+        # （走导入流程入库是硬性约定，手动复制进相册请走导入或重新扫描）
 
         # 只对与源文件特征匹配的相册文件计算 MD5
         # 优先使用数据库缓存的 md5_hash，缺失时才执行 I/O 计算
@@ -1831,20 +1818,24 @@ def _perform_import_check(source_path: Path, progress_callback=None):
         total_candidates = len(candidate_target_files)
 
         if candidate_target_files:
-            def _compute_target_md5(file_and_md5):
+            def _compute_target_md5(file_md5_size):
                 """计算相册文件的 MD5，优先使用数据库缓存
 
-                file_and_md5: (Path, str|None) — 文件路径和缓存的 md5_hash
+                file_md5_size: (Path, str|None, int) — 文件路径、缓存的 md5_hash、缓存的 size
                 """
-                file, cached_md5 = file_and_md5
+                file, cached_md5, cached_size = file_md5_size
                 if cached_md5:
                     md5_hash = cached_md5
                 else:
                     md5_hash = calculate_md5(file)
-                try:
-                    file_size = file.stat().st_size
-                except OSError:
-                    file_size = 0
+                # 优先复用 DB/FS 阶段已读取的 size，避免对每个候选文件 stat() 一次
+                if cached_size:
+                    file_size = cached_size
+                else:
+                    try:
+                        file_size = file.stat().st_size
+                    except OSError:
+                        file_size = 0
                 return (file, md5_hash, file_size)
 
             md5_results = []

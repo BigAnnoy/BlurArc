@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, create_engine
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Index, create_engine
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from sqlalchemy.sql import func
 
@@ -44,7 +44,9 @@ class Photo(Base):
     md5_hash = Column(String(32), index=True)  # 不加 unique：同一 MD5 允许多个 _dup 副本
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     modified_at = Column(DateTime(timezone=True), onupdate=func.now())
-    media_date = Column(DateTime(timezone=True))
+    # media_date 加索引：手机端 /api/mobile/photos/sections 按月 GROUP BY 必须扫 media_date，
+    # 没索引时 20k+ 照片首查会扫整表（这就是手机首次"加载中"卡住的根因之一）。
+    media_date = Column(DateTime(timezone=True), index=True)
     file_type = Column(String(10), nullable=False)  # 'photo' or 'video'
     extension = Column(String(10), nullable=False)
     thumbnail_path = Column(Text)
@@ -131,7 +133,20 @@ def init_db():
     """初始化数据库"""
     # 创建所有表
     Base.metadata.create_all(bind=engine)
-    
+
+    # 迁移：为 photos.media_date 加索引（首次移动端首查卡住的根因）
+    # create_all 不会给旧表补索引，必须手动建。幂等：IF NOT EXISTS
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                __import__('sqlalchemy').text(
+                    "CREATE INDEX IF NOT EXISTS ix_photos_media_date ON photos (media_date)"
+                )
+            )
+            conn.commit()
+    except Exception:
+        pass  # 表尚未创建时忽略（由 create_all 负责）
+
     # 迁移：为旧数据库补加 total_size 列（幂等，仅当列不存在时执行）
     try:
         with engine.connect() as conn:
