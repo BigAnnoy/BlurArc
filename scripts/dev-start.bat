@@ -17,6 +17,7 @@ set ANDROID_SDK=C:\Users\BIGANNOY\AppData\Local\Android\Sdk
 set ADB=%ANDROID_SDK%\platform-tools\adb.exe
 set EMULATOR=%ANDROID_SDK%\emulator\emulator.exe
 set AVD_NAME=BlurArc_Test
+set AVD_TABLET_NAME=BlurArc_Tablet
 set APP_PACKAGE=com.example.blurarc_app
 :: ======================================================================
 
@@ -32,10 +33,12 @@ echo  [3] Deploy to emulator (build APK + install to emulator)
 echo  [4] Full start (backend + phone)
 echo  [5] Build PC exe (npm build + PyInstaller)
 echo  [6] View backend log (last 50 lines)
-echo  [7] Exit
+echo  [7] Deploy to tablet emulator (build APK + install to tablet AVD)
+echo  [8] Run PC app (frontend build + python BlurArc.py)
+echo  [9] Exit
 echo.
 
-set /p CHOICE=Select [1-7]:
+set /p CHOICE=Select [1-9]:
 
 if "%CHOICE%"=="1" goto start_backend
 if "%CHOICE%"=="2" goto deploy_phone
@@ -43,8 +46,10 @@ if "%CHOICE%"=="3" goto deploy_emulator
 if "%CHOICE%"=="4" goto full_start_phone
 if "%CHOICE%"=="5" goto build_exe
 if "%CHOICE%"=="6" goto show_log
-if "%CHOICE%"=="7" exit /b 0
-echo Invalid input, please input 1~7
+if "%CHOICE%"=="7" goto deploy_tablet_emulator
+if "%CHOICE%"=="8" goto run_pc_app
+if "%CHOICE%"=="9" exit /b 0
+echo Invalid input, please input 1~9
 pause
 exit /b 1
 
@@ -133,8 +138,14 @@ echo.
 pause
 exit /b 0
 
-:: ====================== 部署到模拟器 ======================
-:deploy_emulator
+:: ====================== 部署到模拟器（公共，供手机/平板 AVD 共用） ======================
+:: 调用前需设置：
+::   DEPLOY_AVD_NAME        - AVD 名称
+::   DEPLOY_AVD_LABEL       - 用于日志显示的标签（"emulator"/"tablet emulator"）
+::   DEPLOY_AVD_SKIN        - 可选，emulator 启动参数 -skin 的值；留空则不加 -skin
+::   DEPLOY_WAIT_LABEL      - 启动窗口标题（"Android Emulator"/"Android Tablet Emulator"）
+::   DEPLOY_FINISH_MSG      - 结束提示语
+:deploy_avd_common
 echo.
 if not exist "%ADB%" (
     echo ERROR: adb not found: %ADB%
@@ -157,23 +168,30 @@ if not exist "%FLUTTER_PROJ%" (
     exit /b 1
 )
 
-echo Check AVD exists: %AVD_NAME%
-"%EMULATOR%" -list-avds | findstr "%AVD_NAME%" >nul
+echo Check AVD exists: %DEPLOY_AVD_NAME%
+"%EMULATOR%" -list-avds | findstr "%DEPLOY_AVD_NAME%" >nul
 if !ERRORLEVEL! NEQ 0 (
-    echo ERROR: AVD "%AVD_NAME%" does not exist
+    echo ERROR: AVD "%DEPLOY_AVD_NAME%" does not exist
     echo Available AVD list:
     "%EMULATOR%" -list-avds
+    echo.
+    echo Create one with Android Studio AVD Manager or:
+    echo   "%EMULATOR%" -create-avd -n %DEPLOY_AVD_NAME% -k "system-images;android-34;google_apis;x86_64" -d "pixel_tablet"
     pause
     exit /b 1
 )
 
 "%ADB%" devices 2>nul | findstr "emulator-" >nul
 if !ERRORLEVEL! NEQ 0 (
-    echo No running emulator, launch AVD %AVD_NAME%
-    start "Android Emulator" "%EMULATOR%" -avd %AVD_NAME%
+    echo No running %DEPLOY_AVD_LABEL%, launch AVD %DEPLOY_AVD_NAME%
+    if defined DEPLOY_AVD_SKIN (
+        start "%DEPLOY_WAIT_LABEL%" "%EMULATOR%" -avd %DEPLOY_AVD_NAME% -skin %DEPLOY_AVD_SKIN%
+    ) else (
+        start "%DEPLOY_WAIT_LABEL%" "%EMULATOR%" -avd %DEPLOY_AVD_NAME%
+    )
 
     echo Wait emulator device online
-    :wait_emulator_dev
+    :wait_avd_dev
     timeout /t 10 /nobreak >nul
     "%ADB%" devices 2>nul | findstr "emulator-" >nul
     if !ERRORLEVEL! NEQ 0 (
@@ -182,24 +200,24 @@ if !ERRORLEVEL! NEQ 0 (
             pause
             exit /b 1
         )
-        goto wait_emulator_dev
+        goto wait_avd_dev
     )
 
     echo Wait system boot complete
-    :wait_system_boot
+    :wait_avd_boot
     "%ADB%" shell getprop sys.boot_completed 2>nul | findstr "1" >nul
     if !ERRORLEVEL! NEQ 0 (
         timeout /t 5 /nobreak >nul
-        goto wait_system_boot
+        goto wait_avd_boot
     )
-    echo Emulator boot finished
+    echo %DEPLOY_AVD_LABEL% boot finished
 ) else (
     echo Emulator already running
 )
 
 call :build_apk
 
-echo Install APK to emulator
+echo Install APK to %DEPLOY_AVD_LABEL%
 "%ADB%" install -r "build\app\outputs\flutter-apk\app-debug.apk"
 if !ERRORLEVEL! NEQ 0 (
     echo ERROR: Install APK failed
@@ -209,10 +227,18 @@ if !ERRORLEVEL! NEQ 0 (
 
 echo Launch App
 "%ADB%" shell am start -n %APP_PACKAGE%/.MainActivity
-echo Deploy finished!
+echo %DEPLOY_FINISH_MSG%
 echo.
 pause
 exit /b 0
+
+:: ====================== 部署到模拟器（手机 AVD） ======================
+:deploy_emulator
+set DEPLOY_AVD_NAME=%AVD_NAME%
+set DEPLOY_AVD_LABEL=emulator
+set DEPLOY_WAIT_LABEL=Android Emulator
+set DEPLOY_FINISH_MSG=Deploy finished!
+call :deploy_avd_common
 
 :: ====================== 一键启动（后端 + 手机） ======================
 :full_start_phone
@@ -266,6 +292,51 @@ echo Build successful!
 echo ==========================================
 echo Output: dist\BlurArc\
 for %%f in ("%ROOT_DIR%\dist\BlurArc\BlurArc.exe") do echo   BlurArc.exe: %%~zf bytes
+echo.
+pause
+exit /b 0
+
+:: ====================== 部署到平板模拟器 ======================
+:deploy_tablet_emulator
+set DEPLOY_AVD_NAME=%AVD_TABLET_NAME%
+set DEPLOY_AVD_LABEL=tablet emulator
+set DEPLOY_AVD_SKIN=1280x800
+set DEPLOY_WAIT_LABEL=Android Tablet Emulator
+set DEPLOY_FINISH_MSG=Deploy to tablet finished!
+call :deploy_avd_common
+
+:: ====================== 启动 PC 端（前端构建 + BlurArc.py） ======================
+:run_pc_app
+echo.
+if not exist "%PYTHON%" (
+    echo ERROR: Python not found: %PYTHON%
+    pause
+    exit /b 1
+)
+if not exist "%ROOT_DIR%\frontend\package.json" (
+    echo ERROR: frontend/package.json not found: %ROOT_DIR%\frontend
+    pause
+    exit /b 1
+)
+if not exist "%ROOT_DIR%\src\BlurArc.py" (
+    echo ERROR: src/BlurArc.py not found: %ROOT_DIR%\src
+    pause
+    exit /b 1
+)
+
+echo [PC App] Step 1/2: Build frontend (npm run build)
+cd /d "%ROOT_DIR%\frontend"
+call npm run build
+if !ERRORLEVEL! NEQ 0 (
+    echo ERROR: Frontend build failed
+    pause
+    exit /b 1
+)
+
+echo [PC App] Step 2/2: Launch BlurArc.py
+cd /d "%ROOT_DIR%"
+start "BlurArc" "%PYTHON%" "%ROOT_DIR%\src\BlurArc.py"
+echo PC app launched.
 echo.
 pause
 exit /b 0

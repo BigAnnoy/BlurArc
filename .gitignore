@@ -82,3 +82,6 @@ ehthumbs.db
 
 # ── Temp debug scripts ──────────────────────────────────
 test_pairing_*.py
+
+# ── Temporary debug files ────────────────────────────────
+.tmp_*.txt

@@ -15,11 +15,16 @@ class ApiClient {
   int? _port;
   String? _token;
   void Function()? onDisconnected;
+  // 仅在已经成功建立过连接后才允许触发 onDisconnected，避免首次请求失败时误断连
+  bool _everConnected = false;
 
   ApiClient({this.onDisconnected}) {
     _dio = Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 5),
-      receiveTimeout: const Duration(seconds: 10),
+      // 修复：补 sendTimeout。/api/mobile/photos/sections 等接口先做 DB 查询再回 JSON，
+      // 首次请求可能 >10s，没有 sendTimeout 会导致 loading 永远转。
+      sendTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
     ));
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
@@ -28,14 +33,23 @@ class ApiClient {
         }
         handler.next(options);
       },
+      onResponse: (response, handler) {
+        // 收到任何 2xx 响应都视为已建立连接（覆盖 onError 中"曾经连接过"的判断）
+        if (response.statusCode != null && response.statusCode! < 500) {
+          _everConnected = true;
+        }
+        handler.next(response);
+      },
       onError: (error, handler) {
         if (error.response?.statusCode == 401) {
           _token = null;
           _clearStored();
-        } else if (error.type == DioExceptionType.connectionTimeout ||
-            error.type == DioExceptionType.connectionError ||
-            error.type == DioExceptionType.sendTimeout) {
-          // PC 端可能断开了连接
+        } else if (_everConnected &&
+            (error.type == DioExceptionType.connectionTimeout ||
+                error.type == DioExceptionType.connectionError ||
+                error.type == DioExceptionType.sendTimeout)) {
+          // PC 端可能断开了连接（仅在曾经成功连接过的情况下触发，避免配对阶段误判）
+          _everConnected = false;
           onDisconnected?.call();
         }
         handler.next(error);
@@ -45,6 +59,7 @@ class ApiClient {
 
   String? get host => _host;
   int? get port => _port;
+  String? get token => _token;
 
   /// 解析主机地址：Android 模拟器上把 127.0.0.1 / localhost 替换为 10.0.2.2
   String get _resolvedHost {
@@ -99,7 +114,8 @@ class ApiClient {
   }
 
   /// Pair request with a pairing code
-  Future<Map<String, dynamic>> pairRequest(String code, String deviceName) async {
+  Future<Map<String, dynamic>> pairRequest(
+      String code, String deviceName) async {
     final res = await _dio.post('$baseUrl/api/mobile/pair-request',
         data: {'code': code, 'device_name': deviceName});
     return res.data as Map<String, dynamic>;
@@ -151,9 +167,8 @@ class ApiClient {
 
   /// 提交配对码（新流程：用户在手机端输入配对码后调用）
   Future<String?> submitPairingCode(String code, String deviceName) async {
-    final res = await _dio.post(
-      '$baseUrl/api/mobile/pairing/submit-code',
-      data: {'code': code, 'device_name': deviceName});
+    final res = await _dio.post('$baseUrl/api/mobile/pairing/submit-code',
+        data: {'code': code, 'device_name': deviceName});
     final data = res.data as Map<String, dynamic>;
     if (data['status'] == 'paired') {
       return data['token'] as String;
@@ -217,8 +232,8 @@ class ApiClient {
 
   /// Get EXIF
   Future<Map<String, dynamic>> getExif(String path) async {
-    final res = await _dio.get('$baseUrl/api/mobile/exif',
-        queryParameters: {'path': path});
+    final res = await _dio
+        .get('$baseUrl/api/mobile/exif', queryParameters: {'path': path});
     return res.data as Map<String, dynamic>;
   }
 
@@ -226,7 +241,10 @@ class ApiClient {
   Future<Map<String, dynamic>> getPhotoSections(
       {int page = 1, int pageSize = 60}) async {
     final res = await _dio.get('$baseUrl/api/mobile/photos/sections',
-        queryParameters: {'page': page, 'page_size': pageSize});
+            queryParameters: {'page': page, 'page_size': pageSize})
+        // 客户端兜底：15s 还没收到首字节就主动抛 TimeoutException
+        // （Dio 的 sendTimeout=30s 是最后保险，客户端 .timeout 更快失败）
+        .timeout(const Duration(seconds: 15));
     return res.data as Map<String, dynamic>;
   }
 
@@ -234,7 +252,28 @@ class ApiClient {
   Future<Map<String, dynamic>> getPhotosByMonth(String month,
       {int page = 1, int pageSize = 60}) async {
     final res = await _dio.get('$baseUrl/api/mobile/photos/by-month',
-        queryParameters: {'month': month, 'page': page, 'page_size': pageSize});
+        queryParameters: {
+          'month': month,
+          'page': page,
+          'page_size': pageSize
+        }).timeout(const Duration(seconds: 15));
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Get all photos grouped by month (continuous grid for AlbumScreen)
+  /// Returns: { sections: [{month, display, count, photos: [...], has_more_photos}],
+  ///           has_more, available_months, page, page_size }
+  Future<Map<String, dynamic>> getAllPhotosBySection({
+    int page = 1,
+    int pageSize = 6, // 每页几个月
+    int photosPerSection = 60, // 每组最多返回几张
+  }) async {
+    final res =
+        await _dio.get('$baseUrl/api/mobile/photos/all', queryParameters: {
+      'page': page,
+      'page_size': pageSize,
+      'photos_per_section': photosPerSection,
+    }).timeout(const Duration(seconds: 30));
     return res.data as Map<String, dynamic>;
   }
 
@@ -257,8 +296,7 @@ class ApiClient {
   }
 
   /// Upload a file (streaming — does NOT load entire file into memory)
-  Future<Map<String, dynamic>> uploadFile(
-      String filePath, String fileName,
+  Future<Map<String, dynamic>> uploadFile(String filePath, String fileName,
       {void Function(int sent, int total)? onProgress}) async {
     final formData = FormData.fromMap({
       'file': MultipartFile.fromFileSync(filePath, filename: fileName),
