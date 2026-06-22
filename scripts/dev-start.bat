@@ -35,10 +35,12 @@ echo  [5] Build PC exe (npm build + PyInstaller)
 echo  [6] View backend log (last 50 lines)
 echo  [7] Deploy to tablet emulator (build APK + install to tablet AVD)
 echo  [8] Run PC app (frontend build + python BlurArc.py)
-echo  [9] Exit
+echo  [9] Hot run phone emulator   (flutter run -d, hot reload supported)
+echo  [10] Hot run tablet emulator (flutter run -d, hot reload supported)
+echo  [11] Exit
 echo.
 
-set /p CHOICE=Select [1-9]:
+set /p CHOICE=Select [1-11]:
 
 if "%CHOICE%"=="1" goto start_backend
 if "%CHOICE%"=="2" goto deploy_phone
@@ -48,8 +50,10 @@ if "%CHOICE%"=="5" goto build_exe
 if "%CHOICE%"=="6" goto show_log
 if "%CHOICE%"=="7" goto deploy_tablet_emulator
 if "%CHOICE%"=="8" goto run_pc_app
-if "%CHOICE%"=="9" exit /b 0
-echo Invalid input, please input 1~9
+if "%CHOICE%"=="9" goto hotrun_emulator
+if "%CHOICE%"=="10" goto hotrun_tablet_emulator
+if "%CHOICE%"=="11" exit /b 0
+echo Invalid input, please input 1~11
 pause
 exit /b 1
 
@@ -145,6 +149,7 @@ exit /b 0
 ::   DEPLOY_AVD_SKIN        - 可选，emulator 启动参数 -skin 的值；留空则不加 -skin
 ::   DEPLOY_WAIT_LABEL      - 启动窗口标题（"Android Emulator"/"Android Tablet Emulator"）
 ::   DEPLOY_FINISH_MSG      - 结束提示语
+::   DEPLOY_HOT             - 可选，"1"=热更新模式（flutter run），其余=正常 install 模式
 :deploy_avd_common
 echo.
 if not exist "%ADB%" (
@@ -215,6 +220,31 @@ if !ERRORLEVEL! NEQ 0 (
     echo Emulator already running
 )
 
+:: ====================== 模式分支 ======================
+if "%DEPLOY_HOT%"=="1" goto hotrun_branch
+goto install_branch
+
+:hotrun_branch
+echo.
+echo ============================================================
+echo Hot run Flutter on %DEPLOY_AVD_LABEL% (auto-detect device)
+echo ============================================================
+echo Tips: Press  r  = hot reload  (preserve state, ~1-2s)
+echo       Press  R  = hot restart (reset state,    ~5s)
+echo       Press  q  = quit
+echo       Press  h  = help (more commands)
+echo Note : Modify .dart code in IDE and save, then press r.
+echo        First run takes longer (build & install on device).
+echo ============================================================
+echo.
+cd /d "%FLUTTER_PROJ%"
+call "%FLUTTER_BIN%" run
+echo.
+echo [Hot run] flutter run exited
+pause
+exit /b 0
+
+:install_branch
 call :build_apk
 
 echo Install APK to %DEPLOY_AVD_LABEL%
@@ -303,6 +333,24 @@ set DEPLOY_AVD_LABEL=tablet emulator
 set DEPLOY_AVD_SKIN=1280x800
 set DEPLOY_WAIT_LABEL=Android Tablet Emulator
 set DEPLOY_FINISH_MSG=Deploy to tablet finished!
+call :deploy_avd_common
+
+:: ====================== 热更新模式（手机 AVD） ======================
+:hotrun_emulator
+set DEPLOY_AVD_NAME=%AVD_NAME%
+set DEPLOY_AVD_LABEL=phone emulator
+set DEPLOY_AVD_SKIN=
+set DEPLOY_WAIT_LABEL=Android Emulator
+set DEPLOY_HOT=1
+call :deploy_avd_common
+
+:: ====================== 热更新模式（平板 AVD） ======================
+:hotrun_tablet_emulator
+set DEPLOY_AVD_NAME=%AVD_TABLET_NAME%
+set DEPLOY_AVD_LABEL=tablet emulator
+set DEPLOY_AVD_SKIN=1280x800
+set DEPLOY_WAIT_LABEL=Android Tablet Emulator
+set DEPLOY_HOT=1
 call :deploy_avd_common
 
 :: ====================== 启动 PC 端（前端构建 + BlurArc.py） ======================
