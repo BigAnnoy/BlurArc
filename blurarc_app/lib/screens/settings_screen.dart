@@ -14,68 +14,120 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final themeProvider = context.watch<ThemeProvider>();
+    final isTablet = MediaQuery.of(context).size.width > 600;
 
     return ListView(
+      padding: const EdgeInsets.all(16),
       children: [
-        // === 连接信息 ===
-        const _SectionHeader(title: '连接信息'),
-        ListTile(
-          leading: Icon(Icons.wifi, color: theme.colorScheme.primary),
-          title: const Text('电脑地址'),
-          subtitle: Text('${api.host}:${api.port}'),
-        ),
-        const Divider(indent: 72),
-
-        // === 显示 ===
-        const _SectionHeader(title: '显示'),
-        ListTile(
-          leading: Icon(Icons.brightness_6, color: theme.colorScheme.primary),
-          title: const Text('主题模式'),
-          subtitle: Text(_themeLabel(themeProvider.mode)),
-          trailing: SegmentedButton<ThemeMode>(
-            segments: const [
-              ButtonSegment(value: ThemeMode.system, label: Text('自动')),
-              ButtonSegment(value: ThemeMode.light, label: Text('亮色')),
-              ButtonSegment(value: ThemeMode.dark, label: Text('暗色')),
+        // ===== 连接信息卡片 =====
+        if (!isTablet) const _SettingsSectionTitle('设备信息'),
+        _SettingsCard(
+          child: Column(
+            children: [
+              const _SettingsItem(
+                label: '设备名称',
+                value: Text(
+                  '我的手机',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF9aa5b5),
+                  ),
+                ),
+              ),
+              const _SettingsDivider(),
+              _SettingsItem(
+                label: 'Token',
+                value: Text(
+                  _truncateToken(api.token),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    color: Color(0xFF9aa5b5),
+                  ),
+                ),
+              ),
+              const _SettingsDivider(),
+              _SettingsItem(
+                label: '电脑地址',
+                value: Text(
+                  '${api.host}:${api.port}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF9aa5b5),
+                  ),
+                ),
+              ),
             ],
-            selected: {themeProvider.mode},
-            onSelectionChanged: (sel) =>
-                themeProvider.setTheme(sel.first),
-            style: ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              textStyle: WidgetStateProperty.all(
-                  theme.textTheme.bodySmall),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ===== 主题选择卡片 =====
+        if (!isTablet) const _SettingsSectionTitle('显示'),
+        _SettingsCard(
+          child: _SettingsItem(
+            label: '主题',
+            customTrailing: _ThemeRadioGroup(themeProvider: themeProvider),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ===== 仅 Wi-Fi 上传 =====
+        const _SettingsCard(
+          child: _SettingsItem(
+            label: '仅在 Wi-Fi 下上传',
+            customTrailing: _WifiOnlyToggle(),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ===== 关于 =====
+        if (!isTablet) const _SettingsSectionTitle('关于'),
+        const _SettingsCard(
+          child: _SettingsItem(
+            label: 'Blur Arc',
+            value: Text(
+              'v1.0.0',
+              style: TextStyle(fontSize: 13, color: Color(0xFF9aa5b5)),
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 24),
 
-        // === 上传 ===
-        const _SectionHeader(title: '上传'),
-        _WifiOnlyToggle(api: api),
-        const Divider(indent: 72),
-
-        // === 断开连接 ===
-        const _SectionHeader(title: '账户'),
-        ListTile(
-          leading: Icon(Icons.link_off, color: theme.colorScheme.error),
-          title: Text('断开连接',
-              style: TextStyle(color: theme.colorScheme.error)),
-          subtitle: const Text('断开后需要重新配对'),
-          onTap: () => _disconnect(context),
-        ),
-        const Divider(indent: 72),
-
-        // === 关于 ===
-        const _SectionHeader(title: '关于'),
-        const ListTile(
-          leading: Icon(Icons.info),
-          title: Text('Blur Arc'),
-          subtitle: Text('v1.0.0'),
+        // ===== 断开连接（危险按钮） =====
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () => _disconnect(context),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                side: BorderSide(
+                  color: theme.colorScheme.error,
+                  width: 1,
+                ),
+                foregroundColor: theme.colorScheme.error,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                '断开连接',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 32),
       ],
     );
+  }
+
+  String _truncateToken(String? token) {
+    if (token == null || token.isEmpty) return '-';
+    if (token.length <= 12) return token;
+    return '${token.substring(0, 8)}...';
   }
 
   void _disconnect(BuildContext context) async {
@@ -105,43 +157,189 @@ class SettingsScreen extends StatelessWidget {
       );
     }
   }
+}
 
-  String _themeLabel(ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.dark:
-        return '深色模式';
-      case ThemeMode.light:
-        return '浅色模式';
-      case ThemeMode.system:
-        return '跟随系统';
-    }
+// ===== Settings Card 容器 =====
+class _SettingsCard extends StatelessWidget {
+  final Widget child;
+  const _SettingsCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: theme.brightness == Brightness.light
+            ? [
+                BoxShadow(
+                  color: Colors.black.withAlpha(8),
+                  blurRadius: 3,
+                  offset: const Offset(0, 1),
+                ),
+              ]
+            : null,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: child,
+    );
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader({required this.title});
+// ===== Settings Item =====
+class _SettingsItem extends StatelessWidget {
+  final String label;
+  final Widget? value;
+  final Widget? customTrailing;
+
+  const _SettingsItem({
+    required this.label,
+    this.value,
+    this.customTrailing,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+          if (customTrailing != null)
+            customTrailing!
+          else if (value != null)
+            value!,
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsDivider extends StatelessWidget {
+  const _SettingsDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 0.5,
+      margin: const EdgeInsets.only(left: 16),
+      color: Theme.of(context).dividerColor,
+    );
+  }
+}
+
+// ===== Settings Section Title (mobile only) =====
+// 原型 mobile: 大写、letter-spacing 0.5px、字色 text-tertiary、padding 0 4px 8px
+class _SettingsSectionTitle extends StatelessWidget {
+  final String text;
+  const _SettingsSectionTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
       child: Text(
-        title,
+        text.toUpperCase(),
         style: TextStyle(
           fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.primary,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.5,
+          color: Theme.of(context).colorScheme.onSurface.withAlpha(120),
         ),
       ),
     );
   }
 }
 
-/// Wi-Fi 上传开关（持久化到 shared_preferences）
+// ===== Theme Radio Group =====
+class _ThemeRadioGroup extends StatelessWidget {
+  final ThemeProvider themeProvider;
+  const _ThemeRadioGroup({required this.themeProvider});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+    // 原型顺序：跟随系统 / 深色 / 浅色
+    final options = [
+      (ThemeMode.system, '跟随系统'),
+      (ThemeMode.dark, '深色'),
+      (ThemeMode.light, '浅色'),
+    ];
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: options.map((opt) {
+        final selected = opt.$1 == themeProvider.mode;
+        return Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: _RadioBtn(
+            label: opt.$2,
+            selected: selected,
+            onTap: () => themeProvider.setTheme(opt.$1),
+            primary: primary,
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _RadioBtn extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final Color primary;
+
+  const _RadioBtn({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    required this.primary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: selected ? primary.withAlpha(15) : Colors.transparent,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: selected ? primary : theme.dividerColor,
+              width: 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: selected
+                  ? primary
+                  : theme.colorScheme.onSurface.withAlpha(180),
+              fontWeight: selected ? FontWeight.w500 : FontWeight.normal,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ===== Wi-Fi Only Toggle =====
 class _WifiOnlyToggle extends StatefulWidget {
-  final ApiClient api;
-  const _WifiOnlyToggle({required this.api});
+  const _WifiOnlyToggle();
 
   @override
   State<_WifiOnlyToggle> createState() => _WifiOnlyToggleState();
@@ -158,7 +356,9 @@ class _WifiOnlyToggleState extends State<_WifiOnlyToggle> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() => _wifiOnly = prefs.getBool('upload_wifi_only') ?? false);
+    if (mounted) {
+      setState(() => _wifiOnly = prefs.getBool('upload_wifi_only') ?? false);
+    }
   }
 
   Future<void> _set(bool value) async {
@@ -169,14 +369,55 @@ class _WifiOnlyToggleState extends State<_WifiOnlyToggle> {
 
   @override
   Widget build(BuildContext context) {
+    return _CustomSwitch(
+      value: _wifiOnly,
+      onChanged: _set,
+    );
+  }
+}
+
+class _CustomSwitch extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  const _CustomSwitch({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListTile(
-      leading: Icon(Icons.wifi_find, color: theme.colorScheme.primary),
-      title: const Text('仅在 Wi-Fi 下上传'),
-      subtitle: const Text('节省移动数据流量'),
-      trailing: Switch(
-        value: _wifiOnly,
-        onChanged: _set,
+    return InkWell(
+      onTap: () => onChanged(!value),
+      borderRadius: BorderRadius.circular(13),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 44,
+        height: 26,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: value
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurface.withAlpha(20),
+          borderRadius: BorderRadius.circular(13),
+        ),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            width: 20,
+            height: 20,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 2,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

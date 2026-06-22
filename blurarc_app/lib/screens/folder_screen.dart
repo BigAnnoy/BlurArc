@@ -63,16 +63,47 @@ class _FolderScreenState extends State<FolderScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isTablet = MediaQuery.of(context).size.width > 600;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_currentPath.isNotEmpty
-            ? _currentPath.split('/').last
-            : '文件夹'),
-      ),
+      // 原型 mobile：无 AppBar，顶部只有 `‹ 返回相册` 文本按钮
+      // 原型 tablet：保留 AppBar（带路径标题）
+      appBar: isTablet
+          ? AppBar(
+              title: Text(_currentPath.isNotEmpty
+                  ? _currentPath.split('/').last
+                  : '文件夹'),
+            )
+          : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                // mobile: 顶部返回按钮；tablet: 跳过（已由 AppBar 提供）
+                if (!isTablet)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: InkWell(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: const Padding(
+                        padding: EdgeInsets.fromLTRB(12, 8, 12, 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '‹',
+                              style: TextStyle(fontSize: 20, height: 1.0),
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              '返回相册',
+                              style: TextStyle(fontSize: 15),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 // 面包屑导航
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4),

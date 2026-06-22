@@ -13,9 +13,8 @@ class BlurArcLogo extends StatelessWidget {
       'assets/logo/blur_arc_logo.svg',
       width: size,
       height: size,
-      colorFilter: color != null
-          ? ColorFilter.mode(color!, BlendMode.srcIn)
-          : null,
+      colorFilter:
+          color != null ? ColorFilter.mode(color!, BlendMode.srcIn) : null,
     );
   }
 }
@@ -23,18 +22,20 @@ class BlurArcLogo extends StatelessWidget {
 class BlurArcLogoWithText extends StatelessWidget {
   final double logoSize;
   final double fontSize;
+  final FontWeight fontWeight;
   final Color? color;
 
   const BlurArcLogoWithText({
     super.key,
-    this.logoSize = 24,
-    this.fontSize = 14,
+    this.logoSize = 28,
+    this.fontSize = 17,
+    this.fontWeight = FontWeight.w600,
     this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? const Color(0xFF0891b2);
+    final c = color ?? Theme.of(context).colorScheme.primary;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -44,7 +45,7 @@ class BlurArcLogoWithText extends StatelessWidget {
           'Blur Arc',
           style: TextStyle(
             fontSize: fontSize,
-            fontWeight: FontWeight.w500,
+            fontWeight: fontWeight,
             color: c,
           ),
         ),

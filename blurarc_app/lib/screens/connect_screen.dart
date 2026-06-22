@@ -86,7 +86,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
       await for (final service in _mdns.discover()) {
         setState(() {
           // 去重
-          if (!_discovered.any((s) => s.host == service.host && s.port == service.port)) {
+          if (!_discovered
+              .any((s) => s.host == service.host && s.port == service.port)) {
             _discovered.add(service);
           }
         });
@@ -155,34 +156,70 @@ class _ConnectScreenState extends State<ConnectScreen> {
       body: _checkingToken
           ? const Center(child: CircularProgressIndicator())
           : _pcOffline
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.wifi_off, size: 64, color: Colors.grey),
-                    const SizedBox(height: 16),
-                    const Text('PC 端未开启',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text(_statusMessage,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 14, color: Colors.grey)),
-                    const SizedBox(height: 24),
-                    FilledButton.icon(
-                      onPressed: () {
-                        setState(() => _pcOffline = false);
-                        _startDiscovery();
-                      },
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('重新搜索'),
+              ? Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.wifi_off,
+                            size: 64, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        const Text('PC 端未开启',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Text(_statusMessage,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontSize: 14, color: Colors.grey)),
+                        const SizedBox(height: 24),
+                        FilledButton.icon(
+                          onPressed: () {
+                            setState(() => _pcOffline = false);
+                            _startDiscovery();
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('重新搜索'),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            )
-          : Padding(
+                  ),
+                )
+              : _buildDiscoveryBody(),
+    );
+  }
+
+  /// 第一步：发现设备 body
+  /// - 有设备列表：Column + Expanded(ListView) 填满剩余空间
+  /// - 无设备列表（手动输入）：SingleChildScrollView 防止小屏 overflow
+  Widget _buildDiscoveryBody() {
+    final hasDevices = _discovered.isNotEmpty;
+
+    if (hasDevices) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+            child: Column(
+              children: [
+                Text(_statusMessage,
+                    style: const TextStyle(fontSize: 14, color: Colors.grey)),
+                const SizedBox(height: 12),
+                const StepIndicator(currentStep: 1, totalSteps: 2),
+                const SizedBox(height: 8),
+                const Text('步骤 1/2：连接设备', style: TextStyle(fontSize: 14)),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+          Expanded(child: _buildDeviceList()),
+        ],
+      );
+    }
+
+    return SafeArea(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -194,16 +231,12 @@ class _ConnectScreenState extends State<ConnectScreen> {
             const StepIndicator(currentStep: 1, totalSteps: 2),
             const SizedBox(height: 8),
             const Text('步骤 1/2：连接设备',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14)),
+                textAlign: TextAlign.center, style: TextStyle(fontSize: 14)),
             const SizedBox(height: 24),
-
-            if (_isScanning && _discovered.isEmpty)
+            if (_isScanning)
               const Center(child: CircularProgressIndicator())
-            else if (_discovered.isEmpty)
-              _buildManualEntry()
             else
-              Expanded(child: _buildDeviceList()),
+              _buildManualEntry(),
           ],
         ),
       ),
@@ -218,7 +251,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: ListTile(
-            leading: const Icon(Icons.computer, size: 40, color: Color(0xFF22D3EE)),
+            leading:
+                const Icon(Icons.computer, size: 40, color: Color(0xFF22D3EE)),
             title: Text(service.name),
             subtitle: Text('${service.host}:${service.port}'),
             trailing: const Icon(Icons.chevron_right),
@@ -236,7 +270,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('或手动输入', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        const Text('或手动输入',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -246,7 +281,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 decoration: const InputDecoration(
                   hintText: 'IP 地址',
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
               ),
             ),
@@ -261,7 +297,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 decoration: const InputDecoration(
                   hintText: '8900',
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
                 keyboardType: TextInputType.number,
               ),

@@ -29,12 +29,12 @@ class _UploadScreenState extends State<UploadScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cloud_off, size: 48,
-                color: theme.colorScheme.onSurface.withAlpha(80)),
+            Icon(Icons.cloud_off,
+                size: 48, color: theme.colorScheme.onSurface.withAlpha(80)),
             const SizedBox(height: 12),
             Text('未连接到电脑',
                 style: TextStyle(
-                    color: theme.colorScheme.onSurface.withAlpha(120))),
+                    color: theme.colorScheme.onSurface.withAlpha(150))),
           ],
         ),
       );
@@ -42,112 +42,180 @@ class _UploadScreenState extends State<UploadScreen> {
 
     final pendingCount =
         _items.where((i) => i.status == UploadStatus.pending).length;
+    final isTablet = MediaQuery.of(context).size.width > 600;
 
     return Column(
       children: [
-        // "清空" button row (moved from AppBar.actions)
-        if (_items.isNotEmpty && !_isUploading)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: _clearAll,
-                  child: Text('清空',
-                      style: TextStyle(color: theme.colorScheme.error)),
-                ),
-              ],
-            ),
-          ),
-        // 文件选择区域
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: InkWell(
-            onTap: _isUploading ? null : _pickFiles,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              width: double.infinity,
-              height: 100,
-              decoration: BoxDecoration(
-                border: Border.all(color: theme.dividerColor, width: 1),
-                borderRadius: BorderRadius.circular(12),
-                color: theme.colorScheme.surface,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add_photo_alternate, size: 32,
-                      color: theme.colorScheme.primary),
-                  const SizedBox(height: 4),
-                  Text('点击选择照片或视频',
-                      style: theme.textTheme.bodyMedium),
-                  Text('支持 JPG/PNG/MP4/MOV', style: theme.textTheme.bodySmall),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // 统计
-        if (_items.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Text('${_items.length} 个文件', style: theme.textTheme.bodySmall),
-                const Spacer(),
-                Text(_formatSize(_items.fold<int>(0, (sum, i) => sum + i.size)),
-                    style: theme.textTheme.bodySmall),
-              ],
-            ),
-          ),
-        const Divider(height: 1),
-        // 上传列表
+        // 上传区域（dropzone + 列表）
         Expanded(
-          child: _items.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.cloud_upload_outlined, size: 48,
-                          color: theme.colorScheme.onSurface.withAlpha(60)),
-                      const SizedBox(height: 12),
-                      Text('选择文件开始上传',
-                          style: TextStyle(
-                              color: theme.colorScheme.onSurface.withAlpha(80))),
-                    ],
-                  ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+                isTablet ? 16 : 12, 16, isTablet ? 16 : 12, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 大虚线框 dropzone
+                _buildDropzone(theme),
+                const SizedBox(height: 16),
+                // 文件列表
+                if (_items.isNotEmpty) _buildUploadList(),
+              ],
+            ),
+          ),
+        ),
+        // 底部主次按钮（fixed）
+        _buildBottomActions(theme, pendingCount),
+      ],
+    );
+  }
+
+  // ===== Dropzone =====
+  Widget _buildDropzone(ThemeData theme) {
+    return InkWell(
+      onTap: _isUploading ? null : _pickFiles,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: theme.colorScheme.onSurface.withAlpha(30),
+            width: 2,
+            style: BorderStyle.solid,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.add_photo_alternate,
+              size: 40,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '选择照片',
+              style: TextStyle(
+                fontSize: 15,
+                color: theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '点击选择要上传的照片，支持 JPEG/PNG/HEIC/视频',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurface.withAlpha(120),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===== Upload List =====
+  Widget _buildUploadList() {
+    return UploadProgressList(items: _items);
+  }
+
+  // ===== Bottom Actions =====
+  Widget _buildBottomActions(ThemeData theme, int pendingCount) {
+    final isTablet = MediaQuery.of(context).size.width > 600;
+    if (_isUploading) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: LinearProgressIndicator(
+            value: _items.isEmpty ? 0 : _totalProgress,
+            minHeight: 4,
+          ),
+        ),
+      );
+    }
+
+    final hasItems = _items.isNotEmpty;
+    final canStart = pendingCount > 0;
+
+    // 按钮定义（与原型一致：主按钮"开始上传"在前，次按钮"全部取消"在后）
+    final primaryBtn = Expanded(
+      child: FilledButton(
+        onPressed: canStart ? _startUpload : null,
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          backgroundColor: canStart
+              ? theme.colorScheme.primary
+              : theme.colorScheme.primary.withAlpha(80),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: Text(
+          canStart ? '开始上传 ($pendingCount)' : '开始上传',
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+
+    final secondaryBtn = Expanded(
+      child: OutlinedButton(
+        onPressed: hasItems ? _clearAll : null,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          side: BorderSide(
+            color: hasItems
+                ? theme.dividerColor
+                : theme.dividerColor.withAlpha(80),
+            width: 1,
+          ),
+          foregroundColor:
+              theme.colorScheme.onSurface.withAlpha(hasItems ? 200 : 80),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: const Text('全部取消',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+      ),
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          top: BorderSide(color: theme.dividerColor, width: 0.5),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          // 原型 mobile: 上下堆叠 (column); tablet: 左右并排 (row)
+          child: isTablet
+              ? Row(
+                  children: [
+                    primaryBtn,
+                    const SizedBox(width: 8),
+                    secondaryBtn,
+                  ],
                 )
-              : Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: UploadProgressList(items: _items),
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    primaryBtn,
+                    const SizedBox(height: 10),
+                    secondaryBtn,
+                  ],
                 ),
         ),
-        // 底部操作
-        if (_isUploading)
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: LinearProgressIndicator(
-                value: _items.isEmpty ? 0 : _totalProgress,
-              ),
-            ),
-          ),
-        if (pendingCount > 0 && !_isUploading)
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _startUpload,
-                  icon: const Icon(Icons.cloud_upload),
-                  label: Text('开始上传 ($pendingCount)'),
-                ),
-              ),
-            ),
-          ),
-      ],
+      ),
     );
   }
 
@@ -159,7 +227,6 @@ class _UploadScreenState extends State<UploadScreen> {
   Future<void> _pickFiles() async {
     final pickedFiles = <XFile>[];
 
-    // 多选图片
     try {
       final images = await _picker.pickMultiImage();
       pickedFiles.addAll(images);
@@ -170,7 +237,6 @@ class _UploadScreenState extends State<UploadScreen> {
       } catch (_) {}
     }
 
-    // 视频
     try {
       final video = await _picker.pickVideo(source: ImageSource.gallery);
       if (video != null) pickedFiles.add(video);
@@ -251,14 +317,12 @@ class _UploadScreenState extends State<UploadScreen> {
 
     setState(() => _isUploading = false);
 
-    // 通知后端上传批次已完成（触发 PC 端导入弹窗）
     final successCount =
         _items.where((i) => i.status == UploadStatus.done).length;
     if (successCount > 0) {
       api.uploadDone();
     }
 
-    // 提示完成
     if (mounted && successCount > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('上传完成: $successCount/${_items.length}')),
@@ -268,14 +332,5 @@ class _UploadScreenState extends State<UploadScreen> {
 
   void _clearAll() {
     setState(() => _items.clear());
-  }
-
-  String _formatSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }
