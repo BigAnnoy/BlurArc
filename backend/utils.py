@@ -5,10 +5,27 @@
 
 import hashlib
 import logging
+import socket
 from pathlib import Path
 from typing import Optional, Union, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+def get_local_ip() -> str:
+    """获取局域网 IP（通过 UDP socket 探测路由，连接外部地址但不实际发包）
+
+    Returns:
+        本机局域网 IP，失败时返回 127.0.0.1
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+    finally:
+        s.close()
 
 
 def get_file_fingerprint(path: Union[str, Path]) -> Optional[Tuple[int, float]]:

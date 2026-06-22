@@ -148,6 +148,26 @@ flutter build apk
 
 **Flutter SDK 位置：** `E:\Applications\flutter`（已添加到用户 PATH）
 
+## mDNS 广播注意事项
+
+**依赖版本：** 后端 `zeroconf>=0.132.0`（当前 0.149.16），Flutter 端 `multicast_dns: ^0.3.2`
+
+**`ServiceInfo` 参数顺序陷阱：** `zeroconf` 0.132+ 中 `addresses` 是 keyword-only 参数，**不能作为位置参数传递**。错误写法会导致 `TypeError: multiple values for 'port'`，线程静默失败：
+
+```python
+# ❌ 错误 — addresses 被当作 port 参数
+ServiceInfo(SERVICE_TYPE, name, addresses=[...], port=self.port, ...)
+
+# ✅ 正确 — port 先于 addresses
+ServiceInfo(SERVICE_TYPE, name, port=self.port, addresses=[...], ...)
+```
+
+**调用链：** `BlurArc.py: _start_mobile_service()` → `server.start()` → `server.start_pairing_mode()` → `ZeroconfPublisher.start()` → 后台线程注册 `_blurarc._tcp.local.`
+
+**调试：** `ZeroconfPublisher.wait_ready(timeout)` 可确认广播是否成功启动，`_last_error` 可查看错误原因。
+
+**限制：** Android 模拟器不支持组播（NAT 隔离），mDNS 自动发现只能在真机测试。模拟器手动输入 `10.0.2.2:8900`。
+
 ---
 
 ## 📋 开发日志
@@ -157,6 +177,9 @@ flutter build apk
 
 | 日期 | 主题 | 文件 |
 |------|------|------|
+| 2026-06-22 | mDNS 广播修复（ServiceInfo 参数顺序 + 自动启动） | [devlog](docs/devlogs/2026-06-22-mdns-broadcast-fix.md) |
+| 2026-06-22 | 导入预检目标重复检测性能修复（删除 rglob 兜底） | [devlog](docs/devlogs/2026-06-22-import-target-dedup-perf.md) |
+| 2026-06-22 | 手机端首次连接照片加载卡死修复（Dio sendTimeout + SQL 索引） | [devlog](docs/devlogs/2026-06-22-mobile-first-load-fix.md) |
 | 2026-06-21 | 移动端 4 Bug 修复（上传Tab/图片401/配对码输入框/错误提示） | [devlog](.workbuddy/memory/2026-06-21.md) |
 | 2026-06-20 | 移动端 4 个 Bug 排查报告 | [plan](docs/plans/2026-06-20-mobile-bugs-analysis.md) |
 | 2026-06-19 | Flutter mDNS 自动发现实现 | [devlog](docs/devlogs/2026-06-19-mdns-discovery.md) |

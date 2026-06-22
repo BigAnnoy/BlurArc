@@ -27,6 +27,7 @@ from werkzeug.utils import secure_filename
 
 from .config_manager import _get_app_data_dir, ConfigManager
 from .constants import MEDIA_FORMATS
+from .utils import get_local_ip
 from .zeroconf_publisher import ZeroconfPublisher
 
 logger = logging.getLogger(__name__)
@@ -36,9 +37,29 @@ TOKENS_FILE = APP_DATA_DIR / ".config" / "mobile_tokens.json"
 UPLOAD_ROOT = APP_DATA_DIR / ".config" / "phone_upload"
 MAX_SINGLE_FILE_BYTES = 500 * 1024 * 1024
 MAX_FILES_PER_SESSION = 2000
+
+
+class _UploadError(Exception):
+    """上传失败异常 - 携带 HTTP 状态码"""
+    def __init__(self, message: str, status_code: int = 400):
+        super().__init__(message)
+        self.status_code = status_code
 PAIR_RATE_LIMIT = 10  # 每个 IP 每分钟最多请求 10 次配对
 PAIR_RATE_WINDOW = 60  # 速率限制窗口（秒）
 ALLOWED_EXTENSIONS = MEDIA_FORMATS
+DEVICE_NAME_MAX_LEN = 50  # 设备名最大长度
+
+
+def _validate_device_name(raw: object) -> tuple[str, str | None]:
+    """校验设备名，返回 (sanitized_name, error_message)"""
+    name = raw.strip() if isinstance(raw, str) else ""
+    if not name:
+        return "", "设备名不能为空"
+    if len(name) > DEVICE_NAME_MAX_LEN:
+        return "", f"设备名长度不能超过 {DEVICE_NAME_MAX_LEN} 个字符"
+    if any(c in name for c in ('/', '\\', '\0')):
+        return "", "设备名包含非法字符"
+    return name, None
 
 
 class PairingManager:
@@ -176,6 +197,7 @@ class TokenManager:
         self._device_map: dict[str, str] = {}
         self._upload_counts: dict[str, int] = {}  # token → 本会话上传计数
         self._session_upload_dirs: dict[str, Path] = {}  # token → 本次上传会话目录
+        self._upload_lock = threading.Lock()  # 保护 _upload_counts 并发读写
         self._load_tokens()
 
     def _cleanup_expired_pending(self) -> None:
@@ -561,6 +583,109 @@ class MobileAccessServer:
                 logger.error(f"[Mobile] photos/by-month 失败: {e}", exc_info=True)
                 return jsonify({"error": "获取月份照片失败"}), 500
 
+        @self.app.route("/api/mobile/photos/all")
+        def mobile_photos_all():
+            """连续网格用：按月分组返回照片（每页 N 个月，每组带照片列表）
+
+            用于 AlbumScreen 连续滚动网格 + section header 布局。
+            """
+            token = self._extract_token()
+            if not token or not self.token_manager.validate_token(token):
+                return jsonify({"error": "令牌无效"}), 401
+            try:
+                import urllib.parse
+                from .database import SessionLocal, Photo
+                from sqlalchemy import func as sa_func
+
+                page = request.args.get("page", 1, type=int)
+                page_size = request.args.get("page_size", 6, type=int)  # 每页几个月
+                photos_per_section = request.args.get("photos_per_section", 60, type=int)  # 每组最多照片数
+
+                session = SessionLocal()
+                try:
+                    # 1) 找出所有月份（按时间倒序）
+                    month_rows = session.query(
+                        sa_func.strftime('%Y-%m', Photo.media_date).label('month'),
+                        sa_func.count(Photo.id).label('cnt')
+                    ).filter(
+                        Photo.media_date.isnot(None)
+                    ).group_by('month').order_by(
+                        sa_func.strftime('%Y-%m', Photo.media_date).desc()
+                    ).all()
+
+                    months = [r[0] for r in month_rows]
+
+                    # 2) 检查无日期照片
+                    no_date_count = session.query(sa_func.count(Photo.id)).filter(
+                        Photo.media_date.is_(None)
+                    ).scalar() or 0
+
+                    all_sections = []
+                    for m in months:
+                        count = next((r[1] for r in month_rows if r[0] == m), 0)
+                        try:
+                            y, mo = m.split('-')
+                            display = f"{y}年{int(mo)}月"
+                        except ValueError:
+                            display = m
+                        all_sections.append({"month": m, "display": display, "count": count})
+
+                    if no_date_count > 0:
+                        all_sections.append({
+                            "month": "no-date",
+                            "display": "未知日期",
+                            "count": no_date_count,
+                        })
+
+                    # 3) 分页：按 section 分页
+                    start = (page - 1) * page_size
+                    end = start + page_size
+                    page_sections_meta = all_sections[start:end]
+
+                    # 4) 取出这些月份的照片
+                    sections = []
+                    for meta in page_sections_meta:
+                        q = session.query(Photo)
+                        if meta["month"] == "no-date":
+                            q = q.filter(Photo.media_date.is_(None))
+                        else:
+                            q = q.filter(
+                                sa_func.strftime('%Y-%m', Photo.media_date) == meta["month"]
+                            )
+                        photos = q.order_by(
+                            Photo.media_date.desc(), Photo.path
+                        ).limit(photos_per_section).all()
+
+                        photo_list = []
+                        for p in photos:
+                            photo_list.append({
+                                "path": p.path,
+                                "thumbnail": f"/api/mobile/thumbnail?path={urllib.parse.quote(p.path, safe='')}",
+                                "is_video": p.file_type == "video",
+                                "filename": p.filename,
+                                "media_date": p.media_date.isoformat() if p.media_date else None,
+                            })
+                        sections.append({
+                            **meta,
+                            "photos": photo_list,
+                            "has_more_photos": len(photo_list) < meta["count"],
+                        })
+
+                    available_months = [s["month"] for s in all_sections]
+                finally:
+                    session.close()
+
+                return jsonify({
+                    "sections": sections,
+                    "has_more": end < len(all_sections),
+                    "available_months": available_months,
+                    "page": page,
+                    "page_size": page_size,
+                })
+            except Exception as e:
+                logger.error(f"[Mobile] photos/all 失败: {e}", exc_info=True)
+                return jsonify({"error": "获取连续网格照片失败"}), 500
+
         @self.app.route("/api/mobile/folders")
         def mobile_folders():
             """返回文件夹列表（文件夹视图）"""
@@ -792,7 +917,10 @@ class MobileAccessServer:
             token = self._extract_token()
             if not token or not self.token_manager.validate_token(token):
                 return jsonify({"error": "令牌无效"}), 401
-            return self._handle_upload(token)
+            try:
+                return self._handle_upload(token)
+            except _UploadError as e:
+                return jsonify({"error": str(e)}), e.status_code
 
         @self.app.route("/api/mobile/upload/done", methods=["POST"])
         def mobile_upload_done():
@@ -816,16 +944,9 @@ class MobileAccessServer:
         def pairing_request():
             """手机端发起配对请求"""
             data = request.get_json(force=True, silent=True) or {}
-            device_name = data.get("device_name", "Unknown")
-            
-            # 输入验证：限制设备名长度和内容
-            device_name = device_name.strip() if isinstance(device_name, str) else ""
-            if not device_name:
-                return jsonify({"error": "设备名不能为空"}), 400
-            if len(device_name) > 50:
-                return jsonify({"error": "设备名长度不能超过 50 个字符"}), 400
-            if any(c in device_name for c in ('/', '\\', '\0')):
-                return jsonify({"error": "设备名包含非法字符"}), 400
+            device_name, err = _validate_device_name(data.get("device_name", "Unknown"))
+            if err:
+                return jsonify({"error": err}), 400
 
             # 检查是否已有 pending：已 confirmed 则直接返回配对码，未 confirmed 则替换
             existing = self._pairing.get_pending()
@@ -888,7 +1009,9 @@ class MobileAccessServer:
             """手机端提交配对码"""
             data = request.get_json(force=True, silent=True) or {}
             code = data.get("code", "")
-            device_name = data.get("device_name", "")
+            device_name, err = _validate_device_name(data.get("device_name", ""))
+            if err:
+                return jsonify({"status": "invalid", "error": err}), 400
 
             if not self._pairing.verify_code(code.upper()):
                 return jsonify({"status": "invalid", "error": "配对码错误或已过期"}), 400
@@ -924,48 +1047,61 @@ class MobileAccessServer:
         if content_length and content_length > MAX_SINGLE_FILE_BYTES:
             return jsonify({"error": "文件超过大小限制 (500MB)"}), 413
 
-        # 2. Session 文件计数限制
-        count = self.token_manager._upload_counts.get(token, 0)
-        if count >= MAX_FILES_PER_SESSION:
-            return jsonify({"error": "本会话上传文件数已达上限"}), 429
+        # 2. Session 文件计数限制（加锁防并发突破上限，先占位再处理）
+        with self.token_manager._upload_lock:
+            count = self.token_manager._upload_counts.get(token, 0)
+            if count >= MAX_FILES_PER_SESSION:
+                return jsonify({"error": "本会话上传文件数已达上限"}), 429
+            self.token_manager._upload_counts[token] = count + 1
 
-        # 3. 基本验证
-        if "file" not in request.files:
-            return jsonify({"error": "缺少文件"}), 400
-        file = request.files["file"]
-        if not file.filename:
-            return jsonify({"error": "文件名为空"}), 400
-        ext = Path(file.filename).suffix.lower()
-        if ext not in ALLOWED_EXTENSIONS:
-            return jsonify({"error": f"不支持的文件格式: {ext}"}), 400
-
-        # 4. 安全保存
-        safe_name = secure_filename(file.filename) or f"upload_{uuid.uuid4().hex[:8]}{ext}"
-        upload_dir = self.token_manager.get_upload_root(token)
-        save_path = upload_dir / safe_name
-        counter = 1
-        while save_path.exists():
-            save_path = upload_dir / f"{Path(safe_name).stem}_{counter}{ext}"
-            counter += 1
         try:
-            file.save(str(save_path))
+            # 3. 基本验证
+            if "file" not in request.files:
+                raise _UploadError("缺少文件", 400)
+            file = request.files["file"]
+            if not file.filename:
+                raise _UploadError("文件名为空", 400)
+            ext = Path(file.filename).suffix.lower()
+            if ext not in ALLOWED_EXTENSIONS:
+                raise _UploadError(f"不支持的文件格式: {ext}", 400)
+
+            # 4. 安全保存
+            safe_name = secure_filename(file.filename) or f"upload_{uuid.uuid4().hex[:8]}{ext}"
+            upload_dir = self.token_manager.get_upload_root(token)
+            save_path = upload_dir / safe_name
+            counter = 1
+            while save_path.exists():
+                save_path = upload_dir / f"{Path(safe_name).stem}_{counter}{ext}"
+                counter += 1
+            try:
+                file.save(str(save_path))
+            except Exception:
+                raise _UploadError("文件保存失败", 507)
+
+            # 5. 写后验证大小
+            file_size = save_path.stat().st_size
+            if file_size > MAX_SINGLE_FILE_BYTES:
+                save_path.unlink()
+                raise _UploadError("文件超过大小限制 (500MB)", 413)
+
+            device_name = self.token_manager.get_device_name(token)
+            return jsonify({
+                "status": "ok", "name": file.filename, "size": file_size,
+                "device_name": device_name, "upload_dir": str(upload_dir),
+            })
+        except _UploadError:
+            # 失败回滚占位名额
+            with self.token_manager._upload_lock:
+                self.token_manager._upload_counts[token] = max(
+                    0, self.token_manager._upload_counts.get(token, 1) - 1
+                )
+            raise
         except Exception:
-            return jsonify({"error": "文件保存失败"}), 507
-
-        # 5. 写后验证大小
-        file_size = save_path.stat().st_size
-        if file_size > MAX_SINGLE_FILE_BYTES:
-            save_path.unlink()
-            return jsonify({"error": "文件超过大小限制 (500MB)"}), 413
-
-        # 6. 更新 session 计数
-        self.token_manager._upload_counts[token] = count + 1
-
-        device_name = self.token_manager.get_device_name(token)
-        return jsonify({
-            "status": "ok", "name": file.filename, "size": file_size,
-            "device_name": device_name, "upload_dir": str(upload_dir),
-        })
+            with self.token_manager._upload_lock:
+                self.token_manager._upload_counts[token] = max(
+                    0, self.token_manager._upload_counts.get(token, 1) - 1
+                )
+            return jsonify({"error": "上传失败"}), 500
 
     def start(self) -> dict:
         with self._start_lock:
@@ -998,7 +1134,12 @@ class MobileAccessServer:
         if self._zeroconf is None:
             self._zeroconf = ZeroconfPublisher(self.port)
         self._zeroconf.start()
-        return {"status": "broadcasting", "hostname": socket.gethostname()}
+        ok = self._zeroconf.wait_ready(timeout=3.0)
+        return {
+            "status": "broadcasting" if ok else "error",
+            "hostname": socket.gethostname(),
+            "mDNS_ready": ok,
+        }
 
     def stop_pairing_mode(self) -> None:
         """停止配对模式：停止 mDNS 广播，清除待确认"""
@@ -1016,14 +1157,7 @@ class MobileAccessServer:
         raise RuntimeError(f"端口范围 {self.PORT_RANGE} 内没有可用端口")
 
     def _get_local_ip(self) -> str:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
-            return "127.0.0.1"
+        return get_local_ip()
 
     def has_paired_devices(self) -> bool:
         return len(self.token_manager.get_paired_devices()) > 0

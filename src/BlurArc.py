@@ -292,6 +292,12 @@ def _start_mobile_service():
             server = api_server._get_mobile_server()
             info = server.start()
             logger.info(f"移动接入服务已自动启动: {info}")
+            # 自动启动 mDNS 广播，让手机能自动发现
+            result = server.start_pairing_mode()
+            if result.get("mDNS_ready"):
+                logger.info("mDNS 广播已自动启动")
+            else:
+                logger.warning("mDNS 广播启动失败，手机端将无法自动发现")
     except Exception as e:
         logger.warning(f"自动启动移动接入服务失败: {e}")
 
