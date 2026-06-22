@@ -66,4 +66,16 @@ class ThemeProvider extends ChangeNotifier {
         return 'system';
     }
   }
+
+  /// 中文显示名（与原型图一致：跟随系统 / 浅色 / 深色）
+  String get label {
+    switch (_mode) {
+      case ThemeMode.dark:
+        return '深色';
+      case ThemeMode.light:
+        return '浅色';
+      case ThemeMode.system:
+        return '跟随系统';
+    }
+  }
 }

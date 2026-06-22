@@ -29,6 +29,7 @@ class _MonthPhotoScreenState extends State<MonthPhotoScreen> {
   bool _hasMore = true;
   int _page = 1;
   int _total = 0;
+  String? _loadError; // 加载失败时的错误信息（用于显示"重试"按钮）
   final _scrollController = ScrollController();
 
   @override
@@ -54,7 +55,10 @@ class _MonthPhotoScreenState extends State<MonthPhotoScreen> {
   }
 
   Future<void> _loadPhotos() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final data = await widget.api.getPhotosByMonth(widget.month, page: 1);
       _total = data['count'] ?? 0;
@@ -69,7 +73,10 @@ class _MonthPhotoScreenState extends State<MonthPhotoScreen> {
         _loading = false;
       });
     } catch (e) {
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _loadError = e.toString();
+      });
     }
   }
 
@@ -77,7 +84,8 @@ class _MonthPhotoScreenState extends State<MonthPhotoScreen> {
     if (!_hasMore || _loading) return;
     setState(() => _loading = true);
     try {
-      final data = await widget.api.getPhotosByMonth(widget.month, page: _page + 1);
+      final data =
+          await widget.api.getPhotosByMonth(widget.month, page: _page + 1);
       final photos = (data['photos'] as List? ?? [])
           .map((p) => _MonthPhotoItem.fromJson(p as Map<String, dynamic>))
           .toList();
@@ -94,14 +102,16 @@ class _MonthPhotoScreenState extends State<MonthPhotoScreen> {
 
   void _openPhoto(int index) {
     // Build flat photo list for preview
-    final photoList = _photos.map((p) => Photo(
-      id: p.path,
-      name: p.filename,
-      path: p.path,
-      size: 0,
-      date: widget.month,
-      type: p.isVideo ? 'video' : 'photo',
-    )).toList();
+    final photoList = _photos
+        .map((p) => Photo(
+              id: p.path,
+              name: p.filename,
+              path: p.path,
+              size: 0,
+              date: widget.month,
+              type: p.isVideo ? 'video' : 'photo',
+            ))
+        .toList();
 
     Navigator.push(
       context,
@@ -123,40 +133,83 @@ class _MonthPhotoScreenState extends State<MonthPhotoScreen> {
       ),
       body: _loading && _photos.isEmpty
           ? const Center(child: CircularProgressIndicator())
-          : _photos.isEmpty
-              ? const Center(child: Text('暂无照片'))
-              : RefreshIndicator(
-                  onRefresh: _loadPhotos,
-                  child: GridView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(2),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 2,
-                      mainAxisSpacing: 2,
-                      childAspectRatio: 1,
+          : _loadError != null && _photos.isEmpty
+              ? _buildErrorView(_loadError!, _loadPhotos)
+              : _photos.isEmpty
+                  ? const Center(child: Text('暂无照片'))
+                  : RefreshIndicator(
+                      onRefresh: _loadPhotos,
+                      child: GridView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(2),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 2,
+                          mainAxisSpacing: 2,
+                          childAspectRatio: 1,
+                        ),
+                        itemCount: _photos.length + (_hasMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index >= _photos.length) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            );
+                          }
+                          final photo = _photos[index];
+                          return _PhotoGridItem(
+                            photo: photo,
+                            api: widget.api,
+                            onTap: () => _openPhoto(index),
+                          );
+                        },
+                      ),
                     ),
-                    itemCount: _photos.length + (_hasMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index >= _photos.length) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        );
-                      }
-                      final photo = _photos[index];
-                      return _PhotoGridItem(
-                        photo: photo,
-                        api: widget.api,
-                        onTap: () => _openPhoto(index),
-                      );
-                    },
-                  ),
-                ),
     );
+  }
+
+  Widget _buildErrorView(String error, VoidCallback onRetry) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline,
+                size: 48, color: Theme.of(context).colorScheme.error),
+            const SizedBox(height: 12),
+            const Text('加载失败',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Text(
+              _formatErrorMessage(error),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('重试'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatErrorMessage(String raw) {
+    if (raw.contains('TimeoutException') || raw.contains('timeout')) {
+      return '网络请求超时，请检查 PC 端是否正常';
+    }
+    if (raw.contains('SocketException') || raw.contains('Connection')) {
+      return '无法连接到 PC，请检查网络';
+    }
+    return raw.length > 100 ? '${raw.substring(0, 100)}...' : raw;
   }
 }
 
@@ -226,8 +279,7 @@ class _PhotoGridItem extends StatelessWidget {
               right: 4,
               bottom: 4,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
                   color: Colors.black54,
                   borderRadius: BorderRadius.circular(4),
