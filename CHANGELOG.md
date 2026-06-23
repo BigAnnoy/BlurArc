@@ -16,11 +16,47 @@
 - **上传 HTTP 500**（Critical）：`TokenManager` 缺少 `get_upload_root(token)` 方法，保存文件时抛 `AttributeError`
 - **双实例问题**：`start()` 添加防重入检查 + `_start_lock` 锁保护，已运行则直接返回
 - **并发阻塞**：`make_server(threaded=False)` → `threaded=True`，上传时其他端点不再被阻塞
+- **移动端 UI 与原型对齐**（10 项修复）：暗色 AppBar/BottomNav 背景色、AppBar logo 尺寸、工具栏下拉箭头、上传按钮布局、Settings 主题选项顺序、Section header 平台差异化、Settings 区块标题（仅 mobile）、Folder 返回按钮、BlurArcLogo 默认色对比度优化
+- **平板 UI 与原型对齐**（10 项修复）
+- **平板模拟器 UI 修复**：导航栏/工具栏对齐
+- **mDNS 广播修复**：`ServiceInfo` 参数顺序（`port` 必须在 `addresses` 之前）、自动启动、`wait_ready()` 确认
+- **导入预检性能修复**：删除 `rglob` 兜底，目标目录去重改用集合，导入时只对大小相同的组计算 MD5
+- **手机首屏秒加载**：`Dio` 添加 `sendTimeout` 防卡死、SQL 添加复合索引
+- **移动端 6 Bug 修复**：Logo 资源使用错误、文件夹返回按钮文本（"返回相册"→"返回上级"）
+- **代码审查 4 项修复**：
+  - `home_page.dart` 断连页溢出保护（`SafeArea + SingleChildScrollView`）
+  - `api_server.py` 缓存命中时复用 size，去掉 `stat()` I/O
+  - `api_client.dart` `onDisconnected` 触发条件收敛（新增 `_everConnected` 标志）
+  - `dev-start.bat` 抽取 `:deploy_avd_common` 公共函数
 - **会话残留**：`stop()` 清理 `_upload_counts` + `_session_upload_dirs`，服务重启后重置状态
 
 ### 变更
 - 版本号统一为 v0.5.3（之前各文件混用 0.5.0/0.5.1/0.5.2）
 - `dev-start.bat` / `dev-start.ps1` 移入 `scripts/` 目录，新增手机部署选项
+
+**功能改进：**
+- **设备信息服务**：新增 `DeviceInfoService` 缓存设备名称，避免重复 IPC
+- **Android 高刷屏支持**：`MainActivity.kt` 添加 `Window.setFrameRate` API，90/120Hz
+- **iOS 应用名称**：`AppDelegate.swift` 配置显示名 "Blur Arc"
+- **导入去重 MD5 复用 DB 缓存**：`prescan_index` 改为 `(file, md5_hash, size)` 三元组，命中 DB 缓存时跳过 `stat()` I/O
+- **手机端首屏秒加载**：照片列表分页 + 缩略图懒加载 + SQL 索引
+- **导入预检并行化**：保持现有 `ThreadPoolExecutor` 并行 MD5 计算，新增"按文件大小分组后跳过不可能重复"的预筛
+
+**UI 调整：**
+- **Logo 资源统一管理**：从 SVG（`flutter_svg` 兼容性问题）改为 PNG 内置资源，新增 `title_bar_light.png` / `title_bar_dark.png`
+- **新启动器图标**：5 个 mipmap 分辨率全部替换为新设计
+- **暗色 AppBar 背景调整**：`darkBgCard` → `darkBgPage`（`#0c1117`），AppBar/BottomNav/平板工具栏统一透明
+- **Section header 平台差异化**：mobile `14×12×8 + 13px`、tablet `16×16×8 + 14px`
+- **Settings 主题选项顺序**：跟随系统 / 深色 / 浅色（原：跟随系统 / 浅色 / 深色）
+- **手机上传按钮布局**：Column 上下堆叠（"开始上传"在上，"全部取消"在下）
+
+**开发工具：**
+- **`dev-start` 热更新选项**：
+  - `[9]` Flutter run + hot reload（手机端）
+  - `[10]` Flutter run + hot reload（平板模拟器）
+  - `[5]` PC 端自动启动（前端构建 + `BlurArc.py`）
+- **清理临时脚本** `check_logo.py`（16 行，已无人引用）
+- **部署脚本去重**：`dev-start.bat` / `dev-start.ps1` 部署去重 + 抽取 `:deploy_avd_common`
 
 ## [0.5.2] — 2026-06-18
 
