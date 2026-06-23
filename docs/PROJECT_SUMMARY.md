@@ -1,8 +1,8 @@
 # Blur Arc 项目总结
 
-**项目完成日期**: 2026-06-16  
-**版本**: v0.5.0  
-**状态**: ✅ **完全可用**  
+**最新版本**: v0.5.3
+**完成日期**: 2026-06-23
+**状态**: ✅ **完全可用**（PC 端 + 移动端）
 **代码质量**: 生产级
 
 ---
@@ -13,24 +13,39 @@
 
 | 指标 | 数值 |
 |------|------|
-| 总代码行数 | ~13,500 行 |
-| 功能模块数 | 9 个（后端） |
+| 总代码行数 | ~30,000 行（PC 端 ~18K + 移动端 ~12K） |
+| 功能模块 | 11 个后端 + 10 个 Flutter 页面 |
 | 支持媒体格式 | 20+ 种（9 图片+11 视频） |
-| API 端点 | 35+ 个 |
-| 测试用例 | 32 个文件 |
-| 应用启动时间 | 2-3 秒 |
+| API 端点 | **55+** 个（PC 端 35+ + 移动端 20+） |
+| 测试用例 | 32+ 个 pytest + Flutter 单元/Widget 测试 |
+| 应用启动时间 | 2-3 秒（PC）/ 1.5 秒（移动端） |
 | FFmpeg 版本 | 8.1.1（已集成） |
+
+### 跨端能力
+
+| 端 | 状态 | 技术栈 |
+|----|------|--------|
+| Windows 桌面 | ✅ | PyWebView + Flask + React 19 + Tailwind |
+| macOS 桌面 | ✅ | 同上 |
+| Linux 桌面 | ✅ | 同上 |
+| Android 手机 | ✅ | Flutter 3.44+ |
+| iOS 手机 | ✅ | 同上 |
+| Android 平板 | ✅ | Flutter 响应式布局 |
+| iPad | ✅ | 同上 |
 
 ### 完成度
 
 ```
-✅ Phase 1: 后端 API 架构          100% 完成
-✅ Phase 2: 前端框架搭建          100% 完成
-✅ Phase 3: 相册浏览器实现        100% 完成
-✅ Phase 4: 导入功能实现          100% 完成
-✅ Phase 5: 设置 & 部署           100% 完成
-✅ Phase 6: 性能优化              100% 完成（v0.5.0）
-✅ Phase 7: FFmpeg 集成           100% 完成（v0.5.0）
+✅ Phase 1: 后端 API 架构                100% 完成
+✅ Phase 2: PC 端前端框架（React）       100% 完成（v0.5.0 升级自原生 JS）
+✅ Phase 3: 相册浏览器实现                100% 完成
+✅ Phase 4: 导入功能实现                  100% 完成
+✅ Phase 5: 设置 & 部署                   100% 完成
+✅ Phase 6: 性能优化                      100% 完成（v0.5.0）
+✅ Phase 7: FFmpeg 集成                   100% 完成（v0.5.0）
+✅ Phase 8: 移动端 App（Flutter）         100% 完成（v0.5.2 引入，v0.5.3 完善 UI）
+✅ Phase 9: mDNS 局域网发现               100% 完成（v0.5.3 修复）
+✅ Phase 10: 移动端上传闭环               100% 完成（v0.5.3）
 
 总体完成度: 100% ✅
 ```
@@ -39,133 +54,105 @@
 
 ## 🎯 技术亮点
 
-### 1. 现代化架构
+### 1. 现代化分层架构
 
-**三层分层设计**：
-- 前端层：PyWebView + 原生 HTML5/CSS3/JavaScript
-- 中间层：Flask REST API
-- 后端层：Python 业务逻辑
+**四层分层设计**（PC 端）：
+- 展示层：PyWebView + React 19 + TypeScript + Vite + Tailwind
+- API 层：Flask REST API（35+ 端点）
+- 业务层：Python 业务逻辑（导入、去重、缩略图、视频）
+- 数据层：SQLAlchemy + SQLite
+
+**移动端独立栈**：
+- 展示层：Flutter 3.44+ / Dart / Material 3
+- 服务层：ApiClient（带 Token 鉴权）+ mDNS 客户端
+- 共享数据：与 PC 端共用相册数据库（通过局域网 API）
 
 **优势**：
-- 清晰的职责划分
+- 清晰职责分离
+- 前后端 / 多端解耦
 - 易于测试和维护
-- 易于扩展功能
-- 前后端分离
+- 移动端可独立演进
 
-### 2. 轻量级前端
+### 2. 双端 UI 现代化
 
-**原生技术栈**（无框架依赖）：
-- 纯 HTML5 + CSS3 + JavaScript
-- 无需 Node.js/npm
-- 最小化包体积
-- 快速加载
+**PC 端**：React 19 + Tailwind 4，与 PyWebView 无缝集成
+**移动端**：Flutter 3.44，统一暗/亮主题，手机竖屏 + 平板横屏响应式
+**设计流程**：UI 改之前先在 `docs/prototypes/` 出 HTML 原型，确认后再写代码
 
-**代码质量**：
-```
-- CSS 设计系统 + 变量化
-- 响应式布局
-- 流畅动画效果
-- 完善的错误处理
-```
+### 3. 高效导入 + 去重
 
-### 3. 高效 API 设计
+**两阶段预筛**：
+- 阶段 1：按文件大小分组，剔除不可能重复
+- 阶段 2：只对大小相同的组计算 MD5
 
-**12 个精心设计的端点**：
-```
-相册操作 (3 个):
-  - 统计信息
-  - 目录树
-  - 照片列表
+**MD5 缓存复用**：
+- 一次导入只算一次
+- DB 命中时跳过 `stat()` I/O（`prescan_index` 改为 `(file, md5_hash, size)` 三元组）
 
-导入操作 (4 个):
-  - 路径检查
-  - 开始导入
-  - 进度追踪
-  - 取消导入
+**并行去重**：
+- ThreadPoolExecutor 并行计算
+- 进度实时上报
 
-设置操作 (2 个):
-  - 获取/修改相册路径
+### 4. 完整的视频支持
 
-工具 (3 个):
-  - 健康检查
-  - 测试端点
-```
+- FFmpeg 8.1.1 已集成到 `backend/ffmpeg_binaries/`
+- 视频缩略图自动生成
+- 元数据提取（时长 / 分辨率 / 编码）
+- HTTP Range 支持拖拽进度
+- 移动端 video_player 流畅播放
 
-### 4. 完整的应用功能
+### 5. 移动互联（v0.5.2+）
 
-✅ **照片管理**
-- 按年份/月份自动分类
-- 目录树导航
-- 照片网格显示
+**mDNS 自动发现**：
+- PC 端广播 `_blurarc._tcp.local.`
+- 手机打开 App 即看到局域网内 PC 列表
+- 零配置，无需手输 IP（模拟器除外）
 
-✅ **导入系统**
-- 三步导入流程
-- 实时进度显示
-- 详细统计信息
-- 可随时暂停/继续/取消
+**安全配对**：
+- PC 弹 6 位配对码（避免二维码扫描失败）
+- Token 鉴权（HMAC）
+- 已配对设备可查看/撤销
 
-✅ **性能优化**（v0.5.0 新增）
-- MD5 缓存复用：一次导入只算一次
-- 并行源去重：ThreadPoolExecutor 并行计算
-- 两阶段预筛：按文件大小分组，跳过不可能重复的文件
+**上传闭环**：
+- 手机选图 → POST `/api/mobile/upload` → PC 自动归档
+- POST `/api/mobile/upload/done` → PC 端弹 ImportDialog
+- 用户一键确认导入
 
-✅ **视频支持**
-- FFmpeg 8.1.1 已集成
-- 视频缩略图生成
-- 元数据提取（时长/分辨率/编码）
-- HTTP Range 支持 Seek
+### 6. 性能优化（v0.5.3 重点）
 
-✅ **设置面板**
-- 修改相册路径
-- FFmpeg 状态检查
-- 缓存清理
-
-✅ **数据安全**
-- MD5 去重检测
-- 源内重复检测
-- 目标重复检测
-- 冲突自动处理
+| 优化项 | 实现 | 效果 |
+|--------|------|------|
+| 导入预检去重 | 删除 rglob 兜底，只走 DB 索引 | 99% 提速 |
+| 移动端首屏 | Dio `sendTimeout: 30s` + SQL 索引 | 不再卡死 |
+| 设备名缓存 | `DeviceInfoService` 跨平台缓存 | 避免重复 IPC |
+| Logo 资源统一 | 抽离为 `assets/logo/` | 双主题一致 |
 
 ---
 
 ## 💡 技术决策分析
 
-### 为什么选择 PyWebView？
+### 为什么选 PyWebView + React？
 
-**对比分析**:
+**对比**：
 
-| 特性 | PyWebView | Tkinter | Electron |
-|------|-----------|---------|----------|
-| 包体积 | 30-50MB | 20-30MB | 200-300MB |
-| 启动时间 | 2-3s | 1-2s | 5-8s |
-| UI 现代度 | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ |
-| 学习曲线 | 中等 | 低 | 高 |
-| 代码复用 | 90%+ | 30% | 0% |
-| 维护成本 | 低 | 中 | 高 |
+| 方案 | 包体积 | 启动 | UI 现代度 | 代码复用 |
+|------|--------|------|----------|----------|
+| PyWebView + React | 30-50MB | 2-3s | ⭐⭐⭐⭐⭐ | 90%+ |
+| Tkinter | 20-30MB | 1-2s | ⭐⭐ | 30% |
+| Electron | 200-300MB | 5-8s | ⭐⭐⭐⭐⭐ | 0% |
+| Tauri | 8-15MB | <1s | ⭐⭐⭐⭐⭐ | 90%+ |
 
-**结论**：PyWebView 是最优选择
-- Python 开发者友好
-- 现代 Web UI
-- 相对轻量级
-- 易于维护
+**当前选择**：PyWebView + React。后续若用户量增长，可考虑 Tauri（包体积 +10x 优化）。
 
-### 前端为什么不用框架？
+### 为什么选 Flutter 做移动端？
 
-**对比分析**:
+| 方案 | 跨端 | 学习曲线 | 性能 | 生态 |
+|------|------|----------|------|------|
+| Flutter | ⭐⭐⭐⭐⭐ Android/iOS/Web/Desktop | 中 | 接近原生 | 成熟 |
+| React Native | ⭐⭐⭐⭐ Android/iOS | 中 | 中 | 成熟 |
+| 原生 Android + iOS | ❌ | 高 | 原生 | — |
 
-| 指标 | 原生 | Vue | React |
-|------|------|-----|-------|
-| 包体积 | 无额外 | +50KB | +100KB |
-| 加载时间 | 快 | 中 | 中 |
-| 学习成本 | 低 | 中 | 高 |
-| 复杂度 | 低 | 中 | 高 |
-| 性能 | 优 | 中 | 中 |
-
-**结论**：原生代码最适合
-- 应用场景相对简单
-- 无需复杂状态管理
-- 代码清晰易懂
-- 包体积最小
+**结论**：Flutter 是单人维护多端最高 ROI 的选择。
 
 ---
 
@@ -174,81 +161,102 @@
 ### 代码组织
 
 ```
-frontend/
-├── index.html (190 行)          单一清晰的 SPA 结构
-├── css/ (1250+ 行)              标准化设计系统
-│   ├── style.css                全局设计变量
-│   ├── layout.css               网格与布局
-│   ├── components.css           组件样式
-│   └── animations.css           动画效果
-└── js/ (1450+ 行)               模块化 JavaScript
-    ├── api.js                   统一 API 调用
-    ├── main.js                  应用主程序
-    ├── album-browser.js         相册浏览器
-    ├── import-dialog.js         导入对话框
-    └── settings-dialog.js       设置对话框
-
-backend/
-├── BlurArc.py (159 行)      窗口管理与启动
-├── api_server.py (428 行)       Flask 应用
-├── config_manager.py (~140 行)  配置管理
-├── import_manager.py (~300 行)  导入管理
-└── photo_organizer_engine.py    整理引擎
+BlurArc/
+├── src/BlurArc.py (300+ 行)              # 主入口
+├── backend/                              # Python 后端
+│   ├── api_server.py (2700+ 行)          # PC 端 API
+│   ├── mobile_access_server.py (1100+ 行)# 移动端独立 API
+│   ├── zeroconf_publisher.py             # mDNS 广播
+│   ├── import_manager.py (800+ 行)       # 导入 + 去重
+│   ├── thumbnail_manager.py              # 缩略图
+│   ├── video_processor.py                # FFmpeg
+│   ├── database.py                       # SQLAlchemy
+│   ├── config_manager.py
+│   ├── constants.py
+│   ├── utils.py
+│   └── ffmpeg_binaries/                  # FFmpeg 8.1.1
+├── frontend/                             # PC 端 React
+│   └── src/
+│       ├── App.tsx
+│       ├── components/
+│       │   ├── common/  dialogs/  layout/  photos/  sidebar/
+│       ├── services/api.ts
+│       ├── hooks/
+│       ├── stores/
+│       ├── types/
+│       └── utils/
+├── blurarc_app/                          # 移动端 Flutter（~12K 行 Dart）
+│   └── lib/
+│       ├── main.dart
+│       ├── screens/ (10 页)
+│       ├── services/ (api / mDNS / 主题)
+│       ├── models/
+│       ├── widgets/
+│       └── theme/
+├── docs/                                 # 文档 + 原型 + devlog
+├── scripts/                              # 启动 / 构建 / 测试
+├── test/                                 # pytest
+└── BlurArc.spec                          # PyInstaller
 ```
 
 ### 代码特点
 
-✅ **模块化设计**
-- 每个模块单一职责
-- 易于测试和维护
-
-✅ **错误处理**
-- try-catch 完善
-- 用户友好的错误提示
-
-✅ **日志记录**
-- 详细的日志信息
-- 便于问题排查
-
-✅ **文档**
-- 代码注释完善
-- 函数文档齐全
+- ✅ 模块化：每个文件单一职责
+- ✅ 错误处理：完整 try/except + 用户友好提示
+- ✅ 日志：详细、可关 DEBUG
+- ✅ 文档：docstring + 注释完整
+- ✅ 测试：pytest + flutter test
+- ✅ 移动端：响应式 + 暗/亮主题 + 跨平台 device_info
 
 ---
 
 ## 🚀 部署和发布
 
-### 开发部署
+### 开发
 
 ```bash
-# 1. 克隆/下载项目
-# 2. 安装依赖
+# 后端
 pip install -r requirements.txt
+python src/BlurArc.py
 
-# 3. 运行应用
-python BlurArc.py
+# PC 端前端（修改后）
+cd frontend && npm run build
 
-# 或使用启动脚本
-启动BlurArc.bat
+# 移动端
+cd blurarc_app && flutter pub get && flutter run
 ```
 
-### 生产部署
+### dev-start 快捷菜单
 
 ```bash
-# 1. 安装 PyInstaller
-pip install pyinstaller
-
-# 2. 打包应用
-打包.bat
-
-# 3. 分发 EXE
-dist/BlurArc.exe
-
-# 特点：
-# - 单个可执行文件
-# - 无需 Python 环境
-# - 包体积 100-150MB
+.\scripts\dev-start.ps1
+# [5] = 构建并启动 PC 端（前端 build + BlurArc.py）
+# [9] = 启动 Flutter 移动端
+# [10] = 启动并自动 hot reload
 ```
+
+### 生产发布
+
+```bash
+# PC 端 PyInstaller 打包
+pyinstaller BlurArc.spec
+# → dist/BlurArc.exe
+
+# 移动端 Android APK
+cd blurarc_app && flutter build apk
+# → build/app/outputs/flutter-apk/app-release.apk
+```
+
+### 版本发布流程（参考 v0.5.3 收尾）
+
+1. 更新 `frontend/package.json` + `src/BlurArc.py` + 窗口标题版本号
+2. 更新 `CHANGELOG.md`（追加 修复/变更/新增 章节）
+3. 写发布 spec + plan（`docs/superpowers/`）
+4. git add + commit + push
+5. 创建附注型 tag `git tag -a vX.Y.Z -m "..."`
+6. push tag
+7. 8 条 AC 验收
+8. 手动创建 GitHub Release（`gh` CLI 可选）
 
 ---
 
@@ -256,235 +264,131 @@ dist/BlurArc.exe
 
 ### 测试覆盖
 
-✅ **配置管理器测试**
-- 配置读写
-- 初始化检测
-
-✅ **导入管理器测试**
-- 导入流程
-- 进度追踪
-- 错误处理
-
-✅ **前端文件测试**
-- 所有必需文件都存在
-- 大小和完整性检查
-
-✅ **API 端点测试**
-- 所有 12 个端点
-- HTTP 状态码验证
-
-### 测试脚本
+| 套件 | 入口 | 覆盖 |
+|------|------|------|
+| 配置管理器 | `test/unit/test_config_manager*.py` | 配置读写 |
+| 导入管理器 | `test/unit/test_import_manager*.py` | 导入 + 去重 |
+| API 服务器 | `test/api/test_api_*.py` | REST 端点 |
+| 前端组件 | (手动) | UI 流程 |
+| 移动端 | `blurarc_app/test/` | Widget / API Client |
 
 ```bash
-# 运行综合测试
-python test_webview_app.py
+# 后端
+pytest
+pytest test/unit/ -v
 
-# 该脚本检查：
-# 1. 配置管理器可用性
-# 2. 导入管理器可用性
-# 3. 前端文件完整性
-# 4. API 服务器健康状态
-# 5. 关键端点可用性
+# 移动端
+cd blurarc_app && flutter test && flutter analyze
 ```
 
 ---
 
 ## 📚 文档完整性
 
-| 文档 | 行数 | 内容 |
+| 文档 | 内容 | 状态 |
 |------|------|------|
-| PHASE5_WEBVIEW_COMPLETE.md | 500+ | 完整使用指南 |
-| QUICK_REFERENCE.md | 100+ | 快速参考 |
-| QUICK_START.md | 150+ | 快速开始 |
-| API 文档 | 内含 | 12 个端点文档 |
-| 本文件 | - | 最终总结 |
-
----
-
-## 💰 成本效益分析
-
-### 开发成本
-
-| 项 | 时间 | 成本 |
-|----|------|------|
-| 需求分析 & 设计 | 1h | ⭐ |
-| 后端开发 | 2h | ⭐⭐ |
-| 前端开发 | 2h | ⭐⭐ |
-| 集成 & 测试 | 1h | ⭐ |
-| 文档 | 1h | ⭐ |
-| **总计** | **7h** | **⭐⭐⭐** |
-
-### 收益
-
-✅ **功能完整**：完全可用的 Blur Arc 应用
-✅ **质量高**：生产级代码
-✅ **易维护**：清晰的架构
-✅ **易扩展**：模块化设计
-✅ **易部署**：单个 EXE 文件
-
-### ROI
-
-- 开发效率：7 小时完成 ~3900 行生产级代码
-- 代码复用：从 v2.0 (Tkinter) 复用核心逻辑
-- 后续维护：架构清晰，维护成本低
-
----
-
-## 🔮 未来展望
-
-### 短期改进（1-2 周）
-- [ ] 搜索功能
-- [ ] 相册统计图表
-- [ ] 批量操作
-- [ ] 撤销/重做
-
-### 中期改进（1-3 个月）
-- [ ] 多相册支持
-- [ ] 云同步功能
-- [ ] 分享功能
-- [ ] 移动端支持
-
-### 长期展望（3-6 个月）
-- [ ] 人工智能分类
-- [ ] 人脸识别
-- [ ] 自动标签
-- [ ] 社交分享
-
----
-
-## 🎓 学习价值
-
-### 技术栈学习
-
-✅ **PyWebView**: 桌面应用开发
-✅ **Flask**: Web 框架
-✅ **REST API**: 接口设计
-✅ **HTML5/CSS3**: 现代 Web 设计
-✅ **JavaScript**: 前端交互
-
-### 架构设计学习
-
-✅ **三层架构**: 清晰的设计模式
-✅ **MVC 思想**: 模型-视图-控制器
-✅ **API 设计**: RESTful 最佳实践
-✅ **错误处理**: 完善的异常机制
-
-### 项目管理学习
-
-✅ **分阶段开发**: Phase 1-5 递进
-✅ **版本控制**: v1.0 → v2.0 → v0.5
-✅ **文档完整性**: 多层次文档
-✅ **测试驱动**: 自动化测试脚本
-
----
-
-## 📊 最终评分
-
-| 维度 | 评分 | 说明 |
-|------|------|------|
-| **功能完整性** | ⭐⭐⭐⭐⭐ | 所有功能都实现了 |
-| **代码质量** | ⭐⭐⭐⭐⭐ | 生产级代码 |
-| **用户体验** | ⭐⭐⭐⭐⭐ | Win11 风格 UI |
-| **性能表现** | ⭐⭐⭐⭐⭐ | 快速启动、高效导入 |
-| **易用性** | ⭐⭐⭐⭐⭐ | 直观简洁的界面 |
-| **文档完整度** | ⭐⭐⭐⭐⭐ | 详细的文档 |
-| **可维护性** | ⭐⭐⭐⭐⭐ | 模块化架构 |
-| **可扩展性** | ⭐⭐⭐⭐⭐ | 易于添加新功能 |
-| **安全性** | ⭐⭐⭐⭐ | 完善的错误处理 |
-| **部署便利** | ⭐⭐⭐⭐⭐ | 一键打包 EXE |
-
-**综合评分**: ⭐⭐⭐⭐⭐ **5.0 / 5.0**
+| [README.md](README.md) | 项目主入口 | ✅ v0.5.3 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变更 | ✅ v0.5.3 |
+| [docs/QUICK_START.md](docs/QUICK_START.md) | 快速测试 | ✅ v0.5.3 |
+| [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md) | 快速参考 | ✅ v0.5.3 |
+| [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) | 入门指南 | ✅ v0.5.3 |
+| [docs/PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) | 本文件 | ✅ v0.5.3 |
+| [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) | 开发指南 | ✅ v0.5.3 |
+| [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | API 文档（PC+移动） | ✅ v0.5.3 |
+| [docs/CODE_MAP.md](docs/CODE_MAP.md) | 代码地图 | ✅ 2026-06-22 |
+| [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | 依赖说明 | ✅ v0.5.3 |
+| [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) | 数据库表结构 | ✅ v0.5.3 |
+| [docs/prototypes/](docs/prototypes/) | UI 原型（PC/手机/平板） | ✅ 活跃维护 |
+| [docs/devlogs/](docs/devlogs/) | 每日开发日志 | ✅ 每日更新 |
+| [docs/superpowers/specs/](docs/superpowers/specs/) | 方案设计 | ✅ 活跃维护 |
+| [blurarc_app/README.md](blurarc_app/README.md) | 移动端 README | ✅ v0.5.3 |
+| [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) | AI 助手指引 | ✅ v0.5.3 |
 
 ---
 
 ## 🏆 项目亮点
 
-### 🥇 一等奖
+### 🥇 跨端产品
 
-**完整的产品**
-- 不是演示原型，而是完全可用的应用
-- 包含所有必要的功能
+不是演示原型，而是 **完全可用的跨端产品**：
+- PC 桌面（Windows/macOS/Linux）
+- 移动端（Android/iOS 手机+平板）
+- 局域网内互联互通
 
-### 🥈 二等奖
+### 🥈 性能与体验
 
-**清晰的架构**
-- 三层分层设计
-- 模块化实现
-- 易于维护和扩展
+- 导入去重 99% 提速
+- 移动端首屏秒加载
+- mDNS 零配置发现
+- 配对码避免扫码失败
 
-### 🥉 三等奖
+### 🥉 工程化
 
-**高效的开发**
-- 7 小时完成 ~3900 行代码
-- 充分利用现有资源
-- 快速迭代
+- 完整 spec/plan/devlog 体系
+- 8 条 AC 验收机制
+- 附注型 tag 标记版本
+- 性能优化可量化
+
+---
+
+## 🔮 未来展望
+
+### 短期（1-2 周）
+- [ ] 搜索（文件名/日期/EXIF）
+- [ ] 相册统计图表
+- [ ] 批量编辑（重命名/标签）
+- [ ] 撤销/重做
+
+### 中期（1-3 个月）
+- [ ] AI 自动分类（场景/物体）
+- [ ] 人脸识别 + 人物相册
+- [ ] 多相册支持
+- [ ] 备份策略
+
+### 长期（3-6 个月）
+- [ ] P2P 同步（无需服务器）
+- [ ] Web 端访问（已有 Flutter Web 构建）
+- [ ] 移动端编辑（裁剪/滤镜）
+
+---
+
+## 🎓 学习价值
+
+- **PyWebView + React**：桌面 Web 化
+- **Flask + SQLAlchemy**：REST API + ORM
+- **Flutter 3.44 + Provider**：跨端 UI
+- **mDNS + Token**：零配置局域网安全通信
+- **MD5 + 两阶段预筛**：去重算法工程化
+- **Spec/Plan/AC 工作流**：方案驱动的开发模式
 
 ---
 
 ## 📝 总结
 
-### 项目成功的关键因素
+**关键成功因素**：
+1. 清晰需求：本地化照片管理，跨端延展
+2. 合理架构：分层 + 端独立
+3. 性能意识：去重优化、缓存复用
+4. 工程化：spec/plan/AC + 附注 tag
+5. 持续迭代：每个版本聚焦一个主题
 
-1. **清晰的需求**：从 Tkinter 升级到 PyWebView
-2. **合理的架构**：三层分层设计
-3. **高效的工具**：充分利用 Flask + PyWebView
-4. **完善的文档**：多层次的文档覆盖
-5. **自动化测试**：包含测试脚本
+**创新点**：
+- mDNS 零配置 + 配对码的混合方案
+- 两阶段去重工程化
+- 移动端上传闭环（端到端通知）
 
-### 项目的创新点
-
-1. **技术栈创新**：无框架前端 + PyWebView 的完美结合
-2. **架构创新**：RESTful API + 桌面应用的优雅分离
-3. **用户体验创新**：Win11 风格 UI 在桌面应用中的应用
-
-### 项目的实用价值
-
-✨ **可直接使用**：完整可用的 Blur Arc 软件
-✨ **可作为教学案例**：展示完整的应用开发流程
-✨ **可作为模板**：为其他 PyWebView 应用提供参考
-
----
-
-## 🎉 致谢
-
-感谢所有开源项目的支持，特别是：
-- PyWebView 社区
-- Flask 社区
-- Python 社区
+**实用价值**：
+- ✨ 直接可用：完整 PC + 移动端
+- ✨ 教学案例：展示跨端产品从 0 到 1
+- ✨ 模板：Spec 驱动开发可复用
 
 ---
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证。
+[MIT](LICENSE)
 
 ---
 
-## 🚀 开始使用
-
-```bash
-# 运行应用
-python BlurArc.py
-
-# 或使用脚本
-启动BlurArc.bat
-
-# 或打包成 EXE
-打包.bat
-```
-
----
-
-**版本**: v0.5.0  
-**完成日期**: 2026-06-16  
-**代码行数**: ~13,500 行  
-**状态**: ✅ **完全可用**  
-**质量**: 生产级
-
----
-
-**感谢使用 Blur Arc！** 🎉
-
-如有问题或建议，欢迎反馈。
-
-下一个版本敬请期待！ 🚀
+**版本**: v0.5.3 · **完成日期**: 2026-06-23 · **代码行数**: ~30,000
+**状态**: ✅ 完全可用（PC 端 + 移动端）· **质量**: 生产级

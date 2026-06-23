@@ -1,45 +1,22 @@
-# 开发指南
+# 🛠️ Blur Arc 开发指南 v0.5.3
 
-> 更新日期：2026-06-16
-> 版本：v0.5.0
+> 同时覆盖 **后端（Python）**、**PC 前端（React）**、**移动端（Flutter）** 的开发流程与约定。
+>
+> **版本**：v0.5.3（2026-06-23）
 
-## 环境准备
+---
 
-### 系统要求
+## 📋 目录
 
-- Python 3.8+
-- Windows / macOS / Linux
-
-### 安装依赖
-
-```bash
-# 克隆项目
-git clone https://github.com/BigAnnoy/BlurArc.git
-cd BlurArc
-
-# 安装依赖
-pip install -r requirements.txt
-```
-
-### 依赖列表
-
-**后端依赖**
-| 包名 | 版本 | 用途 |
-|------|------|------|
-| Flask | 2.3+ | Web 框架 |
-| Flask-CORS | - | 跨域支持 |
-| PyWebView | 6.1+ | 桌面窗口 |
-| SQLAlchemy | 2.0+ | ORM |
-| Pillow | 10+ | 图像处理 |
-| pillow-heif | - | HEIC 支持 |
-
-**前端依赖**
-| 包名 | 版本 | 用途 |
-|------|------|------|
-| React | 19.2+ | UI 框架 |
-| TypeScript | 6.0+ | 类型检查 |
-| Vite | 8.0+ | 构建工具 |
-| Tailwind CSS | 4.3+ | 样式框架 |
+1. [项目结构](#项目结构)
+2. [开发环境搭建](#开发环境搭建)
+3. [后端开发（Python）](#后端开发python)
+4. [PC 前端开发（React）](#pc-前端开发react)
+5. [移动端开发（Flutter）](#移动端开发flutter)
+6. [调试技巧](#调试技巧)
+7. [测试规范](#测试规范)
+8. [发布流程](#发布流程)
+9. [工程约定](#工程约定)
 
 ---
 
@@ -47,321 +24,525 @@ pip install -r requirements.txt
 
 ```
 BlurArc/
-├── src/
-│   └── BlurArc.py          # 主入口
-├── backend/
-│   ├── __init__.py
-│   ├── api_server.py          # Flask REST API
-│   ├── import_manager.py      # 导入管理器
-│   ├── thumbnail_manager.py   # 缩略图管理
-│   ├── video_processor.py     # 视频处理
-│   ├── database.py            # 数据模型
-│   ├── config_manager.py      # 配置管理
-│   ├── constants.py           # 常量定义
-│   ├── utils.py               # 工具函数
-│   └── ffmpeg_binaries/       # FFmpeg 二进制
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx            # 主应用组件
-│   │   ├── components/        # UI 组件
-│   │   ├── services/api.ts    # API 服务
-│   │   ├── hooks/             # 自定义 Hooks
-│   │   └── types/             # TypeScript 类型
-│   ├── package.json
-│   └── vite.config.ts
-├── scripts/                   # 工具脚本
-├── test/                      # 测试用例
-│   ├── unit/                  # 单元测试
-│   └── api/                   # API 测试
-└── docs/                      # 文档
+├── src/BlurArc.py                # PC 端主入口
+├── backend/                      # Python 后端
+│   ├── api_server.py             # PC 端 API
+│   ├── mobile_access_server.py   # 移动端独立 API
+│   ├── zeroconf_publisher.py     # mDNS 广播
+│   ├── import_manager.py         # 导入 + 去重
+│   ├── thumbnail_manager.py      # 缩略图
+│   ├── video_processor.py        # FFmpeg
+│   ├── database.py               # ORM
+│   ├── config_manager.py         # 配置
+│   └── ffmpeg_binaries/          # FFmpeg 8.1.1
+├── frontend/                     # PC 前端 (React + TS + Vite + Tailwind)
+│   └── src/
+│       ├── App.tsx
+│       ├── components/
+│       │   ├── common/  dialogs/  layout/  photos/  sidebar/
+│       ├── services/api.ts
+│       ├── hooks/
+│       ├── stores/
+│       ├── types/
+│       └── utils/
+├── blurarc_app/                  # 移动端 (Flutter)
+│   ├── lib/
+│   │   ├── main.dart
+│   │   ├── screens/              # 10 个页面
+│   │   ├── services/             # API / mDNS / 主题
+│   │   ├── models/
+│   │   ├── widgets/
+│   │   └── theme/
+│   ├── assets/
+│   ├── android/  ios/  web/  macos/  windows/  linux/
+│   └── pubspec.yaml
+├── docs/                         # 文档
+│   ├── devlogs/                  # 每日开发日志
+│   ├── superpowers/
+│   │   ├── specs/                # 方案
+│   │   └── plans/                # 实施计划
+│   ├── prototypes/               # UI 原型（HTML）
+│   └── *.md                      # API / DB / 开发文档
+├── scripts/                      # 启动 / 构建脚本
+├── test/                         # 后端 pytest
+└── BlurArc.spec                  # PyInstaller
 ```
 
 ---
 
-## 开发命令
+## 开发环境搭建
 
-### 启动应用
+### 后端
 
 ```bash
-# 开发模式启动（后端 + 前端）
-python src/BlurArc.py
+# Python 3.10+
+python --version
 
-# 或直接运行后端（用于调试）
-python -m backend.api_server
+# 虚拟环境（推荐）
+python -m venv .venv
+.\.venv\Scripts\activate    # Windows
+source .venv/bin/activate   # macOS/Linux
+
+# 依赖
+pip install -r requirements.txt
+
+# FFmpeg（可选，视频功能需要）
+python scripts/download_ffmpeg.py
 ```
 
-### 前端开发
+### PC 前端
+
+```bash
+# Node.js 18+
+node --version
+
+cd frontend
+npm install
+npm run dev    # 开发模式
+# 或
+npm run build  # 构建到 dist/
+```
+
+### 移动端
+
+```bash
+# Flutter SDK 3.44+
+flutter --version
+
+cd blurarc_app
+flutter pub get
+flutter doctor    # 检查环境
+```
+
+**dev-start 快捷菜单**：
+
+```bash
+.\scripts\dev-start.ps1
+# [5] PC 端（前端 build + 启动 BlurArc.py）
+# [9] 启动 Flutter
+# [10] 启动 Flutter + hot reload
+```
+
+---
+
+## 后端开发（Python）
+
+### 启动
+
+```bash
+python src/BlurArc.py
+```
+
+### 添加新 API 端点
+
+**步骤**：
+
+1. 打开 `backend/api_server.py`
+2. 在 `_register_routes()`（或类似函数）注册：
+   ```python
+   @self.app.route("/api/my-feature", methods=["GET"])
+   def my_feature():
+       return jsonify({"ok": True})
+   ```
+3. 写业务逻辑到 `backend/xxx_manager.py`
+4. 写测试到 `test/api/test_my_feature.py`
+
+**约定**：
+
+- 所有 API 返回 JSON
+- 错误用 `{"ok": False, "error": "..."}` 格式
+- 日志用 `logger = logging.getLogger(__name__)`
+
+### 添加新数据库表
+
+1. 打开 `backend/database.py`
+2. 加模型类：
+   ```python
+   class MyTable(Base):
+       __tablename__ = "my_table"
+       id = Column(Integer, primary_key=True)
+       ...
+   ```
+3. `init_db()` 会自动建表
+4. 写 CRUD 函数到独立文件或 `database.py`
+
+### 关键文件
+
+| 文件 | 职责 |
+|------|------|
+| `api_server.py` | PC 端 REST 端点 |
+| `mobile_access_server.py` | 移动端 REST 端点 |
+| `zeroconf_publisher.py` | mDNS 广播 |
+| `import_manager.py` | 导入 + 去重 |
+| `thumbnail_manager.py` | 缩略图 |
+| `video_processor.py` | FFmpeg |
+| `database.py` | ORM |
+| `config_manager.py` | 配置 |
+| `utils.py` | MD5 / 工具函数 |
+
+---
+
+## PC 前端开发（React）
+
+### 启动
 
 ```bash
 cd frontend
-
-# 安装依赖
-npm install
-
-# 开发模式（热更新）
-npm run dev
-
-# 构建生产版本
-npm run build
-
-# 预览构建结果
-npm run preview
-
-# 代码检查
-npm run lint
+npm run dev   # Vite dev server（带 HMR）
 ```
 
-### 运行测试
+⚠️ **重要**：dev server 是给浏览器开发用的。如果用 PyWebView 嵌入，需用 `npm run build` 把产物输出到 `frontend/dist/`，PyWebView 才会加载。
 
-```bash
-# 运行所有测试
-pytest
+### 项目结构
 
-# 运行单元测试
-pytest test/unit/ -v
-
-# 运行单个测试文件
-pytest test/unit/test_import_manager_pytest.py -v
-
-# 带覆盖率
-pytest --cov=backend test/unit/
+```
+frontend/src/
+├── App.tsx                     # 根组件
+├── main.tsx                    # 入口
+├── components/
+│   ├── common/                 # 通用组件
+│   │   ├── Loading.tsx
+│   │   ├── ErrorBoundary.tsx
+│   │   └── ThemeToggle.tsx
+│   ├── dialogs/                # 弹窗
+│   │   ├── ImportDialog.tsx
+│   │   ├── SettingsDialog.tsx
+│   │   └── PairingDialog.tsx
+│   ├── layout/                 # 布局
+│   │   ├── MainContent.tsx
+│   │   ├── TopBar.tsx
+│   │   └── Sidebar.tsx
+│   ├── photos/                 # 照片组件
+│   │   ├── PhotoCard.tsx
+│   │   ├── PhotoGrid.tsx
+│   │   └── PhotoPreview.tsx
+│   └── sidebar/                # 侧边栏
+│       ├── FolderTree.tsx
+│       └── DeviceList.tsx
+├── services/api.ts             # API 调用
+├── hooks/                      # React Hooks
+│   ├── usePhotos.ts
+│   ├── useImport.ts
+│   └── ...
+├── stores/                     # 状态（Zustand）
+│   ├── selectionStore.ts
+│   └── themeStore.ts
+├── types/                      # TS 类型
+└── utils/                      # 工具函数
 ```
 
-### 代码检查
+### 关键约定
 
-```bash
-# 类型检查
-mypy backend/
+- React 19 + TypeScript
+- Tailwind 4（className 风格）
+- 状态管理用 Zustand
+- API 调用用 services/api.ts 统一出口
+- 修改 UI **必须先在 `docs/prototypes/` 出 HTML 原型**
 
-# 代码格式化
-black backend/
-black frontend/modules/
+### 添加新组件
+
+1. 在 `components/<子目录>/` 创建 `MyComponent.tsx`
+2. 用 Tailwind className 写样式（避免 inline style）
+3. 写 Props interface
+4. 在父组件 import 使用
+
+### 调用 API
+
+```typescript
+import { api } from '../services/api';
+
+const data = await api.getAlbumStats();
 ```
+
+`api.ts` 统一封装 fetch + 错误处理。
 
 ---
 
-## 核心模块说明
+## 移动端开发（Flutter）
 
-### 1. api_server.py
+### 启动
 
-Flask 应用入口，定义所有 API 端点。
-
-**关键函数**
-- `get_album_stats()` - 统计信息
-- `get_photos()` - 照片列表
-- `start_import()` - 启动导入
-- `delete_files()` - 批量删除
-
-### 2. import_manager.py
-
-导入逻辑核心，处理文件导入和去重。
-
-**关键类和方法**
-```python
-class ImportManager:
-    def start_import_async(...)  # 异步启动导入
-    def _do_import(...)          # 导入主流程
-    def _import_file(...)        # 导入单个文件
-    def _compute_md5(...)        # 计算 MD5
-    def _load_target_records(...) # 加载已有记录
+```bash
+cd blurarc_app
+flutter run              # 真机
+flutter run -d <id>      # 指定设备
 ```
 
-**性能优化**
-- MD5 缓存复用
-- 并行源去重
-- 两阶段预筛
+热更新：模拟器按 `r`（hot reload）/ `R`（hot restart）。
 
-### 3. video_processor.py
+### 项目结构
 
-FFmpeg 封装，处理视频相关操作。
-
-**关键方法**
-```python
-class VideoProcessor:
-    @staticmethod
-    def is_ffmpeg_available() -> bool
-    
-    @staticmethod
-    def generate_thumbnail(video_path, output_path, time_seconds) -> bool
-    
-    @staticmethod
-    def extract_metadata(video_path) -> Optional[Dict]
-    
-    @staticmethod
-    def get_video_duration(video_path) -> Optional[float]
+```
+blurarc_app/lib/
+├── main.dart                   # 入口 + Provider 链
+├── screens/                    # 页面
+│   ├── connect_screen.dart
+│   ├── pairing_code_screen.dart
+│   ├── home_page.dart
+│   ├── album_screen.dart
+│   ├── folder_screen.dart
+│   ├── month_photo_screen.dart
+│   ├── photo_grid_screen.dart
+│   ├── photo_preview_screen.dart
+│   ├── upload_screen.dart
+│   └── settings_screen.dart
+├── services/                   # 服务
+│   ├── api_client.dart
+│   ├── mdns_discovery.dart
+│   ├── device_info_service.dart
+│   └── theme_provider.dart
+├── models/                     # 数据模型
+│   ├── photo.dart
+│   ├── photo_section.dart
+│   └── ...
+├── widgets/                    # 通用组件
+│   ├── blur_arc_logo.dart
+│   ├── photo_card.dart
+│   └── ...
+└── theme/
+    ├── app_theme.dart
+    └── colors.dart
 ```
 
-### 4. thumbnail_manager.py
+### 关键约定
 
-缩略图生成和缓存管理。
+- Dart 3.0+（`>=3.0.0 <4.0.0`）
+- 状态管理：**Provider**（不是 Riverpod / Bloc）
+- HTTP：**Dio**（已配 `sendTimeout: 30s`）
+- 主题：Material 3，统一 `app_theme.dart`
+- 响应式：手机竖屏用 `bottom_tab_bar`，平板横屏用 `tablet_sidebar`
+- 修改 UI **必须先在 `docs/prototypes/mobile/` 出 HTML 原型**
 
-**关键方法**
-```python
-class ThumbnailManager:
-    def get_thumbnail(photo_path, size) -> Optional[str]
-    def generate_thumbnail(photo_path, output_path, size) -> bool
-    def clear_cache(older_than_days) -> int
+### 添加新页面
+
+1. 在 `screens/` 创建 `MyScreen.dart`
+2. 用 `StatelessWidget` 或 `Consumer`（需要状态时）
+3. 注册到 `home_page.dart` 的 Tab 列表
+4. 写测试到 `test/`
+
+### 调用 API
+
+```dart
+import 'package:blurarc/services/api_client.dart';
+
+final api = ApiClient();
+final sections = await api.getPhotoSections();
 ```
 
-### 5. utils.py
+`api_client.dart` 自动加 Token、自动处理 mDNS 发现的主机。
 
-工具函数集合。
+### 关键陷阱
 
-```python
-def compute_md5(path, chunk_size=1024*1024) -> Optional[str]
-def get_file_fingerprint(path) -> Optional[Tuple[int, float]]
-```
-
----
-
-## 添加新功能
-
-### 添加新的 API 端点
-
-1. 在 `api_server.py` 中定义路由：
-
-```python
-@app.route('/api/new-endpoint', methods=['GET'])
-def new_endpoint():
-    # 处理逻辑
-    return jsonify({"result": "ok"})
-```
-
-2. 在 `frontend/modules/api/` 中添加调用方法：
-
-```javascript
-async function newEndpoint() {
-    const response = await fetch('/api/new-endpoint');
-    return response.json();
-}
-```
-
-### 添加新的媒体格式支持
-
-1. 在 `constants.py` 中添加格式：
-
-```python
-MEDIA_FORMATS.add('.newformat')
-VIDEO_FORMATS.add('.newformat')  # 如果是视频
-```
-
-2. 如果需要特殊处理，在相应模块添加逻辑。
+| 陷阱 | 正确写法 |
+|------|----------|
+| mDNS 模拟器无效 | 真机测试；模拟器手动输 IP |
+| `image_picker` Android 13+ 权限 | `permission_handler` 申请 |
+| 设备名 | `DeviceInfoService` 缓存（不要每次 IPC） |
+| 视频播放 | `video_player` 配 `chewie` 可加控件 |
 
 ---
 
 ## 调试技巧
 
-### 后端调试
+### 后端日志
+
+```bash
+# 默认日志在 BlurArc.log
+# 实时看：
+Get-Content BlurArc.log -Wait   # PowerShell
+tail -f BlurArc.log              # bash
+```
+
+### mDNS 失败
 
 ```python
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
-# 在代码中
-logger.debug(f"调试信息: {variable}")
+from backend.zeroconf_publisher import ZeroconfPublisher
+p = ZeroconfPublisher()
+p.start()
+print(p.wait_ready(timeout=3))   # True = 启动成功
+print(p._last_error)              # 失败原因
 ```
 
-### 查看数据库
+**常见原因**：
+- 端口 5353 被占用（`netstat -ano | findstr :5353`）
+- 防火墙阻止组播
+- WiFi 路由器禁用组播
+
+### 移动端连不上 PC
+
+1. **同 WiFi？** （最常见原因）
+2. **PC 防火墙 8900 端口放行？**
+   ```powershell
+   netsh advfirewall firewall add rule name="BlurArc Mobile" dir=in action=allow protocol=TCP localport=8900
+   ```
+3. **模拟器手动输 IP？** `10.0.2.2:8900`（Android 模拟器内 10.0.2.2 等于宿主机 localhost）
+
+### 导入慢
+
+- 看进度条：算 MD5 是最慢的一步
+- 大文件夹可暂停，配置 prescan 缓存后继续
+- 第二次导入同一文件夹应秒过
+
+### PC 前端改了不生效
 
 ```bash
-# 使用 sqlite3 命令行
-sqlite3 .config/photo_manager.db
-
-# 常用查询
-.tables
-.schema photos
-SELECT * FROM photos LIMIT 10;
+# PyWebView 加载的是 dist/，必须 build
+cd frontend && npm run build
 ```
 
-### 查看 API 响应
+### 移动端热更新没反应
+
+- 模拟器：按 `r`（hot reload）/ `R`（hot restart）
+- 真机：重装 APK
+- 改了 `pubspec.yaml` → 完整重启
+
+### 端口冲突
+
+| 端口 | 占用方 | 解决 |
+|------|--------|------|
+| 23986 | PC 端 Flask | 改 `src/BlurArc.py` 中 `WEBVIEW_PORT` |
+| 8900 | 移动接入 | 改 `backend/mobile_access_server.py` 中 `MOBILE_PORT` |
+| 5353 | mDNS | 罕见，避免改 |
+
+---
+
+## 测试规范
+
+### 后端
 
 ```bash
-# 健康检查
-curl http://localhost:5000/api/health
-
-# 统计信息
-curl http://localhost:5000/api/album/stats
+pytest                          # 全量
+pytest test/unit/ -v            # 单元
+pytest test/api/ -v             # API 集成
+pytest test/integration/ -v     # 端到端
 ```
 
----
+**写测试**：
+- 单元测试：`test/unit/test_<module>.py`
+- API 测试：`test/api/test_<feature>_api.py`
+- 用 `tmp_path` fixture 隔离测试数据
 
-## 打包发布
-
-### 使用 PyInstaller
+### 移动端
 
 ```bash
-# 安装 PyInstaller
-pip install pyinstaller
-
-# 打包
-pyinstaller BlurArc.spec
-
-# 输出
-dist/BlurArc.exe
+cd blurarc_app
+flutter test
+flutter analyze
 ```
 
-### 打包配置 (BlurArc.spec)
-
-关键配置项：
-- `datas`: 包含前端文件和 FFmpeg
-- `hiddenimports`: 隐式导入的模块
-- `excludes`: 排除的模块
+**写测试**：
+- Widget 测试：`test/<feature>_test.dart`
+- 用 `WidgetTester` 模拟用户操作
 
 ---
 
-## 性能优化指南
+## 发布流程
 
-### 已实现的优化
+**参考 v0.5.3 范式**：
 
-| 优化项 | 实现位置 | 效果 |
-|--------|----------|------|
-| MD5 缓存 | `import_manager.py` | 减少 50-70% 计算 |
-| 并行去重 | `import_manager.py` | 2-4x 提升 |
-| 两阶段预筛 | `import_manager.py` | 5-10x 提升 |
-
-### 可继续优化
-
-| 方案 | 效果 | 复杂度 |
-|------|------|--------|
-| 增量 MD5 | 大文件 3-5x | 中 |
-| xxHash | 5-10x | 低 |
-| 异步视频元数据 | 不阻塞导入 | 中 |
-
----
-
-## 常见问题
-
-### Q: FFmpeg 不可用？
-
-A: 运行 `python scripts/download_ffmpeg.py` 或手动下载到 `backend/ffmpeg_binaries/`。
-
-### Q: 导入速度慢？
-
-A: 
-1. 检查是否启用了 `skip_source_duplicates` 和 `skip_target_duplicates`
-2. 确保两阶段预筛生效（查看日志中的"预筛完成"）
-3. 考虑减少并发线程数（修改 `max_workers`）
-
-### Q: 缩略图不显示？
-
-A:
-1. 检查 `.thumbnails/` 目录权限
-2. 检查 pillow-heif 是否安装（HEIC 支持）
-3. 查看日志中的错误信息
+1. **改代码** → 跑测试 → `cd frontend && npm run build`
+2. **版本号**：
+   - `frontend/package.json` → `"version": "0.5.3"`
+   - `src/BlurArc.py` 窗口标题
+3. **CHANGELOG.md**：追加 修复/变更/新增 三段
+4. **写 spec/plan**：
+   - `docs/superpowers/specs/<date>-vX.Y.Z-release-design.md`
+   - `docs/superpowers/plans/<date>-vX.Y.Z-release.md`
+5. **git 提交推送**：
+   ```bash
+   git add .
+   git commit -m "release: vX.Y.Z — <主题>"
+   git push
+   ```
+6. **打 tag**：
+   ```bash
+   git tag -a vX.Y.Z -m "Release vX.Y.Z — <主题>"
+   git push origin vX.Y.Z
+   ```
+7. **8 条 AC 验收**（见 plan）
+8. **GitHub Release**（手动网页或 `gh release create`）
 
 ---
 
-## 贡献指南
+## 工程约定
 
-1. Fork 项目
-2. 创建功能分支：`git checkout -b feature/new-feature`
-3. 提交更改：`git commit -m 'Add new feature'`
-4. 推送分支：`git push origin feature/new-feature`
-5. 提交 Pull Request
+### 命名
 
-### 代码规范
+| 类型 | 风格 | 例 |
+|------|------|-----|
+| Python 文件 / 函数 / 变量 | snake_case | `import_manager.py`, `check_file_size` |
+| Python 类 | PascalCase | `ImportManager` |
+| React 组件文件 | PascalCase | `PhotoCard.tsx` |
+| React Hook | camelCase + use | `usePhotos` |
+| TS interface | PascalCase | `PhotoItem` |
+| TS 变量 | camelCase | `photoList` |
+| Dart 文件 | snake_case | `api_client.dart` |
+| Dart 类 | PascalCase | `ApiClient` |
+| Dart 变量 | camelCase | `photoList` |
 
-- 使用 4 空格缩进
-- 函数添加文档字符串
-- 新功能需要测试用例
-- 遵循 PEP 8 规范
+### Commit 信息
+
+```
+feat: 新功能
+fix: 修复
+docs: 文档
+refactor: 重构
+perf: 性能
+chore: 杂项
+test: 测试
+release: 发布
+```
+
+例：`fix(import): MD5 cache 命中时跳过 stat()`
+
+### 分支
+
+- 主分支：`main`
+- 不开 PR/MR（单人开发，直接推 main）
+- 紧急修复：直接在 main 改
+
+### UI 修改必须先出原型
+
+任何 UI 变更 → 先在 `docs/prototypes/` 改 HTML → 用户确认 → 再写代码
+
+### 移动端 vs PC 端
+
+- 移动端 API 走 `backend/mobile_access_server.py`（独立端口 8900）
+- PC 端 API 走 `backend/api_server.py`（PyWebView 23986）
+- 共享 `database.py` 和 `media` 表
+
+### Spec 驱动开发
+
+- 设计阶段：`docs/superpowers/specs/`
+- 实施阶段：`docs/superpowers/plans/`
+- 复盘：`docs/devlogs/<date>-<topic>.md`
+
+### mDNS 参数顺序陷阱
+
+后端 `zeroconf>=0.132.0` 中 `ServiceInfo` 的 `addresses` 是 keyword-only 参数：
+
+```python
+# ❌ 错
+ServiceInfo(SERVICE_TYPE, name, addresses=[...], port=self.port, ...)
+
+# ✅ 对
+ServiceInfo(SERVICE_TYPE, name, port=self.port, addresses=[...], ...)
+```
+
+错误写法 → `TypeError: multiple values for 'port'` → 线程静默失败。
+
+---
+
+## 📚 进一步阅读
+
+- [CODE_MAP.md](CODE_MAP.md) — 模块地图
+- [API_REFERENCE.md](API_REFERENCE.md) — 全部 API
+- [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) — 数据库表
+- [DEPENDENCIES.md](DEPENDENCIES.md) — 依赖列表
+- [blurarc_app/README.md](../blurarc_app/README.md) — 移动端 README
+- [docs/superpowers/specs/](superpowers/specs/) — 方案库
+- [docs/devlogs/](devlogs/) — 每日开发日志
+
+---
+
+**版本**: v0.5.3 · **更新日期**: 2026-06-23

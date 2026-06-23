@@ -27,6 +27,10 @@
 | **全格式预览** | HEIC / TIFF / BMP / RAW 自动转 JPEG 缩略图 |
 | **批量操作** | 多选删除、复制/移动导入、右键菜单、键盘快捷键 |
 | **手机互联** | Flutter 移动端 App，局域网无线浏览相册、推送照片（mDNS 发现 + 安全配对） |
+| **自动配对** | PC 端弹 6 位配对码 + Token 鉴权，避免二维码扫描失败 |
+| **mDNS 零配置** | PC 启动自动广播 `_blurarc._tcp.local.`，手机自动发现，无需手输 IP |
+| **跨设备适配** | 同一份代码适配手机竖屏 / 平板横屏 / 桌面 PC，统一暗/亮主题 |
+| **上传闭环** | 手机选图推送 → PC 自动归档 → ImportDialog 弹窗通知 → 一键导入 |
 
 ## 快速开始
 
@@ -102,6 +106,52 @@ BlurArc/
         └── 20240316_091500_001.mp4
 ```
 
+## 移动端 App
+
+Blur Arc 提供 Flutter 移动端伴侣 App（[blurarc_app/](blurarc_app/)），支持 **Android** / **iOS** 手机与平板。
+
+### 主要能力
+
+- **浏览相册**：按月份分组的照片墙，流畅滚动，缩略图 → 中等预览 → 一键下载原图
+- **推送照片**：手机相册批量选图，上传到 PC 端自动归档到 `YYYY/YYYY-MM/`
+- **mDNS 自动发现**：手机打开 App 即可看到同一局域网内的 PC（`_blurarc._tcp.local.`）
+- **安全配对**：PC 端弹 6 位配对码 + Token 鉴权，避免二维码扫描失败
+- **跨设备适配**：手机竖屏、平板横屏自动切换布局，统一暗/亮主题
+
+### 启动流程
+
+```
+PC 端：python src/BlurArc.py    →  自动开启移动接入服务 + mDNS 广播
+        ↓
+手机端：flutter run              →  mDNS 发现 PC 列表
+        ↓ 点 PC  →  输入 6 位配对码  →  PC 端确认  →  配对成功
+        ↓
+开始浏览 / 上传
+```
+
+### 移动端相关端点
+
+```
+POST /api/mobile/pairing/request         # 发起配对
+POST /api/mobile/pairing/submit-code     # 提交配对码
+GET  /api/mobile/photos/sections         # 月份分组
+GET  /api/mobile/photos/by-month?ym=...  # 单月照片
+GET  /api/mobile/thumbnail?path=...      # 缩略图（带 Token）
+GET  /api/mobile/file?path=...           # 原图（带 Token）
+GET  /api/mobile/preview?path=...        # 中等预览
+POST /api/mobile/upload                  # 上传文件
+POST /api/mobile/upload/done             # 通知 PC 端有上传完成
+```
+
+完整移动端 API 与 PC 端 API 文档见 [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
+
+### 约束
+
+- **Android 模拟器不支持 mDNS**（NAT 隔离组播），自动发现只能在真机测试；模拟器需手动输入 `10.0.2.2:8900`
+- App 内部版本 `1.0` 与 PC 端 `v0.5.3` 解耦
+
+---
+
 ## API 概览
 
 ```
@@ -117,6 +167,13 @@ GET  /api/import/progress/<id>      # 实时进度
 POST /api/import/pause/<id>         # 暂停
 POST /api/import/resume/<id>        # 继续
 POST /api/files/delete              # 批量删除
+GET  /api/mobile/status             # 移动接入开关
+POST /api/mobile/pairing/start      # PC 端发起配对（弹配对码）
+GET  /api/mobile/pairing/pending    # 等待手机输入的配对码
+POST /api/mobile/pairing/confirm    # PC 端确认
+GET  /api/mobile/devices            # 已配对设备列表
+POST /api/mobile/revoke             # 撤销单台设备
+POST /api/mobile/upload/done        # 移动端通知上传完成（弹 ImportDialog）
 ```
 
 完整 API 文档见 [docs/API_REFERENCE.md](docs/API_REFERENCE.md)

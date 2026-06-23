@@ -1,8 +1,11 @@
 # 数据库模型文档
 
-> 更新日期：2026-06-16
+> 更新日期：2026-06-23
 > 数据库类型：SQLite
 > ORM：SQLAlchemy
+> 版本：v0.5.3
+>
+> 包含 PC 端表 + 移动端表（v0.5.2 引入）。
 
 ## 数据库文件位置
 
@@ -132,6 +135,100 @@
 
 ---
 
+## 移动端表（v0.5.2+）
+
+### mobile_pairing（配对会话表）
+
+记录 PC 端与移动端之间的配对会话（中间态，最终成功会写入 mobile_devices）。
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | INTEGER | PK, AUTO | 主键 |
+| session_id | VARCHAR(64) | UNIQUE, NOT NULL | 会话 UUID |
+| code | VARCHAR(6) | NOT NULL, INDEX | 6 位配对码 |
+| device_name | VARCHAR(128) | - | 移动端设备名 |
+| platform | VARCHAR(16) | - | android / ios / web |
+| status | VARCHAR(16) | NOT NULL | pending / approved / rejected / expired |
+| token | TEXT | - | 配对成功后生成的 JWT |
+| device_id | VARCHAR(64) | INDEX | 关联 mobile_devices |
+| created_at | DATETIME | DEFAULT NOW | 发起时间 |
+| expires_at | DATETIME | NOT NULL | 过期时间（默认 5 分钟） |
+| approved_at | DATETIME | - | 确认时间 |
+
+**索引**：
+- `code`：按配对码查询
+- `session_id`：唯一索引
+- `device_id`：按设备查询
+
+**状态机**：
+```
+pending → approved（PC 端 confirm）
+       → rejected（PC 端拒绝）
+       → expired（5 分钟未操作）
+```
+
+---
+
+### mobile_devices（已配对设备表）
+
+记录长期有效（直到 revoke）的已配对设备。
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | INTEGER | PK, AUTO | 主键 |
+| device_id | VARCHAR(64) | UNIQUE, NOT NULL | 设备 UUID（生成后不变） |
+| name | VARCHAR(128) | NOT NULL | 设备名（用户可改） |
+| platform | VARCHAR(16) | NOT NULL | android / ios / web |
+| token_hash | VARCHAR(64) | NOT NULL | Token 哈希（HMAC-SHA256，不存原文） |
+| paired_at | DATETIME | DEFAULT NOW | 首次配对时间 |
+| last_seen | DATETIME | - | 最近一次请求时间 |
+| last_ip | VARCHAR(45) | - | 最近一次 IP（IPv4/IPv6） |
+| is_revoked | BOOLEAN | DEFAULT FALSE | 是否已撤销 |
+
+**索引**：
+- `device_id`：唯一索引（鉴权 key）
+- `token_hash`：鉴权时按 token 哈希查
+
+**安全**：
+- Token 仅在配对成功时返回一次，DB 只存哈希
+- `is_revoked=True` 时拒绝该设备所有请求
+
+---
+
+### flutter_uploads（待导入上传表）
+
+记录来自 Flutter 移动端的上传文件，PC 端 ImportDialog 弹窗读取此表。
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | INTEGER | PK, AUTO | 主键 |
+| import_id | VARCHAR(64) | NOT NULL, INDEX | 批次 UUID（一次上传 = 一个批次） |
+| device_id | VARCHAR(64) | FK→mobile_devices | 来源设备 |
+| file_path | TEXT | NOT NULL | PC 端落盘路径（inbox/...） |
+| original_name | VARCHAR(255) | - | 原文件名 |
+| sha256 | VARCHAR(64) | - | 文件 SHA256（与媒体库 MD5 互不依赖） |
+| size | INTEGER | - | 文件大小（字节） |
+| taken_at | DATETIME | - | 拍摄时间（移动端传） |
+| created_at | DATETIME | DEFAULT NOW | 接收时间 |
+| imported | BOOLEAN | DEFAULT FALSE | 是否已被 PC 端导入到相册 |
+| imported_at | DATETIME | - | 导入时间 |
+
+**索引**：
+- `import_id`：按批次查询
+- `device_id`：按设备过滤
+- `(imported, created_at)`：按未导入 + 时间排序
+
+**生命周期**：
+```
+移动端 upload   →  写入 flutter_uploads（imported=False）
+移动端 upload/done →  PC 端弹 ImportDialog
+用户点确认     →  PC 调用 import-batch
+                →  走 import_manager 流程
+                →  imported=True，imported_at=now
+```
+
+---
+
 ## 数据库操作
 
 ### 常用查询示例
@@ -220,4 +317,36 @@ set_setting('dark_mode', 'true')
 │ status      │
 │ ...         │
 └─────────────┘
+
+┌──────────────────┐         ┌──────────────────┐
+│ mobile_pairing   │         │  mobile_devices  │
+├──────────────────┤   1:1   ├──────────────────┤
+│ id (PK)          │ ──────► │ id (PK)          │
+│ session_id (UQ)  │ approve │ device_id (UQ)   │
+│ code             │         │ name             │
+│ device_name      │         │ platform         │
+│ platform         │         │ token_hash       │
+│ status           │         │ paired_at        │
+│ token            │         │ last_seen        │
+│ device_id (FK)   │         │ last_ip          │
+│ created_at       │         │ is_revoked       │
+│ expires_at       │         └──────────────────┘
+│ approved_at      │                  │
+└──────────────────┘                  │ 1:N
+                                      ▼
+                            ┌──────────────────┐
+                            │ flutter_uploads  │
+                            ├──────────────────┤
+                            │ id (PK)          │
+                            │ import_id        │
+                            │ device_id (FK)   │
+                            │ file_path        │
+                            │ original_name    │
+                            │ sha256           │
+                            │ size             │
+                            │ taken_at         │
+                            │ created_at       │
+                            │ imported         │
+                            │ imported_at      │
+                            └──────────────────┘
 ```
