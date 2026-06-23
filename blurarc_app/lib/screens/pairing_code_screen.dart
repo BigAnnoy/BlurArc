@@ -134,7 +134,7 @@ class _PairingCodeScreenState extends State<PairingCodeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar:
-          AppBar(title: const BlurArcLogoWithText(logoSize: 20, fontSize: 14)),
+          AppBar(title: const BlurArcLogoWithText(height: 37)),
       body: SingleChildScrollView(
         child: Center(
           child: Padding(
@@ -244,9 +244,21 @@ class _PairingCodeScreenState extends State<PairingCodeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(6, (i) {
+                      // 原型：44x52 圆角 8，1.5px 边框，surface2 背景，22px 字
                       return Container(
-                        width: 40,
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        width: 44,
+                        height: 52,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF1a2533)
+                              : const Color(0xFFf0f1f3),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Theme.of(context).dividerColor,
+                            width: 1.5,
+                          ),
+                        ),
                         child: KeyboardListener(
                           focusNode: _keyListenerFocusNodes[i],
                           onKeyEvent: (event) {
@@ -266,20 +278,17 @@ class _PairingCodeScreenState extends State<PairingCodeScreen> {
                             maxLength: 1,
                             keyboardType: TextInputType.text,
                             textCapitalization: TextCapitalization.characters,
-                            style: const TextStyle(
-                                fontSize: 20, fontWeight: FontWeight.bold),
-                            decoration: InputDecoration(
+                            style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.onSurface),
+                            decoration: const InputDecoration(
                               counterText: '',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFF22D3EE), width: 2),
-                              ),
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 10),
+                              border: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                              isDense: true,
                             ),
                             onChanged: (v) {
                               if (v.isNotEmpty) {

@@ -2,16 +2,33 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_client.dart';
+import '../services/device_info_service.dart';
 import '../services/theme_provider.dart';
 import 'connect_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   final ApiClient api;
 
   const SettingsScreen({super.key, required this.api});
 
   @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  String _deviceName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    DeviceInfoService.getDeviceName().then((n) {
+      if (mounted) setState(() => _deviceName = n);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final api = widget.api;
     final theme = Theme.of(context);
     final themeProvider = context.watch<ThemeProvider>();
     final isTablet = MediaQuery.of(context).size.width > 600;
@@ -24,24 +41,12 @@ class SettingsScreen extends StatelessWidget {
         _SettingsCard(
           child: Column(
             children: [
-              const _SettingsItem(
+              _SettingsItem(
                 label: '设备名称',
                 value: Text(
-                  '我的手机',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF9aa5b5),
-                  ),
-                ),
-              ),
-              const _SettingsDivider(),
-              _SettingsItem(
-                label: 'Token',
-                value: Text(
-                  _truncateToken(api.token),
+                  _deviceName.isEmpty ? '...' : _deviceName,
                   style: const TextStyle(
-                    fontSize: 11,
-                    fontFamily: 'monospace',
+                    fontSize: 13,
                     color: Color(0xFF9aa5b5),
                   ),
                 ),
@@ -124,12 +129,6 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  String _truncateToken(String? token) {
-    if (token == null || token.isEmpty) return '-';
-    if (token.length <= 12) return token;
-    return '${token.substring(0, 8)}...';
-  }
-
   void _disconnect(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -148,7 +147,7 @@ class SettingsScreen extends StatelessWidget {
     );
 
     if (confirmed == true) {
-      await api.disconnect();
+      await widget.api.disconnect();
       if (!context.mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
@@ -160,6 +159,7 @@ class SettingsScreen extends StatelessWidget {
 }
 
 // ===== Settings Card 容器 =====
+// 原型 mobile: background + border-radius 12 + 0.5px border (无阴影)
 class _SettingsCard extends StatelessWidget {
   final Widget child;
   const _SettingsCard({required this.child});
@@ -171,15 +171,10 @@ class _SettingsCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: theme.brightness == Brightness.light
-            ? [
-                BoxShadow(
-                  color: Colors.black.withAlpha(8),
-                  blurRadius: 3,
-                  offset: const Offset(0, 1),
-                ),
-              ]
-            : null,
+        border: Border.all(
+          color: theme.dividerColor,
+          width: 0.5,
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: child,

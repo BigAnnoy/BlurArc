@@ -187,6 +187,13 @@ ServiceInfo(SERVICE_TYPE, name, port=self.port, addresses=[...], ...)
 
 ---
 
+## 🗺️ 代码地图
+
+完整的模块/入口/调用链速查表（按功能找文件）见 [docs/CODE_MAP.md](docs/CODE_MAP.md)。
+**改任何功能前先查这张表**。
+
+---
+
 ## 📋 开发日志
 
 开发日志存放在 `docs/devlogs/` 目录，按 `YYYY-MM-DD-<topic>.md` 命名。

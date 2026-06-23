@@ -99,20 +99,21 @@ class _HomePageState extends State<HomePage> {
         onTap: (i) => setState(() => _currentIndex = i),
         isTablet: isTablet,
         items: const [
-          BottomTabItem(icon: Icons.photo_library_outlined, label: '相册'),
-          BottomTabItem(icon: Icons.cloud_upload_outlined, label: '上传'),
-          BottomTabItem(icon: Icons.settings_outlined, label: '设置'),
+          BottomTabItem(emoji: '🖼', label: '相册'),
+          BottomTabItem(emoji: '📤', label: '上传'),
+          BottomTabItem(emoji: '⚙', label: '设置'),
         ],
       ),
     );
   }
 
-  /// 自定义 AppBar — 与原型一致：居中 logo + 文字
+  /// 自定义 AppBar — 居中 logo + "Blur Arc" 文字（PNG 图片版）
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       toolbarHeight: 52,
       title: const BlurArcLogoWithText(),
       centerTitle: true,
+      automaticallyImplyLeading: false,
       elevation: 0,
       scrolledUnderElevation: 0,
     );

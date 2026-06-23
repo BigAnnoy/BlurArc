@@ -75,25 +75,28 @@ class _UploadScreenState extends State<UploadScreen> {
       onTap: _isUploading ? null : _pickFiles,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: theme.colorScheme.onSurface.withAlpha(30),
-            width: 2,
+            width: 1.5,
             style: BorderStyle.solid,
           ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.add_photo_alternate,
-              size: 40,
-              color: theme.colorScheme.primary,
+            // 原型：📷 emoji 图标，40px，text-tertiary 颜色
+            Text(
+              '📷',
+              style: TextStyle(
+                fontSize: 40,
+                color: theme.colorScheme.onSurface.withAlpha(120),
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               '选择照片',
               style: TextStyle(
@@ -104,7 +107,7 @@ class _UploadScreenState extends State<UploadScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              '点击选择要上传的照片，支持 JPEG/PNG/HEIC/视频',
+              '点击选择要上传的照片',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
@@ -228,6 +231,8 @@ class _UploadScreenState extends State<UploadScreen> {
     final pickedFiles = <XFile>[];
 
     try {
+      // 单次拉起系统选择器，避免连续 pop 两遍
+      // image_picker 在 Android 上 pickMultiImage 可以同时选图和视频
       final images = await _picker.pickMultiImage();
       pickedFiles.addAll(images);
     } catch (_) {
@@ -236,11 +241,6 @@ class _UploadScreenState extends State<UploadScreen> {
         if (img != null) pickedFiles.add(img);
       } catch (_) {}
     }
-
-    try {
-      final video = await _picker.pickVideo(source: ImageSource.gallery);
-      if (video != null) pickedFiles.add(video);
-    } catch (_) {}
 
     if (pickedFiles.isEmpty) return;
 

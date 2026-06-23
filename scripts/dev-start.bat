@@ -3,7 +3,7 @@ chcp 65001 >nul 2>&1
 title BlurArc Dev Tools
 setlocal enabledelayedexpansion
 
-:: ====================== 全局配置区（核对本地路径） ======================
+rem ====================== Global config ======================
 set ROOT_DIR=F:\AI\Frame_Album
 set BACKEND_LOG=%ROOT_DIR%\backend.log
 set BACKEND_PORT=5000
@@ -19,12 +19,12 @@ set EMULATOR=%ANDROID_SDK%\emulator\emulator.exe
 set AVD_NAME=BlurArc_Test
 set AVD_TABLET_NAME=BlurArc_Tablet
 set APP_PACKAGE=com.example.blurarc_app
-:: ======================================================================
+rem ============================================================
 
 cls 2>nul
 echo.
 echo  ==========================================
-echo             BlurArc Dev Launcher
+echo            BlurArc Dev Launcher
 echo  ==========================================
 echo.
 echo  [1] Start backend (Flask only)
@@ -57,7 +57,7 @@ echo Invalid input, please input 1~11
 pause
 exit /b 1
 
-:: ====================== 启动后端 ======================
+rem ====================== Start backend ======================
 :start_backend
 echo.
 echo [Backend] Kill process on port %BACKEND_PORT%
@@ -80,20 +80,21 @@ start "BlurArc Backend" /min cmd /c ""%PYTHON%" -m backend.api_server > "%BACKEN
 timeout /t 4 /nobreak >nul
 
 curl --version >nul 2>&1
-if !ERRORLEVEL! equ 0 (
-    curl -s http://127.0.0.1:%BACKEND_PORT%/api/health >nul 2>&1
-    if !ERRORLEVEL! equ 0 (
-        echo [Backend] Service OK - http://0.0.0.0:%BACKEND_PORT%
-    ) else (
-        echo [Backend] Health check failed, see backend.log
-    )
+if errorlevel 1 goto skip_health
+curl -s http://127.0.0.1:%BACKEND_PORT%/api/health >nul 2>&1
+if errorlevel 1 (
+    echo [Backend] Health check failed, see backend.log
 ) else (
-    echo WARN: curl not found, skip health check
+    echo [Backend] Service OK - http://0.0.0.0:%BACKEND_PORT%
 )
+goto health_done
+:skip_health
+echo WARN: curl not found, skip health check
+:health_done
 echo.
 goto :eof
 
-:: ====================== 构建 APK ======================
+rem ====================== Build APK ======================
 :build_apk
 if not exist "%FLUTTER_BIN%" (
     echo ERROR: flutter not found: %FLUTTER_BIN%
@@ -108,7 +109,7 @@ if not exist "%FLUTTER_PROJ%" (
 echo Build debug APK
 cd /d "%FLUTTER_PROJ%"
 call "%FLUTTER_BIN%" build apk --debug
-if !ERRORLEVEL! NEQ 0 (
+if errorlevel 1 (
     echo ERROR: Build APK failed
     pause
     exit /b 1
@@ -116,7 +117,7 @@ if !ERRORLEVEL! NEQ 0 (
 echo Build finished
 goto :eof
 
-:: ====================== 部署到手机 ======================
+rem ====================== Deploy to phone ======================
 :deploy_phone
 echo.
 if not exist "%ADB%" (
@@ -129,7 +130,7 @@ call :build_apk
 
 echo Install APK to phone...
 "%ADB%" install -r "build\app\outputs\flutter-apk\app-debug.apk"
-if !ERRORLEVEL! NEQ 0 (
+if errorlevel 1 (
     echo ERROR: Install APK failed. Check USB connection and developer mode.
     pause
     exit /b 1
@@ -142,14 +143,10 @@ echo.
 pause
 exit /b 0
 
-:: ====================== 部署到模拟器（公共，供手机/平板 AVD 共用） ======================
-:: 调用前需设置：
-::   DEPLOY_AVD_NAME        - AVD 名称
-::   DEPLOY_AVD_LABEL       - 用于日志显示的标签（"emulator"/"tablet emulator"）
-::   DEPLOY_AVD_SKIN        - 可选，emulator 启动参数 -skin 的值；留空则不加 -skin
-::   DEPLOY_WAIT_LABEL      - 启动窗口标题（"Android Emulator"/"Android Tablet Emulator"）
-::   DEPLOY_FINISH_MSG      - 结束提示语
-::   DEPLOY_HOT             - 可选，"1"=热更新模式（flutter run），其余=正常 install 模式
+rem ====================== AVD common logic ======================
+rem Caller must set:
+rem   DEPLOY_AVD_NAME, DEPLOY_AVD_LABEL, DEPLOY_AVD_SKIN
+rem   DEPLOY_WAIT_LABEL, DEPLOY_FINISH_MSG, DEPLOY_HOT
 :deploy_avd_common
 echo.
 if not exist "%ADB%" (
@@ -175,7 +172,7 @@ if not exist "%FLUTTER_PROJ%" (
 
 echo Check AVD exists: %DEPLOY_AVD_NAME%
 "%EMULATOR%" -list-avds | findstr "%DEPLOY_AVD_NAME%" >nul
-if !ERRORLEVEL! NEQ 0 (
+if errorlevel 1 (
     echo ERROR: AVD "%DEPLOY_AVD_NAME%" does not exist
     echo Available AVD list:
     "%EMULATOR%" -list-avds
@@ -187,7 +184,7 @@ if !ERRORLEVEL! NEQ 0 (
 )
 
 "%ADB%" devices 2>nul | findstr "emulator-" >nul
-if !ERRORLEVEL! NEQ 0 (
+if errorlevel 1 (
     echo No running %DEPLOY_AVD_LABEL%, launch AVD %DEPLOY_AVD_NAME%
     if defined DEPLOY_AVD_SKIN (
         start "%DEPLOY_WAIT_LABEL%" "%EMULATOR%" -avd %DEPLOY_AVD_NAME% -skin %DEPLOY_AVD_SKIN%
@@ -199,8 +196,9 @@ if !ERRORLEVEL! NEQ 0 (
     :wait_avd_dev
     timeout /t 10 /nobreak >nul
     "%ADB%" devices 2>nul | findstr "emulator-" >nul
-    if !ERRORLEVEL! NEQ 0 (
-        tasklist | findstr emulator.exe >nul || (
+    if errorlevel 1 (
+        tasklist | findstr emulator.exe >nul
+        if errorlevel 1 (
             echo ERROR: Emulator process exited, launch failed
             pause
             exit /b 1
@@ -211,7 +209,7 @@ if !ERRORLEVEL! NEQ 0 (
     echo Wait system boot complete
     :wait_avd_boot
     "%ADB%" shell getprop sys.boot_completed 2>nul | findstr "1" >nul
-    if !ERRORLEVEL! NEQ 0 (
+    if errorlevel 1 (
         timeout /t 5 /nobreak >nul
         goto wait_avd_boot
     )
@@ -220,7 +218,7 @@ if !ERRORLEVEL! NEQ 0 (
     echo Emulator already running
 )
 
-:: ====================== 模式分支 ======================
+rem Mode branch
 if "%DEPLOY_HOT%"=="1" goto hotrun_branch
 goto install_branch
 
@@ -234,7 +232,7 @@ echo       Press  R  = hot restart (reset state,    ~5s)
 echo       Press  q  = quit
 echo       Press  h  = help (more commands)
 echo Note : Modify .dart code in IDE and save, then press r.
-echo        First run takes longer (build & install on device).
+echo        First run takes longer (build and install on device).
 echo ============================================================
 echo.
 cd /d "%FLUTTER_PROJ%"
@@ -249,7 +247,7 @@ call :build_apk
 
 echo Install APK to %DEPLOY_AVD_LABEL%
 "%ADB%" install -r "build\app\outputs\flutter-apk\app-debug.apk"
-if !ERRORLEVEL! NEQ 0 (
+if errorlevel 1 (
     echo ERROR: Install APK failed
     pause
     exit /b 1
@@ -262,15 +260,17 @@ echo.
 pause
 exit /b 0
 
-:: ====================== 部署到模拟器（手机 AVD） ======================
+rem ====================== Deploy emulator (phone) ======================
 :deploy_emulator
 set DEPLOY_AVD_NAME=%AVD_NAME%
 set DEPLOY_AVD_LABEL=emulator
 set DEPLOY_WAIT_LABEL=Android Emulator
 set DEPLOY_FINISH_MSG=Deploy finished!
 call :deploy_avd_common
+pause
+exit /b 0
 
-:: ====================== 一键启动（后端 + 手机） ======================
+rem ====================== Full start (backend + phone) ======================
 :full_start_phone
 call :start_backend
 call :deploy_phone
@@ -283,7 +283,7 @@ echo ==========================================
 pause
 exit /b 0
 
-:: ====================== 构建 PC exe ======================
+rem ====================== Build PC exe ======================
 :build_exe
 echo.
 echo [PC Exe] Step 1/4: Clean old builds
@@ -294,7 +294,7 @@ if exist "build" rmdir /s /q "build"
 echo [PC Exe] Step 2/4: Build frontend
 cd /d "%ROOT_DIR%\frontend"
 call npm run build
-if !ERRORLEVEL! NEQ 0 (
+if errorlevel 1 (
     echo ERROR: Frontend build failed
     pause
     exit /b 1
@@ -303,7 +303,7 @@ if !ERRORLEVEL! NEQ 0 (
 echo [PC Exe] Step 3/4: Run PyInstaller
 cd /d "%ROOT_DIR%"
 call pyinstaller BlurArc.spec --noconfirm
-if !ERRORLEVEL! NEQ 0 (
+if errorlevel 1 (
     echo ERROR: PyInstaller build failed
     pause
     exit /b 1
@@ -326,7 +326,7 @@ echo.
 pause
 exit /b 0
 
-:: ====================== 部署到平板模拟器 ======================
+rem ====================== Deploy tablet emulator ======================
 :deploy_tablet_emulator
 set DEPLOY_AVD_NAME=%AVD_TABLET_NAME%
 set DEPLOY_AVD_LABEL=tablet emulator
@@ -334,14 +334,13 @@ set DEPLOY_AVD_SKIN=1280x800
 set DEPLOY_WAIT_LABEL=Android Tablet Emulator
 set DEPLOY_FINISH_MSG=Deploy to tablet finished!
 call :deploy_avd_common
+pause
+exit /b 0
 
-:: ====================== 热更新模式（手机 AVD） ======================
-:: 1. 自动启动 PC 端（前端构建 + BlurArc.py，含 mDNS 广播 + Flask + 移动接入）
-:: 2. 启动手机 AVD（若未运行）
-:: 3. flutter run 接上长连接，按 r 热更新
+rem ====================== Hot run phone emulator ======================
 :hotrun_emulator
 call :run_pc_app_core
-if !ERRORLEVEL! NEQ 0 (
+if errorlevel 1 (
     echo [Hot run] PC 端启动失败，已中止
     pause
     exit /b 1
@@ -353,12 +352,12 @@ set DEPLOY_AVD_SKIN=
 set DEPLOY_WAIT_LABEL=Android Emulator
 set DEPLOY_HOT=1
 call :deploy_avd_common
+exit /b 0
 
-:: ====================== 热更新模式（平板 AVD） ======================
-:: 流程同手机，仅 AVD 名称/skin 不同
+rem ====================== Hot run tablet emulator ======================
 :hotrun_tablet_emulator
 call :run_pc_app_core
-if !ERRORLEVEL! NEQ 0 (
+if errorlevel 1 (
     echo [Hot run] PC 端启动失败，已中止
     pause
     exit /b 1
@@ -370,10 +369,11 @@ set DEPLOY_AVD_SKIN=1280x800
 set DEPLOY_WAIT_LABEL=Android Tablet Emulator
 set DEPLOY_HOT=1
 call :deploy_avd_common
+exit /b 0
 
-:: ====================== 启动 PC 端（核心步骤：前端构建 + BlurArc.py） ======================
-:: 不含 pause，供其他流程（如 hot run）静默调用。
-:: 失败直接 exit /b 1，调用方需自行处理。
+rem ====================== Run PC app core ======================
+rem Shared by hotrun_emulator, hotrun_tablet_emulator, and run_pc_app.
+rem Exits with /b 1 on failure, /b 0 on success.
 :run_pc_app_core
 if not exist "%PYTHON%" (
     echo ERROR: Python not found: %PYTHON%
@@ -391,7 +391,7 @@ if not exist "%ROOT_DIR%\src\BlurArc.py" (
 echo [PC App] Step 1/2: Build frontend (npm run build)
 cd /d "%ROOT_DIR%\frontend"
 call npm run build
-if !ERRORLEVEL! NEQ 0 (
+if errorlevel 1 (
     echo ERROR: Frontend build failed
     exit /b 1
 )
@@ -402,11 +402,11 @@ start "BlurArc" "%PYTHON%" "%ROOT_DIR%\src\BlurArc.py"
 echo PC app launched.
 exit /b 0
 
-:: ====================== 启动 PC 端（菜单入口） ======================
+rem ====================== Run PC app (menu entry) ======================
 :run_pc_app
 echo.
 call :run_pc_app_core
-if !ERRORLEVEL! NEQ 0 (
+if errorlevel 1 (
     pause
     exit /b 1
 )
@@ -414,7 +414,7 @@ echo.
 pause
 exit /b 0
 
-:: ====================== 查看后端日志 ======================
+rem ====================== View backend log ======================
 :show_log
 echo.
 echo Last 50 lines of backend.log

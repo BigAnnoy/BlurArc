@@ -105,7 +105,7 @@ class TabletSidebar extends StatelessWidget {
                     },
                   ),
           ),
-          // Collapse button at bottom of sidebar — 原型：纯箭头
+          // Collapse button at bottom of sidebar — 原型：纯箭头，无文字
           Container(
             decoration: BoxDecoration(
               border: Border(
@@ -122,7 +122,7 @@ class TabletSidebar extends StatelessWidget {
                   children: [
                     Icon(
                       Icons.chevron_left,
-                      size: 16,
+                      size: 12,
                       color: theme.colorScheme.onSurface.withAlpha(120),
                     ),
                   ],
@@ -177,11 +177,7 @@ class _SidebarItem extends StatelessWidget {
                 )
               else
                 const SizedBox(width: 13),
-              Icon(
-                Icons.calendar_today_outlined,
-                size: 16,
-                color: textColor.withAlpha(160),
-              ),
+              const Text('📄', style: TextStyle(fontSize: 16)),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -218,11 +214,16 @@ class TabletSidebarExpandButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      width: 24,
+      width: 20,
+      height: 48,
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(
           right: BorderSide(color: theme.dividerColor, width: 0.5),
+        ),
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(6),
+          bottomRight: Radius.circular(6),
         ),
       ),
       child: InkWell(

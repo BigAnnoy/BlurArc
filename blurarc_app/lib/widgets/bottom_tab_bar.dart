@@ -47,9 +47,18 @@ class BottomTabBar extends StatelessWidget {
 }
 
 class BottomTabItem {
-  final IconData icon;
+  /// Material Icon（默认使用）
+  final IconData? icon;
+
+  /// Emoji 图标（与 prototype 一致时使用）
+  final String? emoji;
   final String label;
-  const BottomTabItem({required this.icon, required this.label});
+
+  const BottomTabItem({
+    this.icon,
+    this.emoji,
+    required this.label,
+  }) : assert(icon != null || emoji != null, 'icon 或 emoji 必须传一个');
 }
 
 class _TabButton extends StatelessWidget {
@@ -98,7 +107,19 @@ class _TabButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(item.icon, size: 20, color: color),
+                if (item.emoji != null)
+                  Text(
+                    item.emoji!,
+                    style: TextStyle(
+                      fontSize: 20,
+                      height: 1.0,
+                      color: color,
+                    ),
+                  )
+                else if (item.icon != null)
+                  Icon(item.icon, size: 20, color: color)
+                else
+                  const SizedBox(height: 20),
                 const SizedBox(height: 2),
                 Text(
                   item.label,

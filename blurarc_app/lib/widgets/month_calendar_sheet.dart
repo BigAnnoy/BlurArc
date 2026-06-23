@@ -63,7 +63,7 @@ class _MonthCalendarSheetState extends State<MonthCalendarSheet> {
     final theme = Theme.of(context);
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -71,44 +71,65 @@ class _MonthCalendarSheetState extends State<MonthCalendarSheet> {
             Container(
               width: 36,
               height: 4,
-              margin: const EdgeInsets.only(bottom: 12),
+              margin: const EdgeInsets.only(bottom: 4),
               decoration: BoxDecoration(
                 color: theme.dividerColor,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            // 年份切换
+            // 年份切换 — 原型：year-nav 包含 ‹ 按钮 + year-label + › 按钮 + ✕ 关闭按钮
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: () => setState(() => _year--),
+                // Year nav
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _YearBtn(
+                      icon: Icons.chevron_left,
+                      onTap: () => setState(() => _year--),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 72,
+                      child: Text(
+                        '$_year',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _YearBtn(
+                      icon: Icons.chevron_right,
+                      onTap: () => setState(() => _year++),
+                    ),
+                  ],
                 ),
-                Text('$_year 年', style: theme.textTheme.titleMedium),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: () => setState(() => _year++),
+                const Spacer(),
+                // Close button
+                _YearBtn(
+                  icon: Icons.close,
+                  onTap: () => Navigator.pop(context),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            // 月份网格
+            // 月份网格 — 原型：4列，aspect-ratio: 1，gap: 6px
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              gridDelegate:
-                  const SliverGridDelegateWithFixedCrossAxisCount(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 4,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: 2.2,
+                mainAxisSpacing: 6,
+                crossAxisSpacing: 6,
+                childAspectRatio: 1,
               ),
               itemCount: 12,
               itemBuilder: (context, index) {
                 final month = index + 1;
-                final monthStr =
-                    '$_year-${month.toString().padLeft(2, '0')}';
+                final monthStr = '$_year-${month.toString().padLeft(2, '0')}';
                 final hasPhotos = widget.availableMonths.contains(monthStr);
                 final isSelected = monthStr == widget.selectedMonth;
 
@@ -148,39 +169,77 @@ class _MonthCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // 原型：month-tile 包含 month-name(13px) + month-count(10px)
+    // active: 背景 rgba(34,211,238,0.12)，边框 primary
+    // has-photos: 文字 primary 颜色
     final bgColor = isSelected
-        ? theme.colorScheme.primary
-        : hasPhotos
-            ? theme.colorScheme.surface
-            : theme.colorScheme.surface.withAlpha(80);
+        ? theme.colorScheme.primary.withAlpha(30)
+        : Colors.transparent;
+    final borderColor =
+        isSelected ? theme.colorScheme.primary : Colors.transparent;
     final textColor = isSelected
-        ? theme.colorScheme.onPrimary
+        ? theme.colorScheme.primary
         : hasPhotos
             ? theme.colorScheme.onSurface
             : theme.colorScheme.onSurface.withAlpha(60);
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: hasPhotos ? onTap : null,
       child: Container(
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(8),
-          border: isSelected
-              ? null
-              : Border.all(
-                  color: theme.dividerColor,
-                  width: 0.5,
-                ),
+          border: Border.all(color: borderColor, width: 0.5),
         ),
         alignment: Alignment.center,
-        child: Text(
-          '$month月',
-          style: TextStyle(
-            color: textColor,
-            fontSize: 14,
-            fontWeight: isSelected || hasPhotos ? FontWeight.w500 : FontWeight.normal,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$month月',
+              style: TextStyle(
+                color: textColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (hasPhotos)
+              Text(
+                '•',
+                style: TextStyle(
+                  color: theme.colorScheme.primary,
+                  fontSize: 10,
+                ),
+              ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+/// 年份切换按钮（原型：28x28 圆形按钮）
+class _YearBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _YearBtn({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: theme.dividerColor, width: 0.5),
+        ),
+        child: Icon(icon,
+            size: 14, color: theme.colorScheme.onSurface.withAlpha(180)),
       ),
     );
   }

@@ -37,6 +37,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
   bool _hasMore = true;
   int _page = 1;
   String? _loadError;
+  String? _loadMoreError;
   List<String> _availableMonths = [];
   String? _activeMonth; // 当前激活（滚动到的）月份
 
@@ -45,6 +46,14 @@ class _AlbumScreenState extends State<AlbumScreen> {
 
   // Tablet state
   bool _sidebarCollapsed = false;
+
+  // 双指缩放：当前每行列数（手机 2-4 / 平板 3-7）
+  int _cols = 0; // 0 表示使用 _isTablet 默认值
+
+  // 缩放手势过程中累积的列数变化
+  int _gestureColDelta = 0;
+  // 上次触发换列时的 scale 值，用于去抖
+  double _lastTriggerScale = 1.0;
 
   static const int _pageSize = 6; // 每页几个月
   static const int _photosPerSection = 60;
@@ -160,10 +169,14 @@ class _AlbumScreenState extends State<AlbumScreen> {
         _hasMore = data['has_more'] ?? false;
         _page += 1;
         _loadingMore = false;
+        _loadMoreError = null;
         _ensureKeys();
       });
-    } catch (_) {
-      setState(() => _loadingMore = false);
+    } catch (e) {
+      setState(() {
+        _loadingMore = false;
+        _loadMoreError = _formatErrorMessage(e.toString());
+      });
     }
   }
 
@@ -255,7 +268,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
           ),
           const SizedBox(width: 8),
           _IconButton(
-            icon: Icons.folder,
+            emoji: '📁',
             onTap: _openFolderView,
           ),
         ],
@@ -378,36 +391,110 @@ class _AlbumScreenState extends State<AlbumScreen> {
     if (_sections.isEmpty) {
       return const Center(child: Text('暂无照片'));
     }
-    final cols = _isTablet ? 5 : 3;
+    final cols = _resolveCols();
     final hPad = _isTablet ? 4.0 : 4.0;
     final gap = _isTablet ? 3.0 : 2.0;
-    return RefreshIndicator(
-      onRefresh: _loadSections,
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: EdgeInsets.zero,
-        itemCount: _sections.length + (_hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index >= _sections.length) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+    return GestureDetector(
+      // 双指缩放改变每页照片数：每累计 25% scale 触发 +1/-1 列
+      // pinch out (scale>1) → cols +1 (更多照片)
+      // pinch in  (scale<1) → cols -1 (更大照片)
+      onScaleStart: (_) {
+        _lastTriggerScale = 1.0;
+      },
+      onScaleUpdate: (details) {
+        if (details.pointerCount < 2) return;
+        final s = details.scale;
+        if (s > 1.25 && _lastTriggerScale <= 1.25) {
+          _lastTriggerScale = s;
+          _gestureColDelta += 1;
+          _commitDelta();
+        } else if (s < 0.8 && _lastTriggerScale >= 0.8) {
+          _lastTriggerScale = s;
+          _gestureColDelta -= 1;
+          _commitDelta();
+        }
+      },
+      onScaleEnd: (_) {
+        _gestureColDelta = 0;
+        _lastTriggerScale = 1.0;
+      },
+      child: RefreshIndicator(
+        onRefresh: _loadSections,
+        child: ListView.builder(
+          controller: _scrollController,
+          padding: EdgeInsets.zero,
+          itemCount: _sections.length + (_hasMore ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index >= _sections.length) {
+              if (_loadMoreError != null) {
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '加载更多失败：$_loadMoreError',
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontSize: 12),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() => _loadMoreError = null);
+                            _loadMore();
+                          },
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('重试'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              );
+            }
+            final section = _sections[index];
+            return _SectionBlock(
+              key: _sectionKeys[section.month],
+              section: section,
+              cols: cols,
+              hPad: hPad,
+              gap: gap,
+              isTablet: _isTablet,
+              onPhotoTap: _openPhoto,
+              api: widget.api,
             );
-          }
-          final section = _sections[index];
-          return _SectionBlock(
-            key: _sectionKeys[section.month],
-            section: section,
-            cols: cols,
-            hPad: hPad,
-            gap: gap,
-            isTablet: _isTablet,
-            onPhotoTap: _openPhoto,
-            api: widget.api,
-          );
-        },
+          },
+        ),
       ),
     );
+  }
+
+  void _commitDelta() {
+    final newCols = _applyDelta(_gestureColDelta);
+    if (newCols != _cols) {
+      setState(() => _cols = newCols);
+    }
+  }
+
+  // 解析当前列数（_cols==0 用平台默认）
+  int _resolveCols() {
+    if (_cols > 0) return _cols;
+    return _isTablet ? 5 : 3;
+  }
+
+  // 应用累积的列数 delta 并 clamp 到平台范围
+  int _applyDelta(int delta) {
+    final base = _isTablet ? 5 : 3;
+    final newCols = base + delta;
+    final minCols = _isTablet ? 3 : 2;
+    final maxCols = _isTablet ? 7 : 4;
+    return newCols.clamp(minCols, maxCols);
   }
 
   // ===== Error View =====
@@ -559,15 +646,6 @@ class _PhotoCell extends StatelessWidget {
         decoration: BoxDecoration(
           color: theme.cardTheme.color ?? theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(3),
-          boxShadow: theme.brightness == Brightness.light
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(8),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
-                  ),
-                ]
-              : null,
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
@@ -586,13 +664,24 @@ class _PhotoCell extends StatelessWidget {
               ),
             ),
             if (photo.isVideo)
-              const Positioned(
+              Positioned(
                 bottom: 3,
                 right: 3,
-                child: Icon(
-                  Icons.play_circle_fill,
-                  color: Colors.white70,
-                  size: 20,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: const Text(
+                    '▶',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      height: 1.1,
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -662,7 +751,7 @@ class _OutlineButton extends StatelessWidget {
                 Icon(icon,
                     size: 14,
                     color: theme.colorScheme.onSurface.withAlpha(180)),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               Flexible(
                 child: Text(
                   label,
@@ -688,9 +777,14 @@ class _OutlineButton extends StatelessWidget {
 }
 
 class _IconButton extends StatelessWidget {
-  final IconData icon;
+  final IconData? icon;
+  final String? emoji;
   final VoidCallback onTap;
-  const _IconButton({required this.icon, required this.onTap});
+  const _IconButton({
+    this.icon,
+    this.emoji,
+    required this.onTap,
+  }) : assert(icon != null || emoji != null, 'icon 或 emoji 必须传一个');
 
   @override
   Widget build(BuildContext context) {
@@ -704,12 +798,23 @@ class _IconButton extends StatelessWidget {
         child: Container(
           width: 36,
           height: 36,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: theme.dividerColor, width: 0.5),
           ),
-          child: Icon(icon,
-              size: 18, color: theme.colorScheme.onSurface.withAlpha(180)),
+          child: emoji != null
+              ? Text(emoji!,
+                  style: TextStyle(
+                    fontSize: 18,
+                    height: 1.0,
+                    color: theme.colorScheme.onSurface.withAlpha(180),
+                  ))
+              : icon != null
+                  ? Icon(icon,
+                      size: 18,
+                      color: theme.colorScheme.onSurface.withAlpha(180))
+                  : const SizedBox.shrink(),
         ),
       ),
     );

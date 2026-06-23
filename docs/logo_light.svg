@@ -1,17 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 32 32">
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="-12 -12 64 64">
   <defs>
-    <linearGradient id="favArc" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#67e8f9"/>
-      <stop offset="1" stop-color="#0891b2"/>
+    <linearGradient id="logoArc" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0891b2" stop-opacity="0.95" />
+      <stop offset="1" stop-color="#06b6d4" stop-opacity="0.65" />
     </linearGradient>
-    <filter id="favGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="1.5"/>
+    <filter id="logoGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="2" />
     </filter>
   </defs>
-  <!-- 亮色版：去掉深色背景 rect，保留透明 -->
-  <circle cx="16" cy="16" r="11" stroke="url(#favArc)" stroke-width="2" fill="none" stroke-dasharray="44 25" stroke-linecap="round" transform="rotate(-30 16 16)"/>
-  <circle cx="16" cy="16" r="11" stroke="#22d3ee" stroke-width="3" fill="none" stroke-dasharray="44 25" stroke-linecap="round" transform="rotate(-30 16 16)" filter="url(#favGlow)" opacity=".3"/>
-  <circle cx="16" cy="16" r="6" stroke="#67e8f9" stroke-width="1.1" fill="none" stroke-dasharray="20 17" stroke-linecap="round" transform="rotate(60 16 16)" opacity=".7"/>
-  <circle cx="16" cy="16" r="1.5" fill="#ecfeff" filter="url(#favGlow)" opacity=".6"/>
-  <circle cx="16" cy="16" r="1" fill="#ecfeff"/>
+  <!-- 光晕层 -->
+  <circle cx="20" cy="20" r="14" stroke="#22d3ee" stroke-width="3.5" fill="none" stroke-dasharray="55 33" stroke-linecap="round" transform="rotate(-30 20 20)" filter="url(#logoGlow)" opacity="0.3" />
+  <!-- 主弧（渐变） -->
+  <circle cx="20" cy="20" r="14" stroke="url(#logoArc)" stroke-width="2.2" fill="none" stroke-dasharray="55 33" stroke-linecap="round" transform="rotate(-30 20 20)" />
+  <!-- 内弧 -->
+  <circle cx="20" cy="20" r="8" stroke="#0891b2" stroke-width="1.6" fill="none" stroke-dasharray="28 22" stroke-linecap="round" transform="rotate(60 20 20)" opacity="0.75" />
+  <!-- 中心点光晕 -->
+  <circle cx="20" cy="20" r="2" fill="#0891b2" filter="url(#logoGlow)" opacity="0.6" />
+  <!-- 中心点实心 -->
+  <circle cx="20" cy="20" r="1.4" fill="#0891b2" />
 </svg>

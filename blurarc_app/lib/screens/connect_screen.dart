@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
+import '../services/device_info_service.dart';
 import '../services/mdns_discovery.dart';
 import '../widgets/blur_arc_logo.dart';
 import '../widgets/step_indicator.dart';
@@ -109,7 +110,9 @@ class _ConnectScreenState extends State<ConnectScreen> {
     try {
       final api = ApiClient();
       api.setConnectionParams(service.host, service.port);
-      await api.pairingRequest('BlurArc Mobile');
+      // 用真实设备名（Pixel 7 / iPhone 15 等）作为配对请求中的 device_name
+      final deviceName = await DeviceInfoService.getDeviceName();
+      await api.pairingRequest(deviceName);
 
       if (!mounted) return;
       Navigator.push(
@@ -117,7 +120,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
         MaterialPageRoute(
           builder: (_) => PairingCodeScreen(
             api: api,
-            deviceName: service.name,
+            deviceName: deviceName,
             onCancel: () {
               setState(() {});
             },
@@ -145,7 +148,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const BlurArcLogoWithText(logoSize: 20, fontSize: 14),
+        title: const BlurArcLogoWithText(height: 37),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -244,19 +247,81 @@ class _ConnectScreenState extends State<ConnectScreen> {
   }
 
   Widget _buildDeviceList() {
+    final theme = Theme.of(context);
     return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       itemCount: _discovered.length,
       itemBuilder: (context, index) {
         final service = _discovered[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: ListTile(
-            leading:
-                const Icon(Icons.computer, size: 40, color: Color(0xFF22D3EE)),
-            title: Text(service.name),
-            subtitle: Text('${service.host}:${service.port}'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _onDeviceTap(service),
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Material(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              onTap: () => _onDeviceTap(service),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: theme.dividerColor, width: 0.5),
+                ),
+                child: Row(
+                  children: [
+                    // 设备图标方块（原型：40x40 圆角 8 容器 + 💻 emoji）
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: theme.brightness == Brightness.dark
+                            ? const Color(0xFF1a2533)
+                            : const Color(0xFFeef1f6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text('💻', style: TextStyle(fontSize: 20)),
+                    ),
+                    const SizedBox(width: 12),
+                    // 设备名 + IP
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            service.name,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${service.host}:${service.port}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurface.withAlpha(150),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // 状态点
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF22c55e),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       },
@@ -266,44 +331,82 @@ class _ConnectScreenState extends State<ConnectScreen> {
   Widget _buildManualEntry() {
     final hostController = TextEditingController();
     final portController = TextEditingController(text: '8900');
-
+    final theme = Theme.of(context);
+    // 原型：surface2 圆角容器内嵌两个 input + 冒号
+    final inputGroupDecoration = BoxDecoration(
+      color: theme.brightness == Brightness.dark
+          ? const Color(0xFF1a2533)
+          : const Color(0xFFf0f1f3),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: theme.dividerColor, width: 0.5),
+    );
+    final ipBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide.none,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text('或手动输入',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: hostController,
-                decoration: const InputDecoration(
-                  hintText: 'IP 地址',
-                  border: OutlineInputBorder(),
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: inputGroupDecoration,
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: hostController,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'IP 地址',
+                    border: ipBorder,
+                    focusedBorder: ipBorder,
+                    enabledBorder: ipBorder,
+                    filled: true,
+                    fillColor: Colors.transparent,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                  ),
                 ),
               ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
-              child: Text(':', style: TextStyle(fontSize: 18)),
-            ),
-            SizedBox(
-              width: 80,
-              child: TextField(
-                controller: portController,
-                decoration: const InputDecoration(
-                  hintText: '8900',
-                  border: OutlineInputBorder(),
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                ),
-                keyboardType: TextInputType.number,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(':',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface.withAlpha(180))),
               ),
-            ),
-          ],
+              SizedBox(
+                width: 80,
+                child: TextField(
+                  controller: portController,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '8900',
+                    border: ipBorder,
+                    focusedBorder: ipBorder,
+                    enabledBorder: ipBorder,
+                    filled: true,
+                    fillColor: Colors.transparent,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         FilledButton(
