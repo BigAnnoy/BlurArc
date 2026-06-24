@@ -23,6 +23,7 @@ from .video_processor import VideoProcessor
 
 # 数据库模块
 from .database import SessionLocal, Photo, ImportHistory
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 # 共享常量和工具
 from .constants import MEDIA_FORMATS, VIDEO_FORMATS
@@ -615,27 +616,28 @@ class ImportManager:
             file_type = 'video' if extension in VIDEO_FORMATS else 'photo'
             
             # 保存到数据库
+            # Plan B 优化 3：使用 INSERT OR IGNORE 替代先 SELECT 后 INSERT 的两步操作
+            # 依赖 idx_photo_path_unique（参见 backend/database.py + migrations/）
+            # - 减少 1 次 SELECT 查询（10K 文件预估 -50-100 秒）
+            # - 并发导入同一 path 不会抛 IntegrityError，由 DB 静默忽略
             db = SessionLocal()
             try:
-                # 检查文件是否已经存在于数据库中
-                existing_photo = db.query(Photo).filter(Photo.path == str(final_dest_path)).first()
-                if not existing_photo:
-                    # 创建新的Photo对象
-                    photo = Photo(
-                        filename=final_dest_path.name,
-                        path=str(final_dest_path),
-                        size=file_size,
-                        md5_hash=src_md5,
-                        created_at=datetime.now(),
-                        modified_at=datetime.now(),
-                        media_date=media_date,
-                        file_type=file_type,
-                        extension=extension,
-                        imported_at=datetime.now()
-                    )
-                    db.add(photo)
-                    db.commit()
-                    logger.debug(f"文件信息已保存到数据库: {final_dest_path.name}")
+                stmt = sqlite_insert(Photo).values(
+                    filename=final_dest_path.name,
+                    path=str(final_dest_path),
+                    size=file_size,
+                    md5_hash=src_md5,
+                    created_at=datetime.now(),
+                    modified_at=datetime.now(),
+                    media_date=media_date,
+                    file_type=file_type,
+                    extension=extension,
+                    imported_at=datetime.now(),
+                )
+                stmt = stmt.on_conflict_do_nothing(index_elements=['path'])
+                db.execute(stmt)
+                db.commit()
+                logger.debug(f"文件信息已保存到数据库: {final_dest_path.name}")
             except Exception as e:
                 logger.error(f"保存文件信息到数据库失败: {final_dest_path} - {e}")
                 db.rollback()
