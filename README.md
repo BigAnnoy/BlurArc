@@ -6,6 +6,12 @@
 </p>
 
 <p align="center">
+  <img src="docs/badges/coverage-backend.svg" alt="Backend Coverage" />
+  <img src="docs/badges/coverage-frontend.svg" alt="Frontend Coverage" />
+  <img src="docs/badges/coverage-flutter.svg" alt="Flutter Coverage" />
+</p>
+
+<p align="center">
   让照片回归秩序。<br/>
   完全本地运行，隐私零泄露，无任何云端依赖。
 </p>
