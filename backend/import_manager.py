@@ -28,6 +28,9 @@ from .database import SessionLocal, Photo, ImportHistory
 from .constants import MEDIA_FORMATS, VIDEO_FORMATS
 from .utils import compute_md5, get_file_fingerprint
 
+# 性能优化（v0.6 优化 2）：frozenset 用于 O(1) 扩展名查表
+MEDIA_EXT_SET: frozenset = frozenset(MEDIA_FORMATS)
+
 # 日志配置
 logger = logging.getLogger(__name__)
 
@@ -505,27 +508,29 @@ class ImportManager:
             
             # 扫描当前目录中的文件
             for file in files:
-                file_lower = file.lower()
-                for ext in MEDIA_FORMATS:
-                    if file_lower.endswith(ext):
-                        # 只在确认是媒体文件时创建Path对象
-                        file_path = root_path / file
-                        
-                        # 检查文件是否在最后扫描后被修改（如果需要的话）
+                # 优化 2：O(1) 扩展名查表（替代 for-ext-in-MEDIA_FORMATS 内层循环）
+                ext = os.path.splitext(file)[1].lower()
+                if ext not in MEDIA_EXT_SET:
+                    continue
+
+                # 只在确认是媒体文件时创建 Path 对象
+                file_path = root_path / file
+
+                # 检查文件是否在最后扫描后被修改（如果需要的话）
+                should_add = True
+                if not ignore_last_scan and last_scan_time:
+                    try:
+                        # 优化 1：mtime check 时一并采 size（path.stat() 一次返回所有属性）
+                        stat_result = file_path.stat()
+                        file_mtime = datetime.fromtimestamp(stat_result.st_mtime)
+                        should_add = file_mtime > last_scan_time
+                    except Exception as e:
+                        logger.debug(f"获取文件修改时间失败 {file_path}: {e}")
+                        # 如果获取失败，仍然添加文件
                         should_add = True
-                        if not ignore_last_scan and last_scan_time:
-                            try:
-                                file_mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
-                                should_add = file_mtime > last_scan_time
-                            except Exception as e:
-                                logger.debug(f"获取文件修改时间失败 {file_path}: {e}")
-                                # 如果获取修改时间失败，仍然添加文件
-                                should_add = True
-                        
-                        if should_add:
-                            media_files.append(file_path)
-                        
-                        break
+
+                if should_add:
+                    media_files.append(file_path)
         
         # 注意：last_scan_time 不在此处更新，由 _do_import 在成功完成后更新。
         # 若在扫描阶段即更新，导入中途取消会导致下次扫描漏掉未导入的文件。
