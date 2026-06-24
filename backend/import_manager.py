@@ -29,6 +29,9 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from .constants import MEDIA_FORMATS, VIDEO_FORMATS
 from .utils import compute_md5, get_file_fingerprint
 
+# 性能优化（v0.6 优化 6）：原子计数器（O(1) 命名生成）
+from .dest_filename import build_dest_filename as _build_dest_filename_atomic
+
 # 性能优化（v0.6 优化 2）：frozenset 用于 O(1) 扩展名查表
 MEDIA_EXT_SET: frozenset = frozenset(MEDIA_FORMATS)
 
@@ -611,6 +614,13 @@ class ImportManager:
             # 临界区：MD5查重 + 路径解析 + records预占位
             # 必须原子完成，否则并发线程可能同时通过查重，导致重复复制
             # ----------------------------------------------------------------
+            # taken_names：用于原子计数器模块检测已占用的文件名（仅当前导入任务内）
+            # 关键：必须在临界区内复用同一个集合，否则跨线程的命名冲突
+            if not hasattr(self, '_import_taken_names'):
+                # 类级别共享（每个 ImportManager 实例一个集合）
+                # 通常一个程序只运行一个导入任务，但若并发多个 import_id，
+                # 这层保护能避免不同任务的子目录下的命名冲突
+                self.__class__._import_taken_names = set()
             lock_ctx = file_lock if file_lock is not None else threading.Lock()
             with lock_ctx:
                 # 判断是否 MD5 重复（重复文件仍复制，但加 _dup 后缀标记）
@@ -619,8 +629,13 @@ class ImportManager:
 
                 # 构建目标路径：YYYYMMDD_HHmmss_NNN[_dup].ext
                 # _build_dest_filename 内部探测序号，必须在临界区内调用（TOCTOU 安全）
+                # 传入 taken_names 让原子计数器检测本任务内已占用的文件名
                 ext = file_path.suffix.lower()
-                final_dest_path = self._build_dest_filename(media_date, ext, month_dir, is_dup=is_dup)
+                final_dest_path = self._build_dest_filename(
+                    media_date, ext, month_dir,
+                    is_dup=is_dup,
+                    taken_names=self.__class__._import_taken_names,
+                )
 
                 # 预占位：立即写回 records，后续线程查重时可以看到
                 # 即使文件复制尚未完成，也能防止其他线程重复处理同一 MD5
@@ -846,25 +861,24 @@ class ImportManager:
         media_date: datetime,
         ext: str,
         month_dir: Path,
-        is_dup: bool = False
+        is_dup: bool = False,
+        taken_names: set = None,
     ) -> Path:
-        """生成不冲突的目标路径。
+        """生成不冲突的目标路径（委托给原子计数器模块）。
 
         格式：YYYYMMDD_HHmmss_NNN[_dup].ext，序号从 001 起递增。
         - is_dup=False：20240315_143022_001.jpg
         - is_dup=True ：20240315_143022_001_dup.jpg（MD5 重复文件，仍复制）
 
+        性能优化（v0.6 优化 6）：使用 itertools.count() 原子计数器，O(1) 生成，
+        消除原 O(n) 文件系统探测 + 多线程 TOCTOU 重试。
+
         注意：调用者必须持有 file_lock（临界区内调用），确保 TOCTOU 安全。
+        taken_names 用于线程间共享已被占用的文件名集合。
         """
-        base = media_date.strftime('%Y%m%d_%H%M%S')
-        dup_suffix = '_dup' if is_dup else ''
-        counter = 1
-        while True:
-            name = f"{base}_{counter:03d}{dup_suffix}{ext}"
-            dest = month_dir / name
-            if not dest.exists():
-                return dest
-            counter += 1
+        if taken_names is None:
+            taken_names = set()
+        return _build_dest_filename_atomic(media_date, ext, month_dir, is_dup, taken_names)
 
     def _resolve_dest_path(self, dest: Path, src_md5: str, target_records: Dict) -> Tuple[Path, str]:
         """解析目标路径，处理文件冲突
