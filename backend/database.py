@@ -147,6 +147,20 @@ def init_db():
     except Exception:
         pass  # 表尚未创建时忽略（由 create_all 负责）
 
+    # 迁移：Plan B - 优化 3 前置
+    # 为 photos.path 创建命名 UNIQUE 索引，支持 _import_file 的 INSERT OR IGNORE 优化
+    # 幂等：IF NOT EXISTS；Photo 模型 unique=True 也会创建隐式索引，但此处显式命名便于引用
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                __import__('sqlalchemy').text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_path_unique ON photos (path)"
+                )
+            )
+            conn.commit()
+    except Exception:
+        pass  # 表尚未创建时忽略（由 create_all 负责）
+
     # 迁移：为旧数据库补加 total_size 列（幂等，仅当列不存在时执行）
     try:
         with engine.connect() as conn:
