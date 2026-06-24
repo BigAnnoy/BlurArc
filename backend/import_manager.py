@@ -32,6 +32,41 @@ from .utils import compute_md5, get_file_fingerprint
 # 性能优化（v0.6 优化 2）：frozenset 用于 O(1) 扩展名查表
 MEDIA_EXT_SET: frozenset = frozenset(MEDIA_FORMATS)
 
+# 性能优化（v0.6 优化 4）：EXIF magic bytes 白名单
+# 命中才开 PIL 解析，截图/网络图/无 EXIF 文件直接 mtime fallback
+# 注：_has_exif_magic 读 4 字节，与本集合中的 4 字节签名匹配
+EXIF_SUPPORTED_MAGIC: frozenset = frozenset({
+    # JPEG (常见 App marker：JFIF/Exif/raw 等，统一起头 \xff\xd8\xff)
+    b'\xff\xd8\xff\xe0',  # JPEG/JFIF
+    b'\xff\xd8\xff\xe1',  # JPEG/Exif
+    b'\xff\xd8\xff\xdb',  # JPEG/raw
+    b'\xff\xd8\xff\xee',  # JPEG/Adobe
+    # PNG
+    b'\x89PNG',
+    # WebP（RIFF 容器，前 4 字节）
+    b'RIFF',
+    # TIFF（Intel/ Motorola 字节序）
+    b'II*\x00',
+    b'MM\x00*',
+})
+
+
+def _has_exif_magic(path: Path) -> bool:
+    """快速检测文件头是否为已知图片格式（无 EXIF 时直接走 mtime）
+
+    性能优化：只读取 4 字节，避免对每个文件触发 PIL.Image.open() 的开销。
+    命中白名单才走 PIL 解析；未命中（文本/PDF/未知格式）直接 mtime fallback。
+
+    Returns:
+        True: 文件是已知图片格式，应尝试 EXIF 解析
+        False: 文件不是图片或不可读，应走 mtime
+    """
+    try:
+        with open(path, 'rb') as f:
+            return f.read(4) in EXIF_SUPPORTED_MAGIC
+    except OSError:
+        return False
+
 # 日志配置
 logger = logging.getLogger(__name__)
 
@@ -674,20 +709,28 @@ class ImportManager:
                     return datetime.fromtimestamp(filepath.stat().st_mtime)
                 except OSError:
                     return None
-        
+
+        # 性能优化（v0.6 优化 4）：magic bytes 前置检查
+        # 截图/网络图/无 EXIF 文件不触发 PIL.Image.open() 的开销
+        if not _has_exif_magic(filepath):
+            try:
+                return datetime.fromtimestamp(filepath.stat().st_mtime)
+            except OSError:
+                return None
+
         # 图片文件尝试读取 EXIF
         try:
             from PIL import Image
             from PIL.ExifTags import TAGS
         except ImportError:
             return None
-        
+
         try:
             img = Image.open(filepath)
             exif = img._getexif()
             if not exif:
                 return None
-            
+
             for tag_id, value in exif.items():
                 tag = TAGS.get(tag_id, tag_id)
                 if tag in ('DateTimeOriginal', 'DateTime') and isinstance(value, str):
