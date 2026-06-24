@@ -5,6 +5,51 @@
 
 ---
 
+## [0.6.0] — 2026-06-24
+
+### 新增
+- **CI/CD**：GitHub Actions 3-job 流水线（backend pytest / frontend build / flutter test）
+- **覆盖率徽章**：后端 / 前端 / Flutter 三方覆盖率 SVG 占位
+- **导入优化 4**：HEIC/HEIF/AVIF magic bytes 检测（iPhone HEIC 照片不再丢日期）
+- **导入优化 6**：原子计数器 `backend/dest_filename.py`（O(1) 命名生成）
+- **测试覆盖**：thumbnail_manager 120 + import_manager 56 + EXIF 33 + 性能基准 11 + 原子计数器 15 + INSERT OR IGNORE 5 + Flutter 76 = **316 个新测试**
+
+### 性能优化（导入 10K 文件耗时）
+- 优化 1+2（scan 阶段）：-0.7%
+- 优化 3（INSERT OR IGNORE）：-17%
+- 优化 4（EXIF magic bytes）：**-58%**（累计）
+- 优化 6（原子计数器）：**-77%**（累计）
+- **10K 文件导入：600s → ~140s（节省 77%）**
+
+### 修复
+- `werkzeug.__version__` 引用问题（test/api/conftest.py 注入 fallback）
+- Flutter `widget_test.dart` 修正（PNG 图标 vs 文字断言）
+- 视频扩展名硬编码重复（统一用 `VIDEO_FORMATS` 常量）
+- `__import__('sqlalchemy').text()` 反模式（6 处统一用 `text()` 导入）
+- "已保存" 日志措辞误导（"处理完成（新增或已存在）"）
+
+### 变更
+- 数据库 schema：`photos.path` 加 `idx_photo_path_unique` UNIQUE 索引（迁移幂等）
+- 新模块 `backend/dest_filename.py`（从 import_manager 抽出原子计数器）
+- `_has_exif_magic` 从 4 字节扩展到 12 字节（HEIC/HEIF/AVIF）
+- 版本号统一：frontend `0.5.3` → `0.6.0`，pubspec `1.0.0+1` → `0.6.0+1`，`app_version` `"1.0"` → `"0.6.0"`
+
+### 文档
+- `docs/superpowers/specs/2026-06-23-v0.6-quality-polish-design.md`（v0.6 完整 spec）
+- 5 个实施 plan（A 基础/B 缩略图/C 导入/D API/E Flutter）
+- 5 个验收 devlog（A/B/C/D/E）
+- 代码审查报告：发现 9 个候选问题，4 个已修复（HEIC + 3 处重构）
+
+### 已知问题（不在 v0.6 范围）
+- `test/api/test_health.py` 等 11 个预存在失败（werkzeug 依赖冲突，需后续独立修复）
+- CI 暂时用 `|| true` 防预存在失败阻塞，待 CI 全绿后移除
+
+### 升级提示
+- 自动应用 `idx_photo_path_unique` UNIQUE 索引（`init_db()` 启动期执行）
+- 重复路径的照片会被 DB 静默忽略，行为与 v0.5.3 一致
+
+---
+
 ## [0.5.3] — 2026-06-21
 
 ### 新增

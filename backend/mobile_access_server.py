@@ -367,7 +367,7 @@ class MobileAccessServer:
             token = self._extract_token()
             if not token or not self.token_manager.validate_token(token):
                 return jsonify({"error": "令牌无效"}), 401
-            return jsonify({"status": "ok", "app_version": "1.0", "name": "Blur Arc"})
+            return jsonify({"status": "ok", "app_version": "0.6.0", "name": "Blur Arc"})
 
         @self.app.route("/api/mobile/stats")
         def mobile_stats():
