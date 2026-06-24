@@ -63,3 +63,36 @@ class TestScanSourceReturnsPaths:
         result = manager._scan_source(album, ignore_last_scan=True)
         names = {p.name for p in result}
         assert names == {"deep.jpg", "top.jpg"}
+
+
+class TestScanSourcePerformance:
+    """性能基准：1000 文件 scan 应 < 2 秒"""
+
+    def test_scan_1000_files_under_2s(self, manager, tmp_path):
+        import time
+        album = tmp_path / "big_album"
+        album.mkdir()
+        for i in range(1000):
+            img = Image.new("RGB", (50, 50), color=(i % 255, 100, 200))
+            img.save(album / f"img_{i}.jpg")
+
+        start = time.time()
+        result = manager._scan_source(album, ignore_last_scan=True)
+        elapsed = time.time() - start
+
+        assert len(result) == 1000
+        assert elapsed < 2.0, f"Scan took {elapsed:.2f}s, expected < 2.0s"
+
+    def test_scan_size_collected_per_file(self, manager, tmp_path):
+        """每个返回的 Path 都能成功 stat()（验证文件可访问）"""
+        album = tmp_path / "album"
+        album.mkdir()
+        for i in range(10):
+            img = Image.new("RGB", (50, 50))
+            img.save(album / f"img_{i}.jpg")
+
+        result = manager._scan_source(album, ignore_last_scan=True)
+        for p in result:
+            # 不抛错即可
+            size = p.stat().st_size
+            assert size > 0
