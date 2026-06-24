@@ -865,3 +865,276 @@ class TestExifDateExtraction:
         assert date.month == 6
         assert date.day == 1
 
+
+class TestProgressCallback:
+    """导入进度跟踪（通过 ImportProgress 对象）"""
+
+    def test_progress_updated_per_file(self, tmp_path, manager):
+        """每个文件处理后 progress.processed_files 应递增 1"""
+        from backend.import_manager import ImportProgress
+        import threading
+
+        album = tmp_path / "album"
+        album.mkdir()
+        for i in range(5):
+            _PILImage.new("RGB", (50, 50)).save(album / f"img_{i}.jpg")
+
+        target = tmp_path / "target"
+        progress = ImportProgress("imp_progress_per_file")
+        file_lock = threading.Lock()
+
+        with patch("backend.import_manager.SessionLocal") as mock_session:
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_db.execute = MagicMock()
+            mock_db.commit = MagicMock()
+            mock_db.close = MagicMock()
+
+            for i, f in enumerate(sorted(album.glob("*.jpg"))):
+                manager._import_file(
+                    f, target, {},
+                    progress=progress, file_lock=file_lock,
+                    import_mode="copy", md5_cache={},
+                )
+                # 每次后 processed_files = i+1
+                assert progress.processed_files == i + 1
+
+    def test_progress_current_file_updated(self, tmp_path, manager):
+        """_do_import 内部应调用 progress.update_current_file 记录当前处理文件"""
+        from backend.import_manager import ImportStatus
+
+        album = tmp_path / "album"
+        album.mkdir()
+        _PILImage.new("RGB", (50, 50)).save(album / "a.jpg")
+
+        target = tmp_path / "target"
+        target.mkdir()
+        manager.create_import("imp_current_file", str(album), str(target))
+
+        with patch("backend.import_manager.SessionLocal") as mock_session:
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_db.query.return_value.all.return_value = []
+            mock_db.add = MagicMock()
+            mock_db.commit = MagicMock()
+            mock_db.close = MagicMock()
+            mock_db.execute = MagicMock()
+
+            manager._do_import("imp_current_file", str(album), str(target), "copy")
+
+        # _do_import 完成后 current_file 应记录最后处理的文件名（带 .jpg 后缀）
+        progress = manager.get_progress("imp_current_file")
+        assert progress is not None
+        assert progress.status == ImportStatus.COMPLETED
+        # current_file 记录的是源文件名
+        assert progress.current_file == "a.jpg"
+        # file_details 记录的是目标文件名（重命名为 YYYYMMDD_HHmmss_NNN.jpg）
+        assert len(progress.file_details) == 1
+        assert progress.file_details[0]["filename"].endswith(".jpg")
+
+    def test_progress_calculate_zero_total(self):
+        """total=0 时进度不应崩（除零保护）"""
+        from backend.import_manager import ImportProgress
+        progress = ImportProgress("imp_zero")
+        progress.update_total_files(0)
+        d = progress.to_dict()
+        assert d["progress"] == 0
+
+    def test_progress_calculate_full(self):
+        """processed == total 时进度应为 100"""
+        from backend.import_manager import ImportProgress
+        progress = ImportProgress("imp_full")
+        progress.update_total_files(10)
+        progress.add_file(Path("/tmp/a.jpg"), 100, success=True)
+        progress.add_file(Path("/tmp/b.jpg"), 100, success=True)
+        # 触发 to_dict
+        d = progress.to_dict()
+        # 2/10 = 20
+        assert d["progress"] == 20
+
+    def test_progress_skip_file_does_not_increment_processed(self):
+        """skip_file 只增加 skipped_files，不影响 processed_files"""
+        from backend.import_manager import ImportProgress
+        progress = ImportProgress("imp_skip")
+        progress.update_total_files(10)
+        progress.skip_file(Path("/tmp/a.jpg"), 100)
+        progress.skip_file(Path("/tmp/b.jpg"), 200)
+        assert progress.skipped_files == 2
+        assert progress.processed_files == 0
+
+    def test_progress_add_file_failed_increments_failed(self):
+        """add_file(success=False) 应递增 failed_files"""
+        from backend.import_manager import ImportProgress
+        progress = ImportProgress("imp_failed")
+        progress.update_total_files(10)
+        progress.add_file(Path("/tmp/bad.jpg"), 0, success=False)
+        assert progress.failed_files == 1
+        assert progress.processed_files == 0
+        # file_details 仍记录
+        assert progress.file_details[0]["success"] is False
+
+
+class TestErrorHandling:
+    """错误恢复（个别文件失败不应中断整批）"""
+
+    def test_corrupted_file_in_batch_does_not_stop_import(self, tmp_path, manager):
+        """损坏/无 EXIF 的文件不应中断整批（_import_file 内部 fallback 到 mtime）"""
+        from backend.import_manager import ImportProgress
+        import threading
+
+        album = tmp_path / "album"
+        album.mkdir()
+        good1 = album / "good1.jpg"
+        good2 = album / "good2.jpg"
+        # "损坏" 的 JPEG：magic bytes 对但内容无效 → _get_media_date 返回 None → fallback 到 mtime
+        bad = album / "bad.jpg"
+        bad.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 50)
+        _PILImage.new("RGB", (50, 50)).save(good1)
+        _PILImage.new("RGB", (50, 50)).save(good2)
+
+        target = tmp_path / "target"
+        progress = ImportProgress("imp_error_batch")
+        file_lock = threading.Lock()
+
+        with patch("backend.import_manager.SessionLocal") as mock_session:
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_db.execute = MagicMock()
+            mock_db.commit = MagicMock()
+            mock_db.close = MagicMock()
+
+            for f in [good1, bad, good2]:
+                manager._import_file(
+                    f, target, {},
+                    progress=progress, file_lock=file_lock,
+                    import_mode="copy", md5_cache={},
+                )
+
+        # 3 个文件都成功：坏的 fallback 到 mtime，仍被复制
+        # 验证 _import_file 没有崩（processed_files == 3）
+        assert progress.processed_files == 3
+        assert progress.failed_files == 0
+        # 3 个文件都应在 target 出现
+        copied = list(target.rglob("*.jpg"))
+        assert len(copied) == 3
+
+    def test_real_failure_one_file_others_continue(self, tmp_path, manager, monkeypatch):
+        """真实失败场景：1 个文件复制时 OSError，其他文件应继续"""
+        from backend.import_manager import ImportProgress
+        import threading
+
+        album = tmp_path / "album"
+        album.mkdir()
+        files = []
+        for i in range(5):
+            f = album / f"img_{i}.jpg"
+            _PILImage.new("RGB", (50, 50)).save(f)
+            files.append(f)
+
+        target = tmp_path / "target"
+        progress = ImportProgress("imp_real_fail")
+        file_lock = threading.Lock()
+
+        # 让 img_2 复制时失败
+        original_copy = __import__("shutil").copy2
+        call_count = [0]
+        def selective_fail(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 3:  # 第三次调用失败
+                raise OSError("disk full")
+            return original_copy(*args, **kwargs)
+        monkeypatch.setattr("shutil.copy2", selective_fail)
+
+        with patch("backend.import_manager.SessionLocal") as mock_session:
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_db.execute = MagicMock()
+            mock_db.commit = MagicMock()
+            mock_db.close = MagicMock()
+
+            for f in files:
+                manager._import_file(
+                    f, target, {},
+                    progress=progress, file_lock=file_lock,
+                    import_mode="copy", md5_cache={},
+                )
+
+        # 4 个成功，1 个失败
+        assert progress.processed_files == 4
+        assert progress.failed_files == 1
+
+    def test_disk_full_simulation(self, tmp_path, manager, monkeypatch):
+        """shutil.copy2 失败时 _import_file 应被 try/except 吞掉，不崩"""
+        from backend.import_manager import ImportProgress
+        import threading
+
+        album = tmp_path / "album"
+        album.mkdir()
+        img = album / "img.jpg"
+        _PILImage.new("RGB", (50, 50)).save(img)
+
+        target = tmp_path / "target"
+        progress = ImportProgress("imp_disk_full")
+        file_lock = threading.Lock()
+
+        def fake_copy(*args, **kwargs):
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr("shutil.copy2", fake_copy)
+
+        # 不应抛错（_import_file 内部捕获）
+        manager._import_file(
+            img, target, {},
+            progress=progress, file_lock=file_lock,
+            import_mode="copy", md5_cache={},
+        )
+        # 失败计数应 >= 1
+        assert progress.failed_files >= 1
+
+    def test_invalid_source_path_marks_failed(self, tmp_path, manager):
+        """源路径不存在时，_do_import 标记 FAILED"""
+        from backend.import_manager import ImportManager, ImportStatus
+
+        mgr = ImportManager()
+        nonexistent = tmp_path / "ghost"
+        target = tmp_path / "target"
+        target.mkdir()
+
+        mgr.create_import("imp_invalid_path", str(nonexistent), str(target))
+
+        with patch("backend.import_manager.SessionLocal") as mock_session:
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_db.add = MagicMock()
+            mock_db.commit = MagicMock()
+            mock_db.close = MagicMock()
+
+            mgr._do_import("imp_invalid_path", str(nonexistent), str(target), "copy")
+
+        progress = mgr.get_progress("imp_invalid_path")
+        assert progress.status == ImportStatus.FAILED
+        assert progress.error_message is not None
+
+    def test_nonexistent_target_path_marks_failed(self, tmp_path, manager):
+        """目标路径不存在时，_do_import 标记 FAILED"""
+        from backend.import_manager import ImportStatus
+
+        source = tmp_path / "source"
+        source.mkdir()
+        _PILImage.new("RGB", (50, 50)).save(source / "a.jpg")
+        nonexistent_target = tmp_path / "ghost_target"
+
+        manager.create_import("imp_bad_target", str(source), str(nonexistent_target))
+
+        with patch("backend.import_manager.SessionLocal") as mock_session:
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_db.add = MagicMock()
+            mock_db.commit = MagicMock()
+            mock_db.close = MagicMock()
+
+            manager._do_import("imp_bad_target", str(source), str(nonexistent_target), "copy")
+
+        progress = manager.get_progress("imp_bad_target")
+        assert progress.status == ImportStatus.FAILED
+
