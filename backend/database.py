@@ -139,7 +139,7 @@ def init_db():
     try:
         with engine.connect() as conn:
             conn.execute(
-                __import__('sqlalchemy').text(
+                text(
                     "CREATE INDEX IF NOT EXISTS ix_photos_media_date ON photos (media_date)"
                 )
             )
@@ -153,7 +153,7 @@ def init_db():
     try:
         with engine.connect() as conn:
             conn.execute(
-                __import__('sqlalchemy').text(
+                text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_path_unique ON photos (path)"
                 )
             )
@@ -165,12 +165,12 @@ def init_db():
     try:
         with engine.connect() as conn:
             result = conn.execute(
-                __import__('sqlalchemy').text("PRAGMA table_info(import_history)")
+                text("PRAGMA table_info(import_history)")
             )
             columns = [row[1] for row in result]
             if 'total_size' not in columns:
                 conn.execute(
-                    __import__('sqlalchemy').text(
+                    text(
                         "ALTER TABLE import_history ADD COLUMN total_size INTEGER"
                     )
                 )
@@ -184,7 +184,7 @@ def init_db():
         with engine.connect() as conn:
             # 检查是否存在唯一索引
             result = conn.execute(
-                __import__('sqlalchemy').text("PRAGMA index_list(photos)")
+                text("PRAGMA index_list(photos)")
             )
             indexes = [row for row in result]
             unique_md5_index = None
@@ -197,7 +197,7 @@ def init_db():
             if unique_md5_index:
                 # 删除唯一索引（SQLite 支持删除索引）
                 conn.execute(
-                    __import__('sqlalchemy').text(f"DROP INDEX IF EXISTS {unique_md5_index}")
+                    text(f"DROP INDEX IF EXISTS {unique_md5_index}")
                 )
                 conn.commit()
                 print(f"已移除 photos 表的 MD5 唯一约束: {unique_md5_index}")

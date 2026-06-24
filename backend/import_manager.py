@@ -37,7 +37,7 @@ MEDIA_EXT_SET: frozenset = frozenset(MEDIA_FORMATS)
 
 # 性能优化（v0.6 优化 4）：EXIF magic bytes 白名单
 # 命中才开 PIL 解析，截图/网络图/无 EXIF 文件直接 mtime fallback
-# 注：_has_exif_magic 读 4 字节，与本集合中的 4 字节签名匹配
+# 4 字节签名集合（直接比较 f.read(4)）
 EXIF_SUPPORTED_MAGIC: frozenset = frozenset({
     # JPEG (常见 App marker：JFIF/Exif/raw 等，统一起头 \xff\xd8\xff)
     b'\xff\xd8\xff\xe0',  # JPEG/JFIF
@@ -53,11 +53,21 @@ EXIF_SUPPORTED_MAGIC: frozenset = frozenset({
     b'MM\x00*',
 })
 
+# HEIC/HEIF/AVIF 系列：ISO Base Media File Format
+# 格式：4 字节 box size + 4 字节 'ftyp' + 4 字节 major brand
+# 读取 12 字节后按位置匹配。Apple HEIC、HEIF 主品牌集合。
+HEIC_BRANDS: frozenset = frozenset({
+    b'heic', b'heix', b'heim', b'heis',  # HEVC-based
+    b'mif1', b'msf1',                      # HEIF image / image sequence
+    b'hevc', b'hevx',                      # 较少见
+    b'avif', b'avis',                      # AV1 Image File Format
+})
+
 
 def _has_exif_magic(path: Path) -> bool:
     """快速检测文件头是否为已知图片格式（无 EXIF 时直接走 mtime）
 
-    性能优化：只读取 4 字节，避免对每个文件触发 PIL.Image.open() 的开销。
+    性能优化：只读取 12 字节，避免对每个文件触发 PIL.Image.open() 的开销。
     命中白名单才走 PIL 解析；未命中（文本/PDF/未知格式）直接 mtime fallback。
 
     Returns:
@@ -66,7 +76,18 @@ def _has_exif_magic(path: Path) -> bool:
     """
     try:
         with open(path, 'rb') as f:
-            return f.read(4) in EXIF_SUPPORTED_MAGIC
+            head = f.read(12)
+        if len(head) < 4:
+            return False
+        # 4 字节签名快速查表（JPEG/PNG/WebP/TIFF）
+        if head[:4] in EXIF_SUPPORTED_MAGIC:
+            return True
+        # HEIC/HEIF/AVIF：box size (前 4 字节) + 'ftyp' (字节 4-7) + brand (字节 8-11)
+        # 真实 ISOBMFF 文件 box size 前 3 字节通常为 0（文件 < 16MB 时），第 4 字节任意
+        # 保守策略：要求前 3 字节为 0（避免误报文本中恰好出现 "ftyp" 的情况）
+        if head[:3] == b'\x00\x00\x00' and head[4:8] == b'ftyp':
+            return head[8:12] in HEIC_BRANDS
+        return False
     except OSError:
         return False
 
@@ -687,7 +708,8 @@ class ImportManager:
                 stmt = stmt.on_conflict_do_nothing(index_elements=['path'])
                 db.execute(stmt)
                 db.commit()
-                logger.debug(f"文件信息已保存到数据库: {final_dest_path.name}")
+                # INSERT OR IGNORE: 重复路径会被 DB 静默忽略，日志按"处理完成"措辞
+                logger.debug(f"文件信息处理完成（新增或已存在）: {final_dest_path.name}")
             except Exception as e:
                 logger.error(f"保存文件信息到数据库失败: {final_dest_path} - {e}")
                 db.rollback()
@@ -710,7 +732,7 @@ class ImportManager:
     def _get_media_date(self, filepath: Path) -> Optional[datetime]:
         """获取媒体文件的拍摄日期"""
         # 视频文件尝试使用FFmpeg提取创建时间
-        if filepath.suffix.lower() in {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp'}:
+        if filepath.suffix.lower() in VIDEO_FORMATS:
             try:
                 # 使用视频处理器提取元数据
                 metadata = VideoProcessor.extract_metadata(str(filepath))

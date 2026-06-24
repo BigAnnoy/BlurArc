@@ -120,6 +120,56 @@ class TestExifMagicBytes:
         assert isinstance(EXIF_SUPPORTED_MAGIC, frozenset)
 
 
+class TestHeicMagicDetection:
+    """HEIC/HEIF/AVIF 系列检测（v0.6 审查反馈：补全缺漏的 magic bytes）"""
+
+    def test_heic_file_recognized(self, tmp_path):
+        """标准 HEIC 文件：00 00 00 18 66 74 79 70 68 65 69 63"""
+        heic = tmp_path / "photo.heic"
+        # 真实 HEIC: 0x18=24 byte box, 'ftyp', 'heic'
+        heic.write_bytes(b'\x00\x00\x00\x18ftyp' + b'heic' + b'\x00\x00\x00\x00')
+        assert _has_exif_magic(heic) is True
+
+    def test_heif_mif1_brand(self, tmp_path):
+        """HEIF image sequence (mif1) 应被识别"""
+        heif = tmp_path / "image.heif"
+        heif.write_bytes(b'\x00\x00\x00\x18ftyp' + b'mif1' + b'\x00\x00\x00\x00')
+        assert _has_exif_magic(heif) is True
+
+    def test_avif_brand(self, tmp_path):
+        """AVIF (avif) 应被识别"""
+        avif = tmp_path / "photo.avif"
+        avif.write_bytes(b'\x00\x00\x00\x18ftyp' + b'avif' + b'\x00\x00\x00\x00')
+        assert _has_exif_magic(avif) is True
+
+    def test_heic_with_unrelated_brand_rejected(self, tmp_path):
+        """ftyp 但 brand 不在白名单 → 拒绝"""
+        f = tmp_path / "video.mp4"
+        f.write_bytes(b'\x00\x00\x00\x18ftyp' + b'isom' + b'\x00\x00\x00\x00')
+        assert _has_exif_magic(f) is False
+
+    def test_ftyp_without_zero_size_prefix_rejected(self, tmp_path):
+        """ftyp 但前 4 字节不是 00 00 00 XX → 拒绝（保守策略）"""
+        f = tmp_path / "weird.dat"
+        # 假设 ftyp 出现但前 4 字节不是 box size
+        f.write_bytes(b'AAAABBBB' + b'ftyp' + b'heic')
+        assert _has_exif_magic(f) is False
+
+    def test_heic_brands_constant_is_frozenset(self):
+        """HEIC_BRANDS 必须是 frozenset"""
+        from backend.import_manager import HEIC_BRANDS
+        assert isinstance(HEIC_BRANDS, frozenset)
+        # 至少包含主流品牌
+        assert b'heic' in HEIC_BRANDS
+        assert b'mif1' in HEIC_BRANDS
+        assert b'avif' in HEIC_BRANDS
+
+    def test_short_file_returns_false(self, tmp_path):
+        """文件 < 4 字节 → False"""
+        tiny = tmp_path / "tiny.bin"
+        tiny.write_bytes(b'ab')
+        assert _has_exif_magic(tiny) is False
+
 class TestExifMagicIntegration:
     """与 _get_media_date 的集成测试"""
 
