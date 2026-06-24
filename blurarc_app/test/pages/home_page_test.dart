@@ -24,7 +24,7 @@ import 'package:blurarc_app/services/theme_provider.dart';
 
 class _MockApiClient extends Mock implements ApiClient {}
 
-Widget _buildHome(ApiClient api) {
+Widget buildHome(ApiClient api) {
   return ChangeNotifierProvider<ThemeProvider>.value(
     value: ThemeProvider(),
     child: MaterialApp(
@@ -40,15 +40,14 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  ApiClient _newRealApi() {
+  ApiClient newRealApi() {
     // 真实 ApiClient（用于 disconnect 流程测试）
-    // 显式提供 host/port 让 isConnected 为 true
     final api = ApiClient();
     api.setConnectionParams('127.0.0.1', 8900);
     return api;
   }
 
-  _MockApiClient _newMockApi() {
+  _MockApiClient newMockApi() {
     final api = _MockApiClient();
     // stub isConnected — Mock 默认返回 null 会破坏 !api.isConnected 的 bool 比较
     when(() => api.isConnected).thenReturn(false);
@@ -71,8 +70,8 @@ void main() {
   }
 
   testWidgets('显示自定义 BottomTabBar（3 个 tab）', (tester) async {
-    final api = _newMockApi();
-    await tester.pumpWidget(_buildHome(api));
+    final api = newMockApi();
+    await tester.pumpWidget(buildHome(api));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -84,8 +83,8 @@ void main() {
   });
 
   testWidgets('默认显示相册 tab（AlbumScreen）', (tester) async {
-    final api = _newMockApi();
-    await tester.pumpWidget(_buildHome(api));
+    final api = newMockApi();
+    await tester.pumpWidget(buildHome(api));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -93,8 +92,8 @@ void main() {
   });
 
   testWidgets('点击「上传」tab 切换到 UploadScreen', (tester) async {
-    final api = _newMockApi();
-    await tester.pumpWidget(_buildHome(api));
+    final api = newMockApi();
+    await tester.pumpWidget(buildHome(api));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -105,8 +104,8 @@ void main() {
   });
 
   testWidgets('点击「设置」tab 切换到 SettingsScreen', (tester) async {
-    final api = _newMockApi();
-    await tester.pumpWidget(_buildHome(api));
+    final api = newMockApi();
+    await tester.pumpWidget(buildHome(api));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -117,8 +116,8 @@ void main() {
   });
 
   testWidgets('从设置页切回相册页', (tester) async {
-    final api = _newMockApi();
-    await tester.pumpWidget(_buildHome(api));
+    final api = newMockApi();
+    await tester.pumpWidget(buildHome(api));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -134,8 +133,8 @@ void main() {
   });
 
   testWidgets('disconnect 时显示 PC 端未开启界面', (tester) async {
-    final api = _newRealApi();
-    await tester.pumpWidget(_buildHome(api));
+    final api = newRealApi();
+    await tester.pumpWidget(buildHome(api));
     await tester.pump();
 
     // 触发 onDisconnected
@@ -149,11 +148,8 @@ void main() {
 
   testWidgets('断开界面点「重新连接」回到正常状态（verifyToken=true）',
       (tester) async {
-    final api = _newRealApi();
-    // stub 掉 verifyToken 避免真实 HTTP 请求
-    // 由于 ApiClient 是真实类，无法用 mocktail stub。
-    // 用一个特殊 host 让请求快速失败也没问题，因为我们会切回。
-    await tester.pumpWidget(_buildHome(api));
+    final api = newRealApi();
+    await tester.pumpWidget(buildHome(api));
     await tester.pump();
 
     // 触发 disconnect
@@ -169,4 +165,3 @@ void main() {
     expect(tester.widget<FilledButton>(btn).onPressed, isNotNull);
   });
 }
-
