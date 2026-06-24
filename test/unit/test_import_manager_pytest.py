@@ -1385,3 +1385,81 @@ class TestCancellationAndResources:
         # 不抛错即可
         assert manager.get_progress("imp_pause_resume") is not None
 
+    def test_start_import_async_starts_thread(self, tmp_path, manager):
+        """start_import_async 应启动守护线程并注册到 import_threads"""
+        source = tmp_path / "src"
+        source.mkdir()
+        target = tmp_path / "tgt"
+        target.mkdir()
+        manager.create_import("imp_async", str(source), str(target))
+
+        with patch("backend.import_manager.SessionLocal") as mock_session:
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_db.query.return_value.all.return_value = []
+            mock_db.add = MagicMock()
+            mock_db.commit = MagicMock()
+            mock_db.close = MagicMock()
+            mock_db.execute = MagicMock()
+
+            manager.start_import_async("imp_async", str(source), str(target), "copy")
+
+        # 线程应被注册
+        assert "imp_async" in manager.import_threads
+        # 守护线程
+        thread = manager.import_threads["imp_async"]
+        assert thread.daemon is True
+        # 等待线程结束（空目录会快速 FAILED）
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+
+    def test_load_target_records_falls_back_to_file(self, tmp_path, manager):
+        """DB 失败时应回退到 .photo_organizer.json 文件加载"""
+        import json as _json
+        from backend.import_manager import RECORD_FILENAME
+
+        target = tmp_path / "target"
+        target.mkdir()
+        # 写入 JSON 备份记录
+        record_file = target / RECORD_FILENAME
+        record_file.write_text(_json.dumps({
+            "version": "1.0",
+            "records": {
+                "abc123": ("old/path.jpg", "old.jpg"),
+                "def456": ("old/path2.jpg", "old2.jpg"),
+            },
+        }), encoding="utf-8")
+
+        # DB session 抛错触发 fallback
+        with patch("backend.import_manager.SessionLocal") as mock_session:
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_db.query.side_effect = Exception("DB down")
+
+            records, size_to_md5s = manager._load_target_records(target)
+
+        # 应从文件加载
+        assert "abc123" in records
+        assert "def456" in records
+        assert size_to_md5s == {}
+
+    def test_save_target_records_permission_error(self, tmp_path, manager, monkeypatch):
+        """_save_target_records 在 PermissionError 时不抛错（重试 3 次后跳过）"""
+        from backend.import_manager import RECORD_FILENAME
+
+        target = tmp_path / "target"
+        target.mkdir()
+        # 模拟 open 抛 PermissionError
+        real_open = open
+        call_count = [0]
+
+        def fake_open(*args, **kwargs):
+            call_count[0] += 1
+            raise PermissionError("locked file")
+
+        monkeypatch.setattr("builtins.open", fake_open)
+        # 不应抛错
+        manager._save_target_records(target, {"hash1": ("p", "f")})
+        # 应重试 3 次
+        assert call_count[0] == 3, f"应重试 3 次，实际 {call_count[0]} 次"
+
