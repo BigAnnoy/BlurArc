@@ -619,3 +619,128 @@ class TestScanSourceAdvanced:
         assert len(result) == 1
         assert result[0].name == "照片.jpg"
 
+
+class TestMd5Deduplication:
+    """MD5 计算和去重"""
+
+    def test_md5_deterministic_same_content(self, tmp_path, manager):
+        """相同内容 → 相同 MD5（去重基础）"""
+        a = tmp_path / "a.jpg"
+        b = tmp_path / "b.jpg"
+        # 完全相同内容
+        _PILImage.new("RGB", (50, 50), (200, 50, 50)).save(a)
+        _PILImage.new("RGB", (50, 50), (200, 50, 50)).save(b)
+        # Pillow 在每次保存时可能含微小差异（如 EXIF 标记），用 bytes 完全相同的方式
+        a.write_bytes(b"IDENTICAL_BYTES_FOR_MD5_TEST" * 100)
+        b.write_bytes(b"IDENTICAL_BYTES_FOR_MD5_TEST" * 100)
+        assert manager._compute_md5(a) == manager._compute_md5(b)
+
+    def test_md5_different_content_different_hash(self, tmp_path, manager):
+        """不同内容 → 不同 MD5"""
+        a = tmp_path / "a.bin"
+        b = tmp_path / "b.bin"
+        a.write_bytes(b"alpha" * 1000)
+        b.write_bytes(b"omega" * 1000)
+        assert manager._compute_md5(a) != manager._compute_md5(b)
+
+    def test_md5_returns_32_char_hex(self, tmp_path, manager):
+        """MD5 必须是 32 字符十六进制"""
+        f = tmp_path / "test.bin"
+        f.write_bytes(b"hello world")
+        md5 = manager._compute_md5(f)
+        assert isinstance(md5, str)
+        assert len(md5) == 32
+        assert all(c in "0123456789abcdef" for c in md5)
+
+    def test_md5_cache_avoids_recompute(self, tmp_path, manager, monkeypatch):
+        """md5_cache 参数：同一文件路径被请求时直接返回缓存值（不再算 MD5）"""
+        from backend.import_manager import ImportProgress
+        f = tmp_path / "test.jpg"
+        f.write_bytes(b"sample content")
+
+        cache: dict = {}
+        # 第一次调用会写缓存
+        manager._import_file(
+            f, tmp_path / "target",
+            target_records={},
+            progress=ImportProgress("imp_cache_1"),
+            file_lock=None,
+            import_mode="copy",
+            md5_cache=cache,
+        )
+        # _import_file 复制后才会写缓存；验证缓存包含该路径
+        assert str(f) in cache
+        first_md5 = cache[str(f)]
+        # 修改文件内容，但 cache 命中应不会重新计算
+        f.write_bytes(b"TOTALLY_DIFFERENT_CONTENT")
+        manager._import_file(
+            f, tmp_path / "target2",
+            target_records={},
+            progress=ImportProgress("imp_cache_2"),
+            file_lock=None,
+            import_mode="copy",
+            md5_cache=cache,
+        )
+        # cache 命中，所以第二份记录的 md5 与第一份相同（与文件实际内容无关）
+        assert cache[str(f)] == first_md5
+
+    def test_two_phase_prescreen_size_grouping(self, tmp_path, manager):
+        """两阶段预筛：size_to_md5s 应按文件大小分组"""
+        # 准备 target 中有 3 张照片，size 各不同
+        target = tmp_path / "target"
+        target.mkdir()
+        for i, size_bytes in enumerate([100, 200, 300]):
+            p = target / f"photo_{i}.jpg"
+            p.write_bytes(b"x" * size_bytes)
+
+        with patch("backend.import_manager.SessionLocal") as mock_session:
+            # 构造 FakePhoto 行
+            class FakePhoto:
+                def __init__(self, p, sz, md):
+                    self.path = p
+                    self.size = sz
+                    self.md5_hash = md
+            fake_photos = [
+                FakePhoto(str(target / f"photo_{i}.jpg"), size, f"md5_{i}")
+                for i, size in enumerate([100, 200, 300])
+            ]
+
+            class FakeQuery:
+                def __init__(self, photos):
+                    self._photos = photos
+                def filter(self, *_):
+                    return self
+                def all(self):
+                    return self._photos
+            mock_db = MagicMock()
+            mock_db.query.return_value = FakeQuery(fake_photos)
+            mock_session.return_value = mock_db
+
+            records, size_to_md5s = manager._load_target_records(target)
+
+        # 每个 size 独立成组
+        assert size_to_md5s == {
+            100: {"md5_0"},
+            200: {"md5_1"},
+            300: {"md5_2"},
+        }
+        assert records == {
+            "md5_0": str(target / "photo_0.jpg"),
+            "md5_1": str(target / "photo_1.jpg"),
+            "md5_2": str(target / "photo_2.jpg"),
+        }
+
+    def test_md5_handles_large_file_in_chunks(self, tmp_path, manager):
+        """5MB 文件应能正确计算 MD5（分块读取）"""
+        big = tmp_path / "big.jpg"
+        # 6MB 数据（确保超过单次读取 buffer）
+        big.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * (6 * 1024 * 1024))
+        md5 = manager._compute_md5(big)
+        assert isinstance(md5, str)
+        assert len(md5) == 32
+
+    def test_md5_nonexistent_file_returns_none(self, tmp_path, manager):
+        """不存在的文件应返回 None（不抛错）"""
+        fake = tmp_path / "does_not_exist.bin"
+        assert manager._compute_md5(fake) is None
+
