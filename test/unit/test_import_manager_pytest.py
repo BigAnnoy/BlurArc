@@ -744,3 +744,124 @@ class TestMd5Deduplication:
         fake = tmp_path / "does_not_exist.bin"
         assert manager._compute_md5(fake) is None
 
+
+class TestExifDateExtraction:
+    """EXIF 日期提取（_get_media_date）"""
+
+    def test_jpeg_with_exif_date(self, tmp_path, manager):
+        """JPEG with DateTimeOriginal should return that date."""
+        from PIL import Image
+        import piexif
+
+        img_path = tmp_path / "with_exif.jpg"
+        img = Image.new("RGB", (100, 100))
+        exif_dict = {
+            "0th": {},
+            "Exif": {piexif.ExifIFD.DateTimeOriginal: b"2023:05:15 14:30:00"},
+            "GPS": {},
+            "1st": {},
+            "thumbnail": None,
+        }
+        exif_bytes = piexif.dump(exif_dict)
+        img.save(str(img_path), exif=exif_bytes)
+
+        date = manager._get_media_date(img_path)
+        assert date is not None
+        assert date.year == 2023
+        assert date.month == 5
+        assert date.day == 15
+        assert date.hour == 14
+        assert date.minute == 30
+        assert date.second == 0
+
+    def test_jpeg_with_datetime_fallback(self, tmp_path, manager):
+        """无 DateTimeOriginal 但有 DateTime 字段时也能被解析"""
+        from PIL import Image
+        import piexif
+
+        img_path = tmp_path / "with_datetime.jpg"
+        img = Image.new("RGB", (100, 100))
+        exif_dict = {
+            "0th": {piexif.ImageIFD.DateTime: b"2022:08:20 09:15:30"},
+            "Exif": {},
+            "GPS": {},
+            "1st": {},
+            "thumbnail": None,
+        }
+        exif_bytes = piexif.dump(exif_dict)
+        img.save(str(img_path), exif=exif_bytes)
+
+        date = manager._get_media_date(img_path)
+        assert date is not None
+        assert date.year == 2022
+        assert date.month == 8
+        assert date.day == 20
+
+    def test_jpeg_without_exif_returns_none(self, tmp_path, manager):
+        """无 EXIF 的 JPEG：_get_media_date 返回 None（由调用方 fallback 到 mtime）"""
+        img_path = tmp_path / "no_exif.jpg"
+        _PILImage.new("RGB", (100, 100)).save(str(img_path))
+        # 当前实现：无 EXIF 时 _get_media_date 返回 None
+        assert manager._get_media_date(img_path) is None
+
+    def test_png_has_no_exif_returns_none(self, tmp_path, manager):
+        """PNG 通常无 EXIF：_get_media_date 返回 None"""
+        img_path = tmp_path / "test.png"
+        _PILImage.new("RGB", (100, 100)).save(str(img_path))
+        # PNG 的 EXIF 不是默认支持的
+        assert manager._get_media_date(img_path) is None
+
+    def test_corrupted_image_returns_none(self, tmp_path, manager):
+        """损坏的图片应返回 None，不抛错"""
+        img_path = tmp_path / "broken.jpg"
+        img_path.write_bytes(b"\xff\xd8\xff\xe0\x00\x00")
+        assert manager._get_media_date(img_path) is None
+
+    def test_import_file_falls_back_to_mtime(self, tmp_path, manager):
+        """_import_file 应当在 _get_media_date 返回 None 时 fallback 到 mtime"""
+        from backend.import_manager import ImportProgress
+        import threading
+
+        # 用 broken 的 JPEG — _get_media_date 会返回 None
+        img_path = tmp_path / "broken.jpg"
+        img_path.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 50)
+
+        # 设置 mtime 到 2024-01-15
+        target_mtime = _dt(2024, 1, 15, 10, 0, 0)
+        os.utime(img_path, (target_mtime.timestamp(), target_mtime.timestamp()))
+
+        target = tmp_path / "target"
+        progress = ImportProgress("imp_exif_fallback")
+        file_lock = threading.Lock()
+
+        with patch("backend.import_manager.SessionLocal") as mock_session:
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_db.execute = MagicMock()
+            mock_db.commit = MagicMock()
+            mock_db.close = MagicMock()
+
+            manager._import_file(
+                img_path, target, {},
+                progress=progress, file_lock=file_lock,
+                import_mode="copy", md5_cache={},
+            )
+
+        # 验证：文件被复制到 YYYY-MM 子目录
+        expected_month_dir = target / "2024-01"
+        assert expected_month_dir.exists(), \
+            f"expected fallback to mtime 2024-01, got {list(target.rglob('*'))}"
+
+    def test_video_file_uses_mtime(self, tmp_path, manager):
+        """视频文件：VideoProcessor 提取失败时直接返回 mtime"""
+        video = tmp_path / "video.mp4"
+        video.write_bytes(b"\x00\x00\x00\x20ftypmp42" + b"\x00" * 50)
+        target_mtime = _dt(2024, 6, 1, 12, 0, 0)
+        os.utime(video, (target_mtime.timestamp(), target_mtime.timestamp()))
+
+        date = manager._get_media_date(video)
+        assert date is not None
+        assert date.year == 2024
+        assert date.month == 6
+        assert date.day == 1
+
