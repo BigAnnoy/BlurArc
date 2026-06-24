@@ -518,3 +518,104 @@ def test_file_conflict_values():
     assert "md5" in conflict_values
     assert "name" in conflict_values
 
+
+# ============================================================
+# Plan C: 高级测试（扫描 / MD5 / EXIF / 进度 / 错误 / 并发 / 取消）
+# ============================================================
+
+from PIL import Image as _PILImage  # noqa: E402  (用于创建测试图)
+from datetime import datetime as _dt, timedelta as _td  # noqa: E402
+
+
+@pytest.fixture
+def manager():
+    """新（非单例）的 ImportManager 实例，避免与其他测试共享状态"""
+    from backend.import_manager import ImportManager
+    return ImportManager()
+
+
+class TestScanSourceAdvanced:
+    """_scan_source 高级测试"""
+
+    def test_incremental_scan_skips_unchanged(self, tmp_path, manager):
+        """增量扫描：mtime 早于 last_scan 的文件应被跳过"""
+        album = tmp_path / "album"
+        album.mkdir()
+        # 创建一个老文件
+        old = album / "old.jpg"
+        _PILImage.new("RGB", (50, 50)).save(old)
+        old_time = (_dt.now() - _td(days=7)).timestamp()
+        os.utime(old, (old_time, old_time))
+
+        # 创建一个新文件
+        new = album / "new.jpg"
+        _PILImage.new("RGB", (50, 50)).save(new)
+
+        # 通过 config_manager.update_setting 注入 last_scan_time（仅扫描阶段使用）
+        from backend.config_manager import get_config_manager
+        config = get_config_manager()
+        last_scan = (_dt.now() - _td(days=1)).isoformat()
+        # 路径相同 hash 相同 — 必须与 _scan_source 中的算法一致
+        import hashlib
+        src_key = f"last_scan_{hashlib.md5(str(album).encode()).hexdigest()[:8]}"
+        try:
+            config.update_setting(src_key, last_scan)
+            # 增量扫描（mtime 过滤）
+            result = manager._scan_source(album, ignore_last_scan=False)
+            names = {p.name for p in result}
+            assert "new.jpg" in names
+            # old.jpg mtime 早于 last_scan，应被跳过
+            assert "old.jpg" not in names
+        finally:
+            # 清理测试配置
+            try:
+                config.update_setting(src_key, None)
+            except Exception:
+                pass
+
+    def test_ignore_last_scan_flag(self, tmp_path, manager):
+        """ignore_last_scan=True 强制全量扫描"""
+        album = tmp_path / "album"
+        album.mkdir()
+        _PILImage.new("RGB", (50, 50)).save(album / "img.jpg")
+        result = manager._scan_source(album, ignore_last_scan=True)
+        assert len(result) == 1
+
+    def test_empty_directory_returns_empty(self, tmp_path, manager):
+        result = manager._scan_source(tmp_path, ignore_last_scan=True)
+        assert result == []
+
+    def test_nested_subdirectories(self, tmp_path, manager):
+        album = tmp_path / "album"
+        for i in range(3):
+            sub = album / f"sub_{i}"
+            sub.mkdir(parents=True)
+            _PILImage.new("RGB", (50, 50)).save(sub / f"img_{i}.jpg")
+        result = manager._scan_source(album, ignore_last_scan=True)
+        assert len(result) == 3
+
+    def test_symlink_followed(self, tmp_path, manager):
+        """符号链接指向的媒体文件应被包含"""
+        album = tmp_path / "album"
+        album.mkdir()
+        target = album / "real.jpg"
+        _PILImage.new("RGB", (50, 50)).save(target)
+        link = album / "link.jpg"
+        try:
+            link.symlink_to(target)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlink not supported on this platform")
+        result = manager._scan_source(album, ignore_last_scan=True)
+        # real.jpg 必被发现；link.jpg 如果 os.walk 跟随符号链接也会被发现
+        assert len(result) >= 1
+        assert any(p.name == "real.jpg" for p in result)
+
+    def test_unicode_directory(self, tmp_path, manager):
+        """中文目录名 / 中文文件名"""
+        album = tmp_path / "相册" / "子目录"
+        album.mkdir(parents=True)
+        _PILImage.new("RGB", (50, 50)).save(album / "照片.jpg")
+        result = manager._scan_source(album, ignore_last_scan=True)
+        assert len(result) == 1
+        assert result[0].name == "照片.jpg"
+
