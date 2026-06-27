@@ -177,8 +177,8 @@ export function JoinAlbumModal({ isOpen, onClose, photoIds, onJoined }: JoinAlbu
                 没有匹配的相册
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2.5" style={{ maxHeight: '234px' }}>
-                {filteredAlbums.slice(0, 5).map(album => {
+              <div className="grid grid-cols-2 gap-2.5">
+                {filteredAlbums.map(album => {
                   const isSelected = selectedAlbumIds.has(album.id);
                   return (
                     <button

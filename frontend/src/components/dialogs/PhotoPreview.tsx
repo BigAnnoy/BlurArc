@@ -580,11 +580,9 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
           onClose={() => setContextMenu(null)}
           groups={buildPhotoMenu({
             isFavorite,
-            onPreview: () => {},
             onToggleFavorite: () => {
               handleFavoriteToggle();
             },
-            onJoinAlbum: () => {},
             onOpenInExplorer: async () => {
               try {
                 await api.openInExplorer(photo.path);
@@ -592,7 +590,6 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
                 console.error('打开资源管理器失败:', error);
               }
             },
-            onDelete: () => {},
             t,
           })}
         />
