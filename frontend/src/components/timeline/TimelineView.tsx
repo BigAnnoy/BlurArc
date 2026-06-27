@@ -305,7 +305,14 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
           </div>
         ) : state.view === 'years' ? (
           <>
-            <div className="grid grid-cols-4 gap-4">
+            <div
+              className="grid gap-2 p-3"
+              style={{
+                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                gridAutoRows: '220px',
+                alignContent: 'start',
+              }}
+            >
               {years.map(y => {
                 const covers = y.cover_photo_paths && y.cover_photo_paths.length > 0
                   ? y.cover_photo_paths
@@ -317,7 +324,7 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
                     // D3: 双击直接进 All Photos（带 year filter）
                     onDoubleClick={() => setState({ view: 'all', year: y.year })}
                   >
-                    <div className="aspect-square bg-page">
+                    <div className="w-full h-[calc(100%-44px)] bg-page">
                       {covers.length >= 4 ? (
                         <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-0.5">
                           {covers.slice(0, 4).map((p: string, i: number) => (
@@ -333,8 +340,8 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
                       )}
                     </div>
                     <div className="p-3">
-                      <div className="font-medium">{y.year}年</div>
-                      <div className="text-xs text-text-tertiary">{y.count} 张</div>
+                      <div className="font-medium">{t('timeline.yearLabel', { year: y.year })}</div>
+                      <div className="text-xs text-text-tertiary">{t('main.photoCount', { count: y.count })}</div>
                     </div>
                   </div>
                 );
@@ -349,7 +356,14 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
           </>
         ) : state.view === 'months' ? (
           <>
-            <div className="grid grid-cols-4 gap-4">
+            <div
+              className="grid gap-2 p-3"
+              style={{
+                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                gridAutoRows: '220px',
+                alignContent: 'start',
+              }}
+            >
               {months.map(m => {
                 const covers = m.cover_photo_paths && m.cover_photo_paths.length > 0
                   ? m.cover_photo_paths
@@ -361,7 +375,7 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
                     // D3: 双击直接进 All Photos（带 year+month filter）
                     onDoubleClick={() => setState({ view: 'all', year: m.year, month: m.month })}
                   >
-                    <div className="aspect-square bg-page">
+                    <div className="w-full h-[calc(100%-44px)] bg-page">
                       {covers.length >= 4 ? (
                         <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-0.5">
                           {covers.slice(0, 4).map((p: string, i: number) => (
@@ -377,8 +391,8 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
                       )}
                     </div>
                     <div className="p-3">
-                      <div className="font-medium">{m.year}年{m.month}月</div>
-                      <div className="text-xs text-text-tertiary">{m.count} 张</div>
+                      <div className="font-medium">{t('timeline.yearMonthLabel', { year: m.year, month: m.month })}</div>
+                      <div className="text-xs text-text-tertiary">{t('main.photoCount', { count: m.count })}</div>
                     </div>
                   </div>
                 );
