@@ -12,9 +12,9 @@ interface PhotoToolbarProps {
   title: string;
   count: number;
   loading?: boolean;
-  // §3.2.2 显示选项
-  displayMode: 'square' | 'original';
-  onDisplayModeChange: (mode: 'square' | 'original') => void;
+  // §3.2.2 布局切换
+  layoutMode: 'grid' | 'masonry';
+  onLayoutModeChange: (mode: 'grid' | 'masonry') => void;
   // §4.2 缩放（0=小 120px, 1=中 180px, 2=大 240px）
   zoomLevel: number;
   onZoomChange: (level: number) => void;
@@ -35,7 +35,7 @@ interface PhotoToolbarProps {
 
 export function PhotoToolbar({
   title, count, loading,
-  displayMode, onDisplayModeChange,
+  layoutMode, onLayoutModeChange,
   zoomLevel, onZoomChange,
   filters, onFiltersChange, filterOptions,
   sort, onSortChange, sortOptions,
@@ -56,14 +56,14 @@ export function PhotoToolbar({
       <div className="flex gap-1.5 items-center flex-shrink-0">
         {!selectionMode && (
           <>
-            {/* §3.2.2 布局切换：正方形 / 原始比例 */}
+            {/* §3.2.2 布局切换：网格 / 瀑布流 */}
             <button
-              onClick={() => onDisplayModeChange(displayMode === 'square' ? 'original' : 'square')}
+              onClick={() => onLayoutModeChange(layoutMode === 'grid' ? 'masonry' : 'grid')}
               disabled={actionsDisabled}
               className={`w-[34px] h-[34px] rounded-[6px] border-none bg-transparent cursor-pointer flex items-center justify-center transition-all hover:bg-page hover:text-primary ${
                 actionsDisabled ? 'text-text-tertiary cursor-not-allowed opacity-50' : 'text-text-secondary'
-              } ${displayMode === 'original' ? 'text-primary bg-primary-light' : ''}`}
-              title={displayMode === 'square' ? t('main.layoutSwitch') + '（正方形）' : t('main.layoutSwitch') + '（原始比例）'}
+              } ${layoutMode === 'masonry' ? 'text-primary bg-primary-light' : ''}`}
+              title={layoutMode === 'grid' ? t('main.layoutSwitch') + '（网格）' : t('main.layoutSwitch') + '（瀑布流）'}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>

@@ -451,6 +451,7 @@ def album_photos():
         # 分页参数
         page = int(request.args.get('page', '1'))
         page_size = int(request.args.get('page_size', '100'))
+        sort = request.args.get('sort', '')
         
         target_path = Path(path)
         if not target_path.exists() or not target_path.is_dir():
@@ -474,19 +475,31 @@ def album_photos():
             if file.is_file() and file.suffix.lower() in MEDIA_FORMATS:
                 all_files.append(file)
 
-        # 预先查询数据库中本路径下文件的 is_favorite 状态（批量一次查完）
+        # 预先查询数据库中本路径下文件的 is_favorite 状态和 media_date（批量一次查完）
         path_to_favorite = {}
+        path_to_media_date = {}
         try:
             from database import SessionLocal, Photo
             db_fav = SessionLocal()
             try:
                 # 查询所有匹配路径的文件
-                photo_rows = db_fav.query(Photo.path, Photo.is_favorite).filter(Photo.path.in_([str(f) for f in all_files])).all()
+                photo_rows = db_fav.query(Photo.path, Photo.is_favorite, Photo.media_date).filter(Photo.path.in_([str(f) for f in all_files])).all()
                 path_to_favorite = {p.path: p.is_favorite for p in photo_rows}
+                path_to_media_date = {p.path: p.media_date for p in photo_rows}
             finally:
                 db_fav.close()
         except Exception as e:
-            logger.warning(f"批量查询 is_favorite 失败（不影响主流程）: {e}")
+            logger.warning(f"批量查询 is_favorite/media_date 失败（不影响主流程）: {e}")
+
+        # 排序：按 media_date 排序（需要数据库数据）
+        if sort in ('media_date_desc', 'media_date_asc'):
+            def sort_key(f):
+                md = path_to_media_date.get(str(f))
+                if md is None:
+                    # 无 media_date 的排到最后（降序）或最前（升序）
+                    return datetime.max if sort == 'media_date_desc' else datetime.min
+                return md
+            all_files.sort(key=sort_key, reverse=(sort == 'media_date_desc'))
 
         # 分页计算
         total_count = len(all_files)
@@ -507,13 +520,16 @@ def album_photos():
                 stat = file.stat()
                 encoded_path = urllib.parse.quote(str(file))
                 file_type = 'photo' if file.suffix.lower() in _IMAGE_FORMATS else 'video'
+                # 优先使用数据库的 media_date，否则用文件 mtime
+                media_date = path_to_media_date.get(str(file))
+                date_val = media_date.isoformat() if media_date else datetime.fromtimestamp(stat.st_mtime).isoformat()
                 photos.append({
                     'id': str(file),
                     'name': file.name,
                     'path': str(file),
                     'size': stat.st_size,
                     'size_mb': round(stat.st_size / (1024 * 1024), 2),
-                    'date': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    'date': date_val,
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
                     'type': file_type,
                     'is_favorite': path_to_favorite.get(str(file), False),
@@ -2865,8 +2881,20 @@ def get_album_photos(album_id):
             if not album:
                 return jsonify({'error': '相册不存在'}), 404
             
+            sort = request.args.get('sort', '')
+            
+            # 基础查询
+            query = db.query(Photo).join(Photo.albums).filter(Album.id == album_id)
+            
+            # 排序
+            if sort == 'media_date_desc':
+                query = query.order_by(Photo.media_date.desc())
+            elif sort == 'media_date_asc':
+                query = query.order_by(Photo.media_date.asc())
+            # 默认：按加入顺序（无排序）
+            
             photos = []
-            for photo in album.photos:
+            for photo in query.all():
                 photos.append({
                     'id': photo.id,
                     'filename': photo.filename,
@@ -3648,6 +3676,8 @@ def get_favorites():
                 query = query.order_by(Photo.favorited_at.asc())
             elif sort == 'media_date_desc':
                 query = query.order_by(Photo.media_date.desc())
+            elif sort == 'media_date_asc':
+                query = query.order_by(Photo.media_date.asc())
             else:
                 query = query.order_by(Photo.favorited_at.desc())
             

@@ -257,7 +257,7 @@ export function MobileDeviceManager({ isOpen, onClose }: MobileDeviceManagerProp
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={t('mobileAccess.title')} size="md">
-      <div className="space-y-5">
+      <div className="space-y-5 p-5">
         {/* 移动接入服务总开关 */}
         <div className="flex items-center justify-between p-4 bg-page rounded-lg border border-border">
           <div>

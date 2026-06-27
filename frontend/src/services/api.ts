@@ -68,13 +68,13 @@ export const api = {
   },
 
   // Photos - 支持分页
-  getPhotos: (path: string, page: number = 1, pageSize: number = 100) => fetchJson<{
+  getPhotos: (path: string, page: number = 1, pageSize: number = 100, sort?: string) => fetchJson<{
     photos: { id: string; name: string; path: string; size: number; date: string; type: string; duration?: string; is_favorite?: boolean }[];
     count: number;
     total_pages: number;
     page: number;
     page_size: number;
-  }>(`${API_BASE}/album/photos?path=${encodeURIComponent(path)}&page=${page}&page_size=${pageSize}`),
+  }>(`${API_BASE}/album/photos?path=${encodeURIComponent(path)}&page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}`),
 
   // Thumbnail
   getThumbnail: (path: string) => `${API_BASE}/album/thumbnail?path=${encodeURIComponent(path)}`,
@@ -379,9 +379,9 @@ export const api = {
   deleteAlbum: (albumId: number) =>
     fetchJson<{ status: string; id: number }>(`${API_BASE}/albums/${albumId}`, { method: 'DELETE' }),
 
-  getAlbumPhotos: (albumId: number, page?: number, pageSize?: number) =>
+  getAlbumPhotos: (albumId: number, page?: number, pageSize?: number, sort?: string) =>
     fetchJson<{ photos: { id: number; filename: string; path: string; size: number; date: string | null; type: string; is_favorite: boolean }[]; total: number }>(
-      `${API_BASE}/albums/${albumId}/photos${page && pageSize ? `?page=${page}&page_size=${pageSize}` : ''}`
+      `${API_BASE}/albums/${albumId}/photos${page && pageSize ? `?page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}` : (sort ? `?sort=${sort}` : '')}`
     ),
 
   getPhotoAlbums: (photoId: number) =>
@@ -463,8 +463,8 @@ export const api = {
       body: JSON.stringify({ photo_ids: photoIds, favorite }),
     }),
 
-  getFavorites: () =>
-    fetchJson<{ photos: { id: number; filename: string; path: string; size: number; date: string | null; type: string; is_favorite: boolean; favorited_at: string | null }[]; total: number }>(`${API_BASE}/photos/favorites`),
+  getFavorites: (sort?: string) =>
+    fetchJson<{ photos: { id: number; filename: string; path: string; size: number; date: string | null; type: string; is_favorite: boolean; favorited_at: string | null }[]; total: number }>(`${API_BASE}/photos/favorites${sort ? `?sort=${sort}` : ''}`),
 
   // ============================================================================
   // 文件夹操作 API (v0.7)

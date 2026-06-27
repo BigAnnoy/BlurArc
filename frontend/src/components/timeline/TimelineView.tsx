@@ -3,6 +3,7 @@ import { api } from '../../services/api';
 import { PhotoGrid } from '../photos/PhotoGrid';
 import { PhotoToolbar } from '../common/PhotoToolbar';
 import { SelectionBanner } from '../common/SelectionBanner';
+import { AlbumCoverDefault } from '../common/AlbumCoverDefault';
 import { useI18n } from '../../contexts/I18nContext';
 import type { Photo } from '../../types';
 
@@ -42,8 +43,8 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<string[]>([]);
   const [sort, setSort] = useState('media_date_desc');
-  // v0.7 §3.2.2：显示选项（正方形裁切 / 原始比例），仅 All Photos 视图生效
-  const [displayMode, setDisplayMode] = useState<'square' | 'original'>('square');
+  // v0.7 §3.2.2：布局切换（网格 / 瀑布流），仅 All Photos 视图生效
+  const [layoutMode, setLayoutMode] = useState<'grid' | 'masonry'>('grid');
   // v0.7 §4.2：缩放级别（0=小, 1=中默认, 2=大），仅 All Photos 视图生效
   const [zoomLevel, setZoomLevel] = useState(1);
 
@@ -72,13 +73,11 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
 
   const sortOptions = [
     { key: 'media_date_desc', label: t('sort.dateDesc') },
-    { key: 'media_date_asc', label: t('sort.dateAsc') },
-    { key: 'import_date_desc', label: t('sort.importDesc') },
-    { key: 'import_date_asc', label: t('sort.importAsc') }
+    { key: 'media_date_asc', label: t('sort.dateAsc') }
   ];
 
   // 按日期分组照片
-  const groupPhotosByDay = (photos: Photo[]) => {
+  const groupPhotosByDay = (photos: Photo[], sort: string) => {
     const groups: { [key: string]: Photo[] } = {};
     photos.forEach(photo => {
       // v0.7.1: 后端 date 是 ISO 格式 "2026-06-23T17:56:58"，用 'T' 切取日期部分
@@ -88,7 +87,10 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
       }
       groups[date].push(photo);
     });
-    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+    const groupOrder = sort === 'media_date_asc'
+      ? (a: [string, Photo[]], b: [string, Photo[]]) => a[0].localeCompare(b[0])   // 升序：旧→新
+      : (a: [string, Photo[]], b: [string, Photo[]]) => b[0].localeCompare(a[0]);  // 降序：新→旧
+    return Object.entries(groups).sort(groupOrder);
   };
 
   // 加载首页数据（D6: years/months 取首批，all 取全部）
@@ -251,8 +253,8 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
         title={title}
         count={photos.length}
         loading={loading}
-        displayMode={displayMode}
-        onDisplayModeChange={setDisplayMode}
+        layoutMode={layoutMode}
+        onLayoutModeChange={setLayoutMode}
         zoomLevel={zoomLevel}
         onZoomChange={setZoomLevel}
         filters={filters}
@@ -325,7 +327,9 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
                       ) : covers.length > 0 ? (
                         <img src={api.getThumbnail(covers[0])} alt="" className="w-full h-full object-cover" loading="lazy" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-text-tertiary text-4xl">{y.year}</div>
+                        <div className="w-full h-full flex items-center justify-center">
+                          <AlbumCoverDefault size="tile" />
+                        </div>
                       )}
                     </div>
                     <div className="p-3">
@@ -367,8 +371,8 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
                       ) : covers.length > 0 ? (
                         <img src={api.getThumbnail(covers[0])} alt="" className="w-full h-full object-cover" loading="lazy" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-text-tertiary text-4xl">
-                          {m.year}-{String(m.month).padStart(2, '0')}
+                        <div className="w-full h-full flex items-center justify-center">
+                          <AlbumCoverDefault size="tile" />
                         </div>
                       )}
                     </div>
@@ -390,7 +394,7 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
         ) : (
           // D7: All Photos（无论是否带 filter）按天分组显示照片
           <div className="space-y-6">
-            {groupPhotosByDay(photos).map(([date, dayPhotos]) => (
+            {groupPhotosByDay(photos, sort).map(([date, dayPhotos]) => (
               <div key={date}>
                 <h3 className="text-sm font-semibold text-text-primary mb-3 px-1">
                   {new Date(date).toLocaleDateString(t('common.locale') === 'English' ? 'en-US' : 'zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
@@ -405,7 +409,7 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
                   onDelete={onDelete}
                   onRemoveFromAlbum={onRemoveFromAlbum}
                   onFavoriteChange={onFavoriteChange}
-                  displayMode={displayMode}
+                  layoutMode={layoutMode}
                   zoomLevel={zoomLevel}
                 />
               </div>

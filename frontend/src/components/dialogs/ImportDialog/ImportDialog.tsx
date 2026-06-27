@@ -467,11 +467,13 @@ export function ImportDialog({ isOpen, onClose, onComplete, phoneSourcePath, ini
           step === 'select-mode' || step === 'select-path' || step === 'checking' || step === 'phone-upload'
             ? 'md'
             : step === 'importing'
-            ? 'lg'
+            ? 'xl'
             : '2xl'
         }
       >
-        {renderStep()}
+        <div className="p-5">
+          {renderStep()}
+        </div>
       </Modal>
       <PhotoPreviewModal
         photo={previewPhoto}

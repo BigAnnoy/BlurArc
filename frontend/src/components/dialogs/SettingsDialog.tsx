@@ -176,7 +176,7 @@ export function SettingsDialog({ isOpen, onClose, onDataRefresh }: SettingsDialo
         </button>
       }
     >
-      <div className="space-y-6">
+      <div className="space-y-6 p-5">
         <div>
           <label className="block text-sm font-medium mb-2">{t('settings.albumPath')}</label>
           <div className="flex gap-3">

@@ -375,6 +375,20 @@ const translations: Record<Language, Record<string, string>> = {
     'pairing.requestFrom': '{device} 请求配对',
     'pairing.success': '配对成功',
     'pairing.successDesc': '设备已成功配对，可以开始使用了',
+
+    // Menu Items
+    'menu.preview': '预览',
+    'menu.removeFavorite': '取消收藏 ❤',
+    'menu.addFavorite': '加入收藏 ❤',
+    'menu.joinAlbum': '加入相册...',
+    'menu.joinOtherAlbum': '加入其他相册...',
+    'menu.removeFromAlbum': '从相册移除',
+    'menu.openInExplorer': '在资源管理器中显示',
+    'menu.delete': '删除',
+    'menu.open': '打开',
+    'menu.rename': '重命名',
+    'menu.duplicate': '复制相簿',
+    'menu.scanNew': '扫描新增',
   },
   en: {
     // Common
@@ -737,6 +751,20 @@ const translations: Record<Language, Record<string, string>> = {
     'pairing.requestFrom': '{device} requests pairing',
     'pairing.success': 'Pairing Successful',
     'pairing.successDesc': 'Device is paired and ready to use',
+
+    // Menu Items
+    'menu.preview': 'Preview',
+    'menu.removeFavorite': 'Remove from Favorites ❤',
+    'menu.addFavorite': 'Add to Favorites ❤',
+    'menu.joinAlbum': 'Add to Album...',
+    'menu.joinOtherAlbum': 'Add to Other Album...',
+    'menu.removeFromAlbum': 'Remove from Album',
+    'menu.openInExplorer': 'Show in Explorer',
+    'menu.delete': 'Delete',
+    'menu.open': 'Open',
+    'menu.rename': 'Rename',
+    'menu.duplicate': 'Duplicate Album',
+    'menu.scanNew': 'Scan for New Files',
   },
 };
 

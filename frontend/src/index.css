@@ -49,6 +49,12 @@ body {
   color: var(--color-text-primary);
   background-color: var(--color-page);
   -webkit-font-smoothing: antialiased;
+
+  /* AlbumCoverDefault SVG aliases (对齐原型 v3) */
+  --bg-card: var(--color-card);
+  --stroke-light: var(--color-border);
+  --stroke: var(--color-text-secondary);
+  --stroke-strong: #475569;
 }
 
 /* Dark mode */
@@ -65,6 +71,12 @@ body {
   --color-text-primary: #e8f0f5;
   --color-text-secondary: #8aa0b0;
   --color-text-tertiary: #506070;
+
+  /* AlbumCoverDefault SVG aliases (暗色) */
+  --bg-card: var(--color-card);
+  --stroke-light: var(--color-border);
+  --stroke: var(--color-text-secondary);
+  --stroke-strong: #94a3b8;
 }
 
 /* Scrollbar */
@@ -143,6 +155,26 @@ body {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes modalOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+}
+
+.preview-closing {
+  animation: fadeOut 0.25s ease-out forwards;
 }
 
 /* 按钮按下动效（v0.7 增强） */
@@ -400,4 +432,14 @@ button:not(:disabled):active {
   font-size: 13px;
   line-height: 1;
   flex-shrink: 0;
+}
+
+/* ===== 瀑布流布局（v0.7 §3.2.2：layoutMode === 'masonry'） ===== */
+.layout-masonry {
+  column-width: 200px;
+  column-gap: 6px;
+}
+.layout-masonry > * {
+  break-inside: avoid;
+  margin-bottom: 6px;
 }

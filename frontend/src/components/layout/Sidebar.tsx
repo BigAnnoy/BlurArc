@@ -5,6 +5,8 @@ import { DirectoryTree } from '../sidebar/DirectoryTree';
 import { useI18n } from '../../contexts/I18nContext';
 import { api } from '../../services/api';
 import { ContextMenu } from '../common/ContextMenu';
+import { buildAlbumMenu } from '../common/menuBuilders';
+import { AlbumCoverDefault } from '../common/AlbumCoverDefault';
 import { useToast } from '../common/Toast';
 
 interface Album {
@@ -31,6 +33,7 @@ interface SidebarProps {
   onCreateAlbum?: () => void;
   favoriteCount?: number;
   onAlbumAction?: (action: 'rename' | 'delete' | 'duplicate', album: Album) => void;
+  onRefreshCounters?: () => Promise<void>;
 }
 
 export function Sidebar({
@@ -47,6 +50,7 @@ export function Sidebar({
   onCreateAlbum,
   favoriteCount = 0,
   onAlbumAction,
+  onRefreshCounters,
 }: SidebarProps) {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -239,15 +243,15 @@ export function Sidebar({
                     try {
                       await api.addPhotoToAlbum(album.id, Number(photoId));
                       showToast(`已添加到 ${album.name}`, 'success');
+                      await onRefreshCounters?.();
                     } catch (error) {
                       showToast('添加失败', 'error');
                     }
                   } else if (sourceAlbumId && Number(sourceAlbumId) !== album.id) {
                     try {
                       await api.mergeAlbums(Number(sourceAlbumId), album.id);
-                      const res = await api.getAlbums();
-                      setAlbums(res.albums);
                       showToast(`已合并到 ${album.name}`, 'success');
+                      await onRefreshCounters?.();
                     } catch (error) {
                       showToast('合并失败', 'error');
                     }
@@ -274,7 +278,7 @@ export function Sidebar({
                   }
                 >
                   {!(album as any).cover_photo_path && (
-                    <div className="thumb-default">📷</div>
+                    <AlbumCoverDefault size="thumb" />
                   )}
                 </div>
                 <span className="flex-1 text-left truncate min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{album.name}</span>
@@ -297,7 +301,7 @@ export function Sidebar({
         <div className="flex items-center justify-between text-[12px] font-bold uppercase tracking-[0.08em] text-text-secondary mt-5 mb-2 py-1">
           <span>{t('sidebar.folders')}</span>
         </div>
-        <DirectoryTree years={years} rootDir={rootDir} selectedPath={selectedPath} onSelect={onSelectPath} />
+        <DirectoryTree years={years} rootDir={rootDir} selectedPath={selectedPath} onSelect={onSelectPath} onRefreshCounters={onRefreshCounters} />
       </div>
 
       {/* 导入按钮 */}
@@ -317,29 +321,13 @@ export function Sidebar({
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
-          groups={[
-            {
-              items: [
-                {
-                  label: t('common.open') || '打开',
-                  onClick: () => onSelectAlbum?.(contextMenu.album.id)
-                },
-                {
-                  label: t('common.rename') || '重命名',
-                  onClick: () => onAlbumAction?.('rename', contextMenu.album)
-                },
-                {
-                  label: t('common.duplicate') || '复制相簿',
-                  onClick: () => onAlbumAction?.('duplicate', contextMenu.album)
-                },
-                {
-                  label: t('common.delete') || '删除',
-                  onClick: () => onAlbumAction?.('delete', contextMenu.album),
-                  danger: true
-                }
-              ]
-            }
-          ]}
+          groups={buildAlbumMenu({
+            onOpen: () => onSelectAlbum?.(contextMenu.album.id),
+            onRename: () => onAlbumAction?.('rename', contextMenu.album),
+            onDuplicate: () => onAlbumAction?.('duplicate', contextMenu.album),
+            onDelete: () => onAlbumAction?.('delete', contextMenu.album),
+            t,
+          })}
         />
       )}
     </aside>

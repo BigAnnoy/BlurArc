@@ -10,6 +10,9 @@ import { DeleteConfirmDialog } from './components/dialogs/DeleteConfirmDialog';
 import { AlbumManageModal } from './components/dialogs/AlbumManageModal';
 import { JoinAlbumModal } from './components/dialogs/JoinAlbumModal';
 import { ToastProvider, useToast } from './components/common/Toast';
+import { ContextMenu } from './components/common/ContextMenu';
+import { buildAlbumMenu } from './components/common/menuBuilders';
+import { AlbumCoverDefault } from './components/common/AlbumCoverDefault';
 import { I18nProvider, useI18n } from './contexts/I18nContext';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { api } from './services/api';
@@ -84,6 +87,10 @@ function AppContent() {
     device_name: string;
     file_count: number;
   } | null>(null);
+  // v0.7: MainContent 排序状态（传递给 MainContent，变化时触发重载）
+  const [mainSort, setMainSort] = useState('media_date_desc');
+  // v0.7: 相册卡片右键菜单
+  const [albumCardMenu, setAlbumCardMenu] = useState<{ x: number; y: number; album: { id: number; name: string } } | null>(null);
 
   // Initialize app
   useEffect(() => {
@@ -150,12 +157,12 @@ function AppContent() {
   }, []);
 
   // Load photos when path changes
-  const loadPhotos = useCallback(async (path: string, title: string, page: number = 1, append: boolean = false) => {
+  const loadPhotos = useCallback(async (path: string, title: string, page: number = 1, append: boolean = false, sort?: string) => {
     if (page === 1) {
       setState((prev) => ({ ...prev, selectedPath: path, selectedTitle: title, loading: true }));
     }
     try {
-      const res = await api.getPhotos(path, page, 100);
+      const res = await api.getPhotos(path, page, 100, sort);
       const newPhotos = res.photos.map((p) => ({
         id: p.path,
         name: p.name,
@@ -182,6 +189,27 @@ function AppContent() {
     }
   }, [showToast]);
 
+  // 统一刷新所有计数（stats / tree / favorites / albums）
+  const refreshAllCounters = useCallback(async () => {
+    try {
+      const [statsRes, treeRes, favoritesRes] = await Promise.all([
+        api.getStats().catch(() => null),
+        api.getTree().catch(() => ({ tree: [], rootDir: null })),
+        api.getFavorites().catch(() => ({ photos: [], total: 0 })),
+      ]);
+      setState((prev) => ({
+        ...prev,
+        stats: statsRes ? { total: statsRes.total_files, videos: statsRes.video_count, size: formatSize(statsRes.total_size_mb) } : prev.stats,
+        years: treeRes.tree || [],
+        rootDir: treeRes.rootDir || prev.rootDir,
+        favoriteCount: favoritesRes.total,
+      }));
+      window.dispatchEvent(new Event('albums:changed'));
+    } catch (error) {
+      console.error('Failed to refresh counters:', error);
+    }
+  }, []);
+
   const handleSelectPath = useCallback((path: string) => {
     // 从路径提取目录名（不再对"年份"/"YYYY-MM"等格式做特殊处理，统一用真实目录名）
     const parts = path.split(/[\\/]/);
@@ -192,6 +220,20 @@ function AppContent() {
 
     loadPhotos(path, dirName, 1);
   }, [loadPhotos]);
+
+  // v0.7: 排序变化时重载照片（仅对 MainContent 的三个视图生效）
+  useEffect(() => {
+    // 跳过初始化或时间线视图（时间线自己管理排序）
+    if (state.currentView === 'timeline' || state.currentView === 'albums') return;
+    
+    if (state.currentView === 'folder' && state.selectedPath) {
+      loadPhotos(state.selectedPath, state.selectedTitle, 1, false, mainSort);
+    } else if (state.currentView === 'album-detail' && state.selectedAlbumId) {
+      handleSelectAlbum(state.selectedAlbumId, mainSort);
+    } else if (state.currentView === 'favorites') {
+      handleShowFavorites(mainSort);
+    }
+  }, [mainSort]);
 
   const handlePhotoClick = useCallback((photo: Photo) => {
     if (state.selectionMode) {
@@ -244,19 +286,20 @@ function AppContent() {
     }
   }, [state.photos, state.selectedIds]);
 
-  const handleDeleteComplete = useCallback(() => {
+  const handleDeleteComplete = useCallback(async () => {
     setState((prev) => ({ ...prev, selectionMode: false, selectedIds: new Set() }));
     showToast(t('delete.success'), 'success');
+    await refreshAllCounters();
     if (state.selectedPath) {
       loadPhotos(state.selectedPath, state.selectedTitle, 1);
     }
-  }, [state.selectedPath, state.selectedTitle, loadPhotos, showToast, t]);
+  }, [state.selectedPath, state.selectedTitle, loadPhotos, refreshAllCounters, showToast, t]);
 
   // v0.7: 显示收藏
-  const handleShowFavorites = useCallback(async () => {
+  const handleShowFavorites = useCallback(async (sort?: string) => {
     setState((prev) => ({ ...prev, currentView: 'favorites', selectedAlbumId: null, loading: true }));
     try {
-      const res = await api.getFavorites();
+      const res = await api.getFavorites(sort);
       const photos = res.photos.map((p) => ({
         id: String(p.id),
         name: p.filename,
@@ -283,12 +326,12 @@ function AppContent() {
   }, [showToast]);
 
   // v0.7: 选择相册
-  const handleSelectAlbum = useCallback(async (albumId: number) => {
+  const handleSelectAlbum = useCallback(async (albumId: number, sort?: string) => {
     setState((prev) => ({ ...prev, currentView: 'album-detail', selectedAlbumId: albumId, loading: true }));
     try {
       const [albumRes, photosRes] = await Promise.all([
         api.getAlbum(albumId),
-        api.getAlbumPhotos(albumId, 1, 100),
+        api.getAlbumPhotos(albumId, 1, 100, sort),
       ]);
       const photos = photosRes.photos.map((p) => ({
         id: String(p.id),
@@ -383,14 +426,8 @@ function AppContent() {
       ...prev,
       photos: prev.photos.map((p) => (p.id === photoId ? { ...p, is_favorite: isFavorite } : p)),
     }));
-    // 重新拉取收藏总数，刷新 sidebar 计数
-    try {
-      const favRes = await api.getFavorites();
-      setState((prev) => ({ ...prev, favoriteCount: favRes.total }));
-    } catch (error) {
-      console.error('Failed to refresh favorite count:', error);
-    }
-  }, []);
+    await refreshAllCounters();
+  }, [refreshAllCounters]);
 
   // v0.7: 相册操作处理
   const handleAlbumAction = useCallback(async (action: 'rename' | 'delete' | 'duplicate', album: { id: number; name: string }) => {
@@ -402,13 +439,14 @@ function AppContent() {
       try {
         await api.duplicateAlbum(album.id);
         showToast('相册已复制', 'success');
+        await refreshAllCounters();
         handleSelectAlbum(album.id);
       } catch (error) {
         console.error('Failed to duplicate album:', error);
         showToast('复制相册失败', 'error');
       }
     }
-  }, [showToast, handleSelectAlbum]);
+  }, [showToast, refreshAllCounters, handleSelectAlbum]);
 
   // Reload app data after first run setup
   const handleWelcomeComplete = useCallback(async () => {
@@ -435,25 +473,11 @@ function AppContent() {
 
   // Refresh all app data (stats, tree, and current photos)
   const refreshAppData = useCallback(async () => {
-    try {
-      const [statsRes, treeRes] = await Promise.all([
-        api.getStats().catch(() => null),
-        api.getTree().catch(() => ({ tree: [], rootDir: null })),
-      ]);
-      setState((prev) => ({
-        ...prev,
-        stats: statsRes ? { total: statsRes.total_files, videos: statsRes.video_count, size: formatSize(statsRes.total_size_mb) } : null,
-        years: treeRes.tree || [],
-        rootDir: treeRes.rootDir || null,
-      }));
-      // Reload current photos if a path is selected
-      if (state.selectedPath) {
-        loadPhotos(state.selectedPath, state.selectedTitle, 1);
-      }
-    } catch (error) {
-      console.error('Failed to refresh app data:', error);
+    await refreshAllCounters();
+    if (state.selectedPath) {
+      loadPhotos(state.selectedPath, state.selectedTitle, 1);
     }
-  }, [state.selectedPath, state.selectedTitle, loadPhotos]);
+  }, [refreshAllCounters, state.selectedPath, state.selectedTitle, loadPhotos]);
 
   if (!state.initialized && state.loading) {
     return (
@@ -486,6 +510,7 @@ function AppContent() {
           onCreateAlbum={handleCreateAlbum}
           favoriteCount={state.favoriteCount}
           onAlbumAction={handleAlbumAction}
+          onRefreshCounters={refreshAllCounters}
         />
         {state.currentView === 'albums' ? (
           <section className="flex-1 flex flex-col overflow-hidden bg-page min-h-0">
@@ -518,7 +543,7 @@ function AppContent() {
                       onClick={() => handleSelectAlbum(album.id)}
                       onContextMenu={(e) => {
                         e.preventDefault();
-                        handleAlbumAction('rename', { id: album.id, name: album.name });
+                        setAlbumCardMenu({ x: e.clientX, y: e.clientY, album: { id: album.id, name: album.name } });
                       }}
                       className="album-card card-hover relative rounded-md overflow-hidden cursor-pointer text-left group"
                       style={{ minHeight: '220px' }}
@@ -529,10 +554,7 @@ function AppContent() {
                           style={{ backgroundImage: `url(${api.getThumbnail((album as any).cover_photo_path)})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
                         />
                       ) : (
-                        <div className="tile-default">
-                          <span className="emoji">📷</span>
-                          <span className="label">PHOTOS</span>
-                        </div>
+                        <AlbumCoverDefault size="tile" />
                       )}
                       <div className="album-card-label absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-gradient-to-t from-black/65 to-transparent text-white">
                         <div className="text-sm font-medium truncate">{album.name}</div>
@@ -560,7 +582,7 @@ function AppContent() {
             hasMore={state.hasMore}
             onLoadMore={() => {
               if (state.selectedPath && state.hasMore) {
-                loadPhotos(state.selectedPath, state.selectedTitle, state.currentPage + 1, true);
+                loadPhotos(state.selectedPath, state.selectedTitle, state.currentPage + 1, true, mainSort);
               }
             }}
             albumId={null}
@@ -568,6 +590,8 @@ function AppContent() {
             onJoinAlbums={handleJoinAlbums}
             onPhotoDelete={handlePhotoDelete}
             onFavoriteChange={handleFavoriteChange}
+            sort={mainSort}
+            onSortChange={setMainSort}
           />
         ) : state.selectedAlbumId ? (
           // 选中了某个相册，使用 MainContent 显示相册内照片
@@ -585,7 +609,7 @@ function AppContent() {
             hasMore={state.hasMore}
             onLoadMore={() => {
               if (state.selectedPath && state.hasMore) {
-                loadPhotos(state.selectedPath, state.selectedTitle, state.currentPage + 1, true);
+                loadPhotos(state.selectedPath, state.selectedTitle, state.currentPage + 1, true, mainSort);
               }
             }}
             albumId={state.selectedAlbumId}
@@ -593,6 +617,8 @@ function AppContent() {
             onJoinAlbums={handleJoinAlbums}
             onPhotoDelete={handlePhotoDelete}
             onFavoriteChange={handleFavoriteChange}
+            sort={mainSort}
+            onSortChange={setMainSort}
           />
         ) : state.currentView === 'favorites' ? (
           <MainContent
@@ -613,6 +639,8 @@ function AppContent() {
             onJoinAlbums={handleJoinAlbums}
             onPhotoDelete={handlePhotoDelete}
             onFavoriteChange={handleFavoriteChange}
+            sort={mainSort}
+            onSortChange={setMainSort}
           />
         ) : (
           <TimelineView
@@ -660,13 +688,7 @@ function AppContent() {
           if (previewPhoto?.id === updated.id) {
             setPreviewPhoto({ ...previewPhoto, ...updated });
           }
-          // 重新拉取收藏总数，刷新 sidebar 计数
-          try {
-            const favRes = await api.getFavorites();
-            setState((prev) => ({ ...prev, favoriteCount: favRes.total }));
-          } catch (error) {
-            console.error('Failed to refresh favorite count:', error);
-          }
+          await refreshAllCounters();
         }}
       />
       <DeleteConfirmDialog
@@ -696,8 +718,29 @@ function AppContent() {
         isOpen={joinAlbumOpen}
         onClose={() => { setJoinAlbumOpen(false); setJoinAlbumPhotoIds([]); }}
         photoIds={joinAlbumPhotoIds}
-        onJoined={() => { setJoinAlbumOpen(false); setJoinAlbumPhotoIds([]); }}
+        onJoined={async () => {
+          setJoinAlbumOpen(false);
+          setJoinAlbumPhotoIds([]);
+          await refreshAllCounters();
+        }}
       />
+
+      {/* v0.7: 相册卡片右键菜单 */}
+      {albumCardMenu && (
+        <ContextMenu
+          isOpen={true}
+          x={albumCardMenu.x}
+          y={albumCardMenu.y}
+          onClose={() => setAlbumCardMenu(null)}
+          groups={buildAlbumMenu({
+            onOpen: () => handleSelectAlbum(albumCardMenu.album.id),
+            onRename: () => handleAlbumAction('rename', albumCardMenu.album),
+            onDuplicate: () => handleAlbumAction('duplicate', albumCardMenu.album),
+            onDelete: () => handleAlbumAction('delete', albumCardMenu.album),
+            t,
+          })}
+        />
+      )}
     </div>
   );
 }

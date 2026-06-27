@@ -12,8 +12,8 @@ interface ModalProps {
 const sizeClasses = {
   sm: 'max-w-sm',
   md: 'max-w-md',
-  lg: 'max-w-2xl',
-  xl: 'max-w-4xl',
+  lg: 'max-w-lg',
+  xl: 'max-w-2xl',
   '2xl': 'max-w-[80vw]',
 };
 
@@ -46,21 +46,21 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md' }:
       onClick={onClose}
     >
       <div
-        className={`bg-card rounded-lg shadow-lg w-[90%] ${sizeClasses[size]} max-h-[90vh] overflow-y-auto animate-slideUp`}
+        className={`bg-card rounded-lg shadow-lg w-[90%] ${sizeClasses[size]} max-h-[90vh] overflow-hidden flex flex-col animate-slideUp`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 py-4 border-b border-border">
-          <h2 className="text-lg font-semibold">{title}</h2>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+          <h2 className="text-base font-semibold">{title}</h2>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded flex items-center justify-center text-text-secondary hover:bg-page hover:text-text-primary transition-all"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-text-secondary hover:bg-page hover:text-text-primary transition-all"
           >
-            ✕
+            ×
           </button>
         </div>
-        <div className="p-4">{children}</div>
+        {children}
         {footer && (
-          <div className="flex gap-3 justify-end px-4 py-4 border-t border-border">
+          <div className="flex gap-3 justify-end px-5 py-4 border-t border-border flex-shrink-0">
             {footer}
           </div>
         )}

@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../services/api';
 import { useI18n } from '../../contexts/I18nContext';
 import type { Photo } from '../../types';
+import { ContextMenu } from '../common/ContextMenu';
+import { buildPhotoMenu } from '../common/menuBuilders';
+import { AlbumCoverDefault } from '../common/AlbumCoverDefault';
 
 interface PhotoAlbum {
   id: number;
@@ -31,10 +34,28 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
   const [showControls, setShowControls] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [photoAlbums, setPhotoAlbums] = useState<PhotoAlbum[]>([]);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [albumsLoading, setAlbumsLoading] = useState(false);
   const [isSlideshow, setIsSlideshow] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const thumbsRef = useRef<HTMLDivElement>(null);
+
+  // 延迟卸载模式：isOpen=false 时先播放退出动画，再真正卸载
+  useEffect(() => {
+    if (isOpen) {
+      setIsVisible(true);
+      setIsClosing(false);
+    } else if (isVisible) {
+      setIsClosing(true);
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+        setIsClosing(false);
+      }, 250);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (photo && photosList.length > 0) {
@@ -180,7 +201,7 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
     }
   };
 
-  if (!photo || !isOpen) return null;
+  if (!photo || !isVisible) return null;
 
   const isVideo = photo.type === 'video';
   const dateStr = (() => {
@@ -194,10 +215,10 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
 
   return (
     <div
-      className="preview-shell fixed inset-0 z-50 bg-page grid"
+      className={`preview-shell fixed inset-0 z-50 bg-page grid ${isClosing ? 'preview-closing' : 'animate-fadeIn'}`}
       style={{
         gridTemplateRows: '56px 1fr 100px',
-        gridTemplateColumns: showInfoPanel ? '1fr 340px' : '1fr 0',
+        gridTemplateColumns: '1fr 0',
         gridTemplateAreas: '"topbar topbar" "main panel" "thumbs thumbs"'
       }}
     >
@@ -316,6 +337,10 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
         className="flex items-center justify-center relative p-6 bg-page min-w-0 min-h-0 overflow-hidden"
         style={{ gridArea: 'main' }}
         onMouseMove={handleMouseMove}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setContextMenu({ x: e.clientX, y: e.clientY });
+        }}
       >
         <button
           onClick={handlePrev}
@@ -340,12 +365,13 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
 
         {isVideo ? (
           <video
+            key={`video-${photo.id}`}
             ref={videoRef}
             src={api.getFile(photo.path)}
             controls={showControls}
             muted
             playsInline
-            className="w-full max-w-[calc(100%-104px)] max-h-full rounded-md shadow-lg object-contain flex-shrink-0"
+            className="w-full max-w-[calc(100%-104px)] max-h-full rounded-md shadow-lg object-contain flex-shrink-0 animate-modal-in"
             style={{
               background: '#000',
             }}
@@ -353,9 +379,10 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
           />
         ) : (
           <img
+            key={`img-${photo.id}`}
             src={api.getFile(photo.path)}
             alt={photo.name}
-            className="w-full max-w-[calc(100%-104px)] max-h-full rounded-md shadow-lg object-contain flex-shrink-0"
+            className="w-full max-w-[calc(100%-104px)] max-h-full rounded-md shadow-lg object-contain flex-shrink-0 animate-modal-in"
             style={{
               background: 'var(--color-page)',
             }}
@@ -364,8 +391,23 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
       </div>
 
       {/* 右侧信息面板 */}
-      {showInfoPanel && (
-        <div className="info-panel bg-card border-l border-border overflow-y-auto" style={{ gridArea: 'panel' }}>
+      <div
+        className="info-panel-wrapper bg-card border-l border-border overflow-y-auto overflow-x-hidden"
+        style={{
+          gridArea: 'panel',
+          width: showInfoPanel ? '340px' : '0',
+          transition: 'width 0.3s ease',
+        }}
+      >
+        <div
+          className="info-panel-inner"
+          style={{
+            width: '340px',
+            opacity: showInfoPanel ? 1 : 0,
+            transition: 'opacity 0.2s ease',
+            transform: showInfoPanel ? 'translateX(0)' : 'translateX(20px)',
+          }}
+        >
           <div className="px-[22px] py-5">
             {/* 标题和描述 */}
             <div className="panel-section space-y-2 pb-5 border-b border-border">
@@ -462,7 +504,7 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
                         />
                       ) : (
                         <div className="w-12 h-12 rounded-[4px] flex-shrink-0 overflow-hidden">
-                          <div className="thumb-default">📷</div>
+                          <AlbumCoverDefault size="thumb" />
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
@@ -479,7 +521,7 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
             </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* 底部缩略图条 */}
       <div
@@ -529,6 +571,32 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
           ))}
         </div>
       </div>
+
+      {contextMenu && photo && (
+        <ContextMenu
+          isOpen={true}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          groups={buildPhotoMenu({
+            isFavorite,
+            onPreview: () => {},
+            onToggleFavorite: () => {
+              handleFavoriteToggle();
+            },
+            onJoinAlbum: () => {},
+            onOpenInExplorer: async () => {
+              try {
+                await api.openInExplorer(photo.path);
+              } catch (error) {
+                console.error('打开资源管理器失败:', error);
+              }
+            },
+            onDelete: () => {},
+            t,
+          })}
+        />
+      )}
     </div>
   );
 }

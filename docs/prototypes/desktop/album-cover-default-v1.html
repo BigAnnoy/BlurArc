@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>相册默认封面新设计 - 照片堆叠轮廓</title>
+<style>
+  :root {
+    --bg-page: #f1f5f9;
+    --bg-card: #ffffff;
+    --text-tertiary: #64748b;
+    --border: #e2e8f0;
+    --radius-sm: 6px;
+    --radius-lg: 12px;
+  }
+  .dark {
+    --bg-page: #0f172a;
+    --bg-card: #1e293b;
+    --text-tertiary: #94a3b8;
+    --border: #334155;
+  }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg-page);
+    color: var(--text-tertiary);
+    margin: 0;
+    padding: 40px;
+    min-height: 100vh;
+  }
+  .dark body { background: var(--bg-page); }
+  h2 { font-size: 16px; font-weight: 600; margin: 0 0 20px 0; color: var(--text-tertiary); }
+  .section { margin-bottom: 48px; }
+  .section-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--text-tertiary); }
+  .row { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+
+  /* 封面容器 */
+  .cover-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .cover-label { font-size: 12px; color: var(--text-tertiary); }
+
+  /* 3 个尺寸 */
+  .size-tile { width: 200px; height: 200px; }
+  .size-cover { width: 120px; height: 80px; }  /* 3:2 比例 */
+  .size-thumb { width: 36px; height: 36px; }
+
+  /* 封面背景 */
+  .album-cover-default {
+    background: var(--bg-page);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* SVG 自适应 */
+  .album-cover-default svg {
+    width: 70%;
+    height: 70%;
+    color: var(--text-tertiary);
+  }
+
+  /* 对比：旧设计 */
+  .old-cover {
+    background:
+      radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.25) 0%, transparent 50%),
+      radial-gradient(circle at 70% 70%, rgba(8, 145, 178, 0.25) 0%, transparent 50%),
+      linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border-radius: var(--radius-sm);
+  }
+  .dark .old-cover {
+    background:
+      radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.18) 0%, transparent 50%),
+      radial-gradient(circle at 70% 70%, rgba(8, 145, 178, 0.18) 0%, transparent 50%),
+      linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  }
+  .old-cover .emoji { font-size: 28px; }
+  .old-cover .label { font-size: 10px; font-weight: 500; letter-spacing: 0.5px; color: #0891b2; }
+  .size-tile.old-cover .emoji { font-size: 40px; }
+  .size-thumb.old-cover .emoji { font-size: 14px; }
+  .size-thumb.old-cover .label { display: none; }
+
+  /* 主题切换按钮 */
+  .theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 8px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="document.documentElement.classList.toggle('dark')">
+  切换亮/暗色
+</button>
+
+<h2>相册默认封面新设计：照片堆叠轮廓</h2>
+
+<div class="section">
+  <div class="section-title">新设计（照片堆叠轮廓 SVG，纯线条无填充）</div>
+  <div class="row">
+    <div class="cover-box">
+      <div class="album-cover-default size-tile">
+        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round">
+          <rect x="18" y="22" width="44" height="56" rx="5" transform="rotate(-10 40 50)"/>
+          <rect x="32" y="18" width="44" height="56" rx="5" transform="rotate(4 54 46)"/>
+          <rect x="42" y="24" width="44" height="56" rx="5" transform="rotate(-3 64 52)"/>
+        </svg>
+      </div>
+      <span class="cover-label">tile（主区域 200×200）</span>
+    </div>
+
+    <div class="cover-box">
+      <div class="album-cover-default size-cover">
+        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round">
+          <rect x="18" y="22" width="44" height="56" rx="5" transform="rotate(-10 40 50)"/>
+          <rect x="32" y="18" width="44" height="56" rx="5" transform="rotate(4 54 46)"/>
+          <rect x="42" y="24" width="44" height="56" rx="5" transform="rotate(-3 64 52)"/>
+        </svg>
+      </div>
+      <span class="cover-label">cover（Modal 3:2）</span>
+    </div>
+
+    <div class="cover-box">
+      <div class="album-cover-default size-thumb">
+        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+          <rect x="18" y="22" width="44" height="56" rx="5" transform="rotate(-10 40 50)"/>
+          <rect x="32" y="18" width="44" height="56" rx="5" transform="rotate(4 54 46)"/>
+          <rect x="42" y="24" width="44" height="56" rx="5" transform="rotate(-3 64 52)"/>
+        </svg>
+      </div>
+      <span class="cover-label">thumb（侧边栏 36×36）</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">旧设计（cyan 渐变 + 📷 + PHOTOS，对比用）</div>
+  <div class="row">
+    <div class="cover-box">
+      <div class="old-cover size-tile">
+        <span class="emoji">📷</span>
+        <span class="label">PHOTOS</span>
+      </div>
+      <span class="cover-label">tile（旧）</span>
+    </div>
+
+    <div class="cover-box">
+      <div class="old-cover size-cover">
+        <span class="emoji">📷</span>
+        <span class="label">PHOTOS</span>
+      </div>
+      <span class="cover-label">cover（旧）</span>
+    </div>
+
+    <div class="cover-box">
+      <div class="old-cover size-thumb">
+        <span class="emoji">📷</span>
+      </div>
+      <span class="cover-label">thumb（旧）</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">实际应用场景预览（相册集视图）</div>
+  <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 800px;">
+    <!-- 有照片的相册（显示照片封面） -->
+    <div style="background: var(--bg-card); border-radius: var(--radius-lg); overflow: hidden;">
+      <div style="aspect-ratio: 1; background: linear-gradient(135deg, #fbbf24, #f59e0b);"></div>
+      <div style="padding: 12px;">
+        <div style="font-size: 13px; font-weight: 500; color: var(--text-tertiary);">旅游</div>
+        <div style="font-size: 11px; color: var(--text-tertiary);">12 张</div>
+      </div>
+    </div>
+    <!-- 无照片的相册（新默认封面） -->
+    <div style="background: var(--bg-card); border-radius: var(--radius-lg); overflow: hidden;">
+      <div class="album-cover-default" style="aspect-ratio: 1;">
+        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" style="width:55%;height:55%;color:var(--text-tertiary);">
+          <rect x="18" y="22" width="44" height="56" rx="5" transform="rotate(-10 40 50)"/>
+          <rect x="32" y="18" width="44" height="56" rx="5" transform="rotate(4 54 46)"/>
+          <rect x="42" y="24" width="44" height="56" rx="5" transform="rotate(-3 64 52)"/>
+        </svg>
+      </div>
+      <div style="padding: 12px;">
+        <div style="font-size: 13px; font-weight: 500; color: var(--text-tertiary);">新建相册</div>
+        <div style="font-size: 11px; color: var(--text-tertiary);">0 张</div>
+      </div>
+    </div>
+    <!-- 另一个无照片的相册 -->
+    <div style="background: var(--bg-card); border-radius: var(--radius-lg); overflow: hidden;">
+      <div class="album-cover-default" style="aspect-ratio: 1;">
+        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" style="width:55%;height:55%;color:var(--text-tertiary);">
+          <rect x="18" y="22" width="44" height="56" rx="5" transform="rotate(-10 40 50)"/>
+          <rect x="32" y="18" width="44" height="56" rx="5" transform="rotate(4 54 46)"/>
+          <rect x="42" y="24" width="44" height="56" rx="5" transform="rotate(-3 64 52)"/>
+        </svg>
+      </div>
+      <div style="padding: 12px;">
+        <div style="font-size: 13px; font-weight: 500; color: var(--text-tertiary);">123</div>
+        <div style="font-size: 11px; color: var(--text-tertiary);">0 张</div>
+      </div>
+    </div>
+    <!-- 有照片的相册 -->
+    <div style="background: var(--bg-card); border-radius: var(--radius-lg); overflow: hidden;">
+      <div style="aspect-ratio: 1; background: linear-gradient(135deg, #60a5fa, #3b82f6);"></div>
+      <div style="padding: 12px;">
+        <div style="font-size: 13px; font-weight: 500; color: var(--text-tertiary);">工作</div>
+        <div style="font-size: 11px; color: var(--text-tertiary);">5 张</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

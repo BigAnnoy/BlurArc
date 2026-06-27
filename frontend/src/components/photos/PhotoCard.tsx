@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import type { Photo } from '../../types';
 import { api } from '../../services/api';
 import { ContextMenu } from '../common/ContextMenu';
+import { buildPhotoMenu } from '../common/menuBuilders';
+import { useI18n } from '../../contexts/I18nContext';
 
 interface PhotoCardProps {
   photo: Photo;
@@ -13,7 +15,7 @@ interface PhotoCardProps {
   onDelete?: (photoId: string) => void;
   onRemoveFromAlbum?: () => void;
   albumId?: number | null;
-  displayMode?: 'square' | 'original';
+  layoutMode?: 'grid' | 'masonry';
   draggable?: boolean;
   onDragStart?: () => void;
   onDragOver?: (e: React.DragEvent) => void;
@@ -22,7 +24,8 @@ interface PhotoCardProps {
   isDragOver?: boolean;
 }
 
-export function PhotoCard({ photo, selected, selectionMode, onClick, onFavoriteChange, onJoinAlbum, onDelete, onRemoveFromAlbum, albumId, displayMode = 'square', draggable: draggableProp, onDragStart, onDragOver, onDrop, isDragged, isDragOver }: PhotoCardProps) {
+export function PhotoCard({ photo, selected, selectionMode, onClick, onFavoriteChange, onJoinAlbum, onDelete, onRemoveFromAlbum, albumId, layoutMode = 'grid', draggable: draggableProp, onDragStart, onDragOver, onDrop, isDragged, isDragOver }: PhotoCardProps) {
+  const { t } = useI18n();
   const thumbnailUrl = api.getThumbnail(photo.path);
   const [isFav, setIsFav] = useState(photo.is_favorite || false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -87,7 +90,7 @@ export function PhotoCard({ photo, selected, selectionMode, onClick, onFavoriteC
       <img
         src={thumbnailUrl}
         alt={photo.name}
-        className={`w-full h-full ${displayMode === 'square' ? 'object-cover' : 'object-contain'} transition-transform duration-300 ${selectionMode ? '' : 'hover:scale-105'}`}
+        className={`w-full ${layoutMode === 'grid' ? 'aspect-square object-cover' : 'h-auto object-cover'} transition-transform duration-300 ${selectionMode ? '' : 'hover:scale-105'}`}
         loading="lazy"
       />
       
@@ -136,69 +139,25 @@ export function PhotoCard({ photo, selected, selectionMode, onClick, onFavoriteC
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
-          groups={[
-            // 预览
-            {
-              items: [
-                {
-                  label: '预览',
-                  onClick: () => onClick()
-                },
-                {
-                  label: isFav ? '取消收藏 ❤' : '加入收藏 ❤',
-                  onClick: () => {
-                    handleFavoriteClick({ stopPropagation: () => {} } as React.MouseEvent);
-                  }
-                }
-              ]
+          groups={buildPhotoMenu({
+            isFavorite: isFav,
+            inAlbumId: albumId,
+            onPreview: () => onClick(),
+            onToggleFavorite: () => {
+              handleFavoriteClick({ stopPropagation: () => {} } as React.MouseEvent);
             },
-            // 相册操作
-            {
-              items: albumId
-                ? [
-                    {
-                      label: '从相册移除',
-                      onClick: () => onRemoveFromAlbum?.(),
-                      danger: true
-                    },
-                    {
-                      label: '加入其他相册...',
-                      onClick: () => onJoinAlbum?.(photo.id)
-                    }
-                  ]
-                : [
-                    {
-                      label: '加入相册...',
-                      onClick: () => onJoinAlbum?.(photo.id)
-                    }
-                  ]
+            onJoinAlbum: () => onJoinAlbum?.(photo.id),
+            onRemoveFromAlbum: onRemoveFromAlbum,
+            onOpenInExplorer: async () => {
+              try {
+                await api.openInExplorer(photo.path);
+              } catch (error) {
+                console.error('打开资源管理器失败:', error);
+              }
             },
-            // 文件系统
-            {
-              items: [
-                {
-                  label: '在资源管理器中显示',
-                  onClick: async () => {
-                    try {
-                      await api.openInExplorer(photo.path);
-                    } catch (error) {
-                      console.error('打开资源管理器失败:', error);
-                    }
-                  }
-                }
-              ]
-            },
-            // 删除
-            {
-              items: [
-                {
-                  label: '删除',
-                  onClick: () => onDelete?.(photo.id),
-                  danger: true
-                }
-              ]
-            }
-          ]}
+            onDelete: () => onDelete?.(photo.id),
+            t,
+          })}
         />
       )}
     </>

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-interface MenuItem {
+export interface MenuItem {
   label: string;
   icon?: string;
   onClick: () => void;
@@ -8,7 +8,7 @@ interface MenuItem {
   disabled?: boolean;
 }
 
-interface MenuGroup {
+export interface MenuGroup {
   items: MenuItem[];
 }
 
@@ -55,7 +55,11 @@ export function ContextMenu({ isOpen, onClose, x, y, groups }: ContextMenuProps)
   };
 
   return (
-    <div ref={menuRef} style={menuStyle} className="bg-card rounded-lg shadow-lg border border-border py-1 min-w-[180px]">
+    <div
+      ref={menuRef}
+      style={menuStyle}
+      className="bg-card rounded-lg shadow-lg border border-border py-1 min-w-[180px] animate-modal-in"
+    >
       {groups.map((group, groupIdx) => (
         <div key={groupIdx}>
           {groupIdx > 0 && <div className="my-1 border-t border-border" />}

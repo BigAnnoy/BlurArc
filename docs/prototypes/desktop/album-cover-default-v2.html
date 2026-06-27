@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>相册默认封面新设计 v2</title>
+<style>
+  :root {
+    --bg-page: #f1f5f9;
+    --bg-card: #ffffff;
+    --stroke: #94a3b8;
+    --stroke-light: #cbd5e1;
+    --accent: #64748b;
+    --border: #e2e8f0;
+    --radius-sm: 6px;
+    --radius-lg: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .dark {
+    --bg-page: #0f172a;
+    --bg-card: #1e293b;
+    --stroke: #475569;
+    --stroke-light: #334155;
+    --accent: #94a3b8;
+    --border: #334155;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg-page);
+    color: var(--accent);
+    margin: 0;
+    padding: 40px;
+    min-height: 100vh;
+    transition: background 0.3s;
+  }
+  h2 { font-size: 16px; font-weight: 600; margin: 0 0 8px 0; }
+  .subtitle { font-size: 13px; color: var(--stroke); margin-bottom: 32px; }
+  .section { margin-bottom: 48px; }
+  .section-title { font-size: 13px; font-weight: 600; margin-bottom: 20px; color: var(--accent); letter-spacing: 0.3px; }
+  .row { display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; }
+  .cover-box { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .cover-label { font-size: 11px; color: var(--stroke); }
+
+  /* 封面容器 */
+  .cover-frame {
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+  .size-tile { width: 200px; height: 200px; }
+  .size-cover { width: 150px; height: 100px; }
+  .size-thumb { width: 36px; height: 36px; }
+
+  .cover-frame svg { display: block; }
+
+  /* 主题切换 */
+  .theme-toggle {
+    position: fixed; top: 20px; right: 20px;
+    padding: 8px 16px; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--accent); cursor: pointer; font-size: 13px;
+    box-shadow: var(--shadow);
+  }
+
+  /* 对比旧设计 */
+  .old-cover {
+    background:
+      radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.25) 0%, transparent 50%),
+      radial-gradient(circle at 70% 70%, rgba(8, 145, 178, 0.25) 0%, transparent 50%),
+      linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px; border-radius: var(--radius-sm);
+  }
+  .dark .old-cover {
+    background:
+      radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.18) 0%, transparent 50%),
+      radial-gradient(circle at 70% 70%, rgba(8, 145, 178, 0.18) 0%, transparent 50%),
+      linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  }
+  .old-cover .emoji { font-size: 32px; }
+  .old-cover .label { font-size: 10px; font-weight: 500; letter-spacing: 0.5px; color: #0891b2; }
+
+  /* 卡片场景 */
+  .album-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    width: 180px;
+  }
+  .album-card .info { padding: 12px; }
+  .album-card .name { font-size: 13px; font-weight: 500; color: var(--accent); }
+  .album-card .count { font-size: 11px; color: var(--stroke); margin-top: 2px; }
+  .photo-cover-demo {
+    aspect-ratio: 1;
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+    position: relative;
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="document.documentElement.classList.toggle('dark')">切换亮/暗色</button>
+
+<h2>相册默认封面设计 v2</h2>
+<div class="subtitle">更精致的 SVG，加入山景内容与微妙的层次感</div>
+
+<!-- 方案 A：照片堆叠 + 山景内容 -->
+<div class="section">
+  <div class="section-title">方案 A：照片堆叠 + 前层山景内容</div>
+  <div class="row">
+    <div class="cover-box">
+      <div class="cover-frame size-tile">
+        <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
+          <!-- 后层照片（最远，最淡） -->
+          <g opacity="0.35" transform="rotate(-12 40 50)">
+            <rect x="18" y="20" width="52" height="60" rx="6" stroke="var(--stroke-light)" stroke-width="1.5" fill="none"/>
+          </g>
+          <!-- 中层照片 -->
+          <g opacity="0.6" transform="rotate(5 60 48)">
+            <rect x="38" y="18" width="52" height="60" rx="6" stroke="var(--stroke)" stroke-width="1.5" fill="var(--bg-card)"/>
+          </g>
+          <!-- 前层照片（有山景内容） -->
+          <g transform="rotate(-3 70 58)">
+            <rect x="50" y="22" width="52" height="60" rx="6" stroke="var(--accent)" stroke-width="1.8" fill="var(--bg-card)"/>
+            <!-- 山景 -->
+            <path d="M54 70 L66 52 L74 62 L84 48 L98 70 Z" stroke="var(--stroke)" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
+            <!-- 太阳 -->
+            <circle cx="90" cy="40" r="4" stroke="var(--stroke)" stroke-width="1.5" fill="none"/>
+          </g>
+        </svg>
+      </div>
+      <span class="cover-label">tile（200×200）</span>
+    </div>
+
+    <div class="cover-box">
+      <div class="cover-frame size-cover">
+        <svg width="90" height="60" viewBox="0 0 120 80" fill="none">
+          <g opacity="0.35" transform="rotate(-12 40 40)">
+            <rect x="18" y="12" width="52" height="46" rx="5" stroke="var(--stroke-light)" stroke-width="1.5" fill="none"/>
+          </g>
+          <g opacity="0.6" transform="rotate(5 60 38)">
+            <rect x="38" y="10" width="52" height="46" rx="5" stroke="var(--stroke)" stroke-width="1.5" fill="var(--bg-card)"/>
+          </g>
+          <g transform="rotate(-3 70 48)">
+            <rect x="50" y="14" width="52" height="46" rx="5" stroke="var(--accent)" stroke-width="1.8" fill="var(--bg-card)"/>
+            <path d="M54 52 L66 36 L74 44 L84 32 L98 52 Z" stroke="var(--stroke)" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
+            <circle cx="90" cy="28" r="3.5" stroke="var(--stroke)" stroke-width="1.5" fill="none"/>
+          </g>
+        </svg>
+      </div>
+      <span class="cover-label">cover（3:2）</span>
+    </div>
+
+    <div class="cover-box">
+      <div class="cover-frame size-thumb">
+        <svg width="22" height="22" viewBox="0 0 120 120" fill="none">
+          <g opacity="0.4" transform="rotate(-12 40 50)">
+            <rect x="18" y="20" width="52" height="60" rx="6" stroke="var(--stroke-light)" stroke-width="3" fill="none"/>
+          </g>
+          <g opacity="0.7" transform="rotate(5 60 48)">
+            <rect x="38" y="18" width="52" height="60" rx="6" stroke="var(--stroke)" stroke-width="3" fill="none"/>
+          </g>
+          <g transform="rotate(-3 70 58)">
+            <rect x="50" y="22" width="52" height="60" rx="6" stroke="var(--accent)" stroke-width="3.5" fill="none"/>
+          </g>
+        </svg>
+      </div>
+      <span class="cover-label">thumb（36×36）</span>
+    </div>
+  </div>
+</div>
+
+<!-- 方案 B：极简单张照片 + 山景 -->
+<div class="section">
+  <div class="section-title">方案 B：极简单张照片轮廓 + 山景内容（无堆叠）</div>
+  <div class="row">
+    <div class="cover-box">
+      <div class="cover-frame size-tile">
+        <svg width="90" height="90" viewBox="0 0 100 100" fill="none">
+          <rect x="15" y="12" width="70" height="76" rx="8" stroke="var(--accent)" stroke-width="2" fill="var(--bg-card)"/>
+          <!-- 山景 -->
+          <path d="M22 72 L38 48 L48 60 L62 40 L78 72 Z" stroke="var(--stroke)" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+          <!-- 太阳 -->
+          <circle cx="68" cy="34" r="6" stroke="var(--stroke)" stroke-width="1.8" fill="none"/>
+          <!-- 底部线条（地平线延伸） -->
+          <line x1="22" y1="80" x2="78" y2="80" stroke="var(--stroke-light)" stroke-width="1.2"/>
+        </svg>
+      </div>
+      <span class="cover-label">tile（200×200）</span>
+    </div>
+
+    <div class="cover-box">
+      <div class="cover-frame size-cover">
+        <svg width="70" height="48" viewBox="0 0 100 70" fill="none">
+          <rect x="12" y="8" width="76" height="54" rx="6" stroke="var(--accent)" stroke-width="1.8" fill="var(--bg-card)"/>
+          <path d="M18 50 L32 30 L42 40 L56 24 L72 50 Z" stroke="var(--stroke)" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
+          <circle cx="64" cy="22" r="4.5" stroke="var(--stroke)" stroke-width="1.5" fill="none"/>
+        </svg>
+      </div>
+      <span class="cover-label">cover（3:2）</span>
+    </div>
+
+    <div class="cover-box">
+      <div class="cover-frame size-thumb">
+        <svg width="24" height="24" viewBox="0 0 100 100" fill="none">
+          <rect x="15" y="12" width="70" height="76" rx="8" stroke="var(--accent)" stroke-width="4" fill="none"/>
+          <path d="M22 72 L38 48 L48 60 L62 40 L78 72 Z" stroke="var(--stroke)" stroke-width="3.5" fill="none" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="cover-label">thumb（36×36）</span>
+    </div>
+  </div>
+</div>
+
+<!-- 方案 C：相册簿翻开 -->
+<div class="section">
+  <div class="section-title">方案 C：相册簿翻开样式</div>
+  <div class="row">
+    <div class="cover-box">
+      <div class="cover-frame size-tile">
+        <svg width="110" height="110" viewBox="0 0 120 120" fill="none">
+          <!-- 左页 -->
+          <path d="M60 30 L20 36 L20 92 L60 86 Z" stroke="var(--accent)" stroke-width="1.8" fill="var(--bg-card)" stroke-linejoin="round"/>
+          <!-- 右页 -->
+          <path d="M60 30 L100 36 L100 92 L60 86 Z" stroke="var(--accent)" stroke-width="1.8" fill="var(--bg-card)" stroke-linejoin="round"/>
+          <!-- 中间装订线 -->
+          <line x1="60" y1="30" x2="60" y2="86" stroke="var(--stroke-light)" stroke-width="1.2"/>
+          <!-- 左页内容（小照片） -->
+          <rect x="28" y="44" width="24" height="20" rx="2" stroke="var(--stroke)" stroke-width="1.3" fill="none"/>
+          <!-- 右页内容（山景） -->
+          <path d="M68 64 L78 50 L84 58 L92 46 L96 64 Z" stroke="var(--stroke)" stroke-width="1.3" fill="none" stroke-linejoin="round"/>
+          <circle cx="90" cy="44" r="2.5" stroke="var(--stroke)" stroke-width="1.3" fill="none"/>
+        </svg>
+      </div>
+      <span class="cover-label">tile（200×200）</span>
+    </div>
+
+    <div class="cover-box">
+      <div class="cover-frame size-cover">
+        <svg width="80" height="55" viewBox="0 0 120 80" fill="none">
+          <path d="M60 18 L20 24 L20 68 L60 62 Z" stroke="var(--accent)" stroke-width="1.5" fill="var(--bg-card)" stroke-linejoin="round"/>
+          <path d="M60 18 L100 24 L100 68 L60 62 Z" stroke="var(--accent)" stroke-width="1.5" fill="var(--bg-card)" stroke-linejoin="round"/>
+          <line x1="60" y1="18" x2="60" y2="62" stroke="var(--stroke-light)" stroke-width="1"/>
+          <rect x="28" y="30" width="22" height="18" rx="2" stroke="var(--stroke)" stroke-width="1.2" fill="none"/>
+          <path d="M68 48 L78 36 L84 42 L92 32 L96 48 Z" stroke="var(--stroke)" stroke-width="1.2" fill="none" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="cover-label">cover（3:2）</span>
+    </div>
+
+    <div class="cover-box">
+      <div class="cover-frame size-thumb">
+        <svg width="22" height="22" viewBox="0 0 120 120" fill="none">
+          <path d="M60 30 L20 36 L20 92 L60 86 Z" stroke="var(--accent)" stroke-width="3.5" fill="none" stroke-linejoin="round"/>
+          <path d="M60 30 L100 36 L100 92 L60 86 Z" stroke="var(--accent)" stroke-width="3.5" fill="none" stroke-linejoin="round"/>
+          <line x1="60" y1="30" x2="60" y2="86" stroke="var(--stroke-light)" stroke-width="2.5"/>
+        </svg>
+      </div>
+      <span class="cover-label">thumb（36×36）</span>
+    </div>
+  </div>
+</div>
+
+<!-- 实际应用场景 -->
+<div class="section">
+  <div class="section-title">实际应用场景（相册集视图，方案 A）</div>
+  <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 800px;">
+    <div class="album-card">
+      <div class="photo-cover-demo"></div>
+      <div class="info"><div class="name">旅游</div><div class="count">12 张</div></div>
+    </div>
+    <div class="album-card">
+      <div class="cover-frame" style="aspect-ratio: 1; border-radius: 0; box-shadow: none;">
+        <svg width="55%" height="55%" viewBox="0 0 120 120" fill="none">
+          <g opacity="0.35" transform="rotate(-12 40 50)">
+            <rect x="18" y="20" width="52" height="60" rx="6" stroke="var(--stroke-light)" stroke-width="1.5" fill="none"/>
+          </g>
+          <g opacity="0.6" transform="rotate(5 60 48)">
+            <rect x="38" y="18" width="52" height="60" rx="6" stroke="var(--stroke)" stroke-width="1.5" fill="var(--bg-card)"/>
+          </g>
+          <g transform="rotate(-3 70 58)">
+            <rect x="50" y="22" width="52" height="60" rx="6" stroke="var(--accent)" stroke-width="1.8" fill="var(--bg-card)"/>
+            <path d="M54 70 L66 52 L74 62 L84 48 L98 70 Z" stroke="var(--stroke)" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
+            <circle cx="90" cy="40" r="4" stroke="var(--stroke)" stroke-width="1.5" fill="none"/>
+          </g>
+        </svg>
+      </div>
+      <div class="info"><div class="name">新建相册</div><div class="count">0 张</div></div>
+    </div>
+    <div class="album-card">
+      <div class="cover-frame" style="aspect-ratio: 1; border-radius: 0; box-shadow: none;">
+        <svg width="55%" height="55%" viewBox="0 0 120 120" fill="none">
+          <g opacity="0.35" transform="rotate(-12 40 50)">
+            <rect x="18" y="20" width="52" height="60" rx="6" stroke="var(--stroke-light)" stroke-width="1.5" fill="none"/>
+          </g>
+          <g opacity="0.6" transform="rotate(5 60 48)">
+            <rect x="38" y="18" width="52" height="60" rx="6" stroke="var(--stroke)" stroke-width="1.5" fill="var(--bg-card)"/>
+          </g>
+          <g transform="rotate(-3 70 58)">
+            <rect x="50" y="22" width="52" height="60" rx="6" stroke="var(--accent)" stroke-width="1.8" fill="var(--bg-card)"/>
+            <path d="M54 70 L66 52 L74 62 L84 48 L98 70 Z" stroke="var(--stroke)" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
+            <circle cx="90" cy="40" r="4" stroke="var(--stroke)" stroke-width="1.5" fill="none"/>
+          </g>
+        </svg>
+      </div>
+      <div class="info"><div class="name">123</div><div class="count">0 张</div></div>
+    </div>
+    <div class="album-card">
+      <div class="photo-cover-demo" style="background: linear-gradient(135deg, #60a5fa, #3b82f6);"></div>
+      <div class="info"><div class="name">工作</div><div class="count">5 张</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 对比旧设计 -->
+<div class="section">
+  <div class="section-title">旧设计（对比用）</div>
+  <div class="row">
+    <div class="cover-box">
+      <div class="old-cover size-tile">
+        <span class="emoji">📷</span>
+        <span class="label">PHOTOS</span>
+      </div>
+      <span class="cover-label">tile（旧）</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

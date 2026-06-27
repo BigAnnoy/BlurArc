@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { DirNode } from '../../types';
 import { ContextMenu } from '../common/ContextMenu';
+import { buildDirectoryMenu } from '../common/menuBuilders';
+import { useI18n } from '../../contexts/I18nContext';
 import { api } from '../../services/api';
 
 interface DirectoryTreeProps {
@@ -9,9 +11,11 @@ interface DirectoryTreeProps {
   rootDir: DirNode | null;
   selectedPath: string | null;
   onSelect: (path: string) => void;
+  onRefreshCounters?: () => Promise<void>;
 }
 
-export function DirectoryTree({ rootDir, selectedPath, onSelect }: DirectoryTreeProps) {
+export function DirectoryTree({ rootDir, selectedPath, onSelect, onRefreshCounters }: DirectoryTreeProps) {
+  const { t } = useI18n();
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set([rootDir?.path || '']));
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null);
 
@@ -26,6 +30,7 @@ export function DirectoryTree({ rootDir, selectedPath, onSelect }: DirectoryTree
   const handleScanNewFiles = async (path: string) => {
     try {
       await api.scanDirectory(path);
+      await onRefreshCounters?.();
       onSelect(path);
     } catch (error) {
       console.error('扫描新增失败:', error);
@@ -124,24 +129,15 @@ export function DirectoryTree({ rootDir, selectedPath, onSelect }: DirectoryTree
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
-          groups={[
-            {
-              items: [
-                {
-                  label: '在资源管理器中显示',
-                  onClick: () => {
-                    handleShowInExplorer(contextMenu.path);
-                  }
-                },
-                {
-                  label: '扫描新增',
-                  onClick: () => {
-                    handleScanNewFiles(contextMenu.path);
-                  }
-                }
-              ]
-            }
-          ]}
+          groups={buildDirectoryMenu({
+            onOpenInExplorer: () => {
+              handleShowInExplorer(contextMenu.path);
+            },
+            onScanNew: () => {
+              handleScanNewFiles(contextMenu.path);
+            },
+            t,
+          })}
         />
       )}
     </div>

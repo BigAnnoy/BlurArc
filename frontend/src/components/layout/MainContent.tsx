@@ -27,16 +27,21 @@ interface MainContentProps {
   onJoinAlbums?: (photoIds: string[]) => void;
   onPhotoDelete?: (photoId: string) => void;
   onFavoriteChange?: (photoId: string, isFavorite: boolean) => void;
+  // v0.7: 排序状态（从 App 传入，用于触发重载）
+  sort?: string;
 }
 
-export function MainContent({ title, count, photos, loading, selectionMode, selectedIds, onPhotoClick, onSelect, onSelectAll, onDelete, hasMore, onLoadMore, onFilterChange, onSortChange, onRemoveFromAlbum, albumId, onJoinAlbum, onJoinAlbums, onPhotoDelete, onFavoriteChange }: MainContentProps) {
+export function MainContent({ title, count, photos, loading, selectionMode, selectedIds, onPhotoClick, onSelect, onSelectAll, onDelete, hasMore, onLoadMore, onFilterChange, onSortChange, onRemoveFromAlbum, albumId, onJoinAlbum, onJoinAlbums, onPhotoDelete, onFavoriteChange, sort: externalSort }: MainContentProps) {
   const selectedCount = selectedIds.size;
   const { t } = useI18n();
   const [filters, setFilters] = useState<string[]>([]);
-  const [sort, setSort] = useState('media_date_desc');
+  const [internalSort, setInternalSort] = useState('media_date_desc');
   const [group, setGroup] = useState<'all' | 'month' | 'year'>('all');
-  // v0.7 §3.2.2/§4.2：显示选项 + 缩放（与 PhotoToolbar 公共组件配合）
-  const [displayMode, setDisplayMode] = useState<'square' | 'original'>('square');
+  
+  // 使用外部传入的 sort（如果有），否则使用内部 sort
+  const sort = externalSort ?? internalSort;
+  // v0.7 §3.2.2/§4.2：布局切换 + 缩放（与 PhotoToolbar 公共组件配合）
+  const [layoutMode, setLayoutMode] = useState<'grid' | 'masonry'>('grid');
   const [zoomLevel, setZoomLevel] = useState(1);
   const [draggedPhoto, setDraggedPhoto] = useState<string | null>(null);
   const [dragOverPhoto, setDragOverPhoto] = useState<string | null>(null);
@@ -51,8 +56,6 @@ export function MainContent({ title, count, photos, loading, selectionMode, sele
   const sortOptions = [
     { key: 'media_date_desc', label: t('sort.dateDesc') },
     { key: 'media_date_asc', label: t('sort.dateAsc') },
-    { key: 'import_date_desc', label: t('sort.importDesc') },
-    { key: 'import_date_asc', label: t('sort.importAsc') },
     { key: 'manual', label: t('sort.manual') }
   ];
 
@@ -68,7 +71,7 @@ export function MainContent({ title, count, photos, loading, selectionMode, sele
   };
 
   const handleSortChange = (newSort: string) => {
-    setSort(newSort);
+    setInternalSort(newSort);
     onSortChange?.(newSort);
   };
 
@@ -113,8 +116,8 @@ export function MainContent({ title, count, photos, loading, selectionMode, sele
         title={title}
         count={count}
         loading={loading}
-        displayMode={displayMode}
-        onDisplayModeChange={setDisplayMode}
+        layoutMode={layoutMode}
+        onLayoutModeChange={setLayoutMode}
         zoomLevel={zoomLevel}
         onZoomChange={setZoomLevel}
         filters={filters}
@@ -180,7 +183,7 @@ export function MainContent({ title, count, photos, loading, selectionMode, sele
           onDelete={onPhotoDelete}
           onRemoveFromAlbum={onRemoveFromAlbum}
           onFavoriteChange={onFavoriteChange}
-          displayMode={displayMode}
+          layoutMode={layoutMode}
           zoomLevel={zoomLevel}
         />
       )}

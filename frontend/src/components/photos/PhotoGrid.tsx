@@ -11,7 +11,7 @@ interface PhotoGridProps {
   hasMore?: boolean;
   onLoadMore?: () => void;
   groupBy?: 'all' | 'month' | 'year';
-  displayMode?: 'square' | 'original';
+  layoutMode?: 'grid' | 'masonry';
   sort?: string;
   onDragStart?: (photoId: string) => void;
   onDragOver?: (e: React.DragEvent, photoId: string) => void;
@@ -28,7 +28,7 @@ interface PhotoGridProps {
   zoomLevel?: number;
 }
 
-export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick, hasMore, onLoadMore, groupBy = 'all', displayMode = 'square', sort, onDragStart, onDragOver, onDrop, draggedPhoto, dragOverPhoto, albumId, onJoinAlbum, onDelete, onRemoveFromAlbum, onFavoriteChange, zoomLevel = 1 }: PhotoGridProps) {
+export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick, hasMore, onLoadMore, groupBy = 'all', layoutMode = 'grid', sort, onDragStart, onDragOver, onDrop, draggedPhoto, dragOverPhoto, albumId, onJoinAlbum, onDelete, onRemoveFromAlbum, onFavoriteChange, zoomLevel = 1 }: PhotoGridProps) {
   const { t } = useI18n();
   const observerRef = useRef<HTMLDivElement>(null);
   // v0.7 §4.2：根据缩放级别计算单元格尺寸
@@ -66,7 +66,7 @@ export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick, ha
   }
 
   // 按日期分组照片
-  const groupPhotosByDate = (photos: Photo[], groupBy: 'month' | 'year') => {
+  const groupPhotosByDate = (photos: Photo[], groupBy: 'month' | 'year', sort?: string) => {
     const groups: { [key: string]: Photo[] } = {};
     
     photos.forEach(photo => {
@@ -85,12 +85,18 @@ export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick, ha
       groups[key].push(photo);
     });
     
-    // 按日期降序排序
-    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+    // 根据 sort 参数决定组间排序方向
+    if (sort === 'media_date_asc') {
+      // 升序：旧→新
+      return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+    } else {
+      // 降序（默认）：新→旧
+      return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+    }
   };
 
   const renderPhotoGrid = (photosToRender: Photo[]) => (
-    <div className="flex-1 min-h-0 grid gap-1 p-1 overflow-y-auto content-start" style={gridStyle}>
+    <div className={`flex-1 min-h-0 gap-1 p-1 overflow-y-auto content-start ${layoutMode === 'masonry' ? 'layout-masonry' : 'grid'}`} style={layoutMode === 'grid' ? gridStyle : undefined}>
       {photosToRender.map((photo) => (
         <PhotoCard
           key={photo.id}
@@ -98,7 +104,7 @@ export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick, ha
           selected={selectionMode && selectedIds?.has(photo.id)}
           selectionMode={selectionMode}
           onClick={() => onPhotoClick(photo)}
-          displayMode={displayMode}
+          layoutMode={layoutMode}
           draggable={sort === 'manual'}
           onDragStart={onDragStart ? () => onDragStart(photo.id) : undefined}
           onDragOver={onDragOver ? (e) => onDragOver(e, photo.id) : undefined}
@@ -124,7 +130,7 @@ export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick, ha
     return renderPhotoGrid(photos);
   }
 
-  const groupedPhotos = groupPhotosByDate(photos, groupBy);
+  const groupedPhotos = groupPhotosByDate(photos, groupBy, sort);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -135,7 +141,7 @@ export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick, ha
               {groupBy === 'year' ? dateKey : dateKey}
             </h3>
           </div>
-          <div className="grid gap-1 p-1" style={gridStyle}>
+          <div className={`gap-1 p-1 ${layoutMode === 'masonry' ? 'layout-masonry' : 'grid'}`} style={layoutMode === 'grid' ? gridStyle : undefined}>
             {datePhotos.map((photo) => (
               <PhotoCard
                 key={photo.id}
@@ -143,7 +149,7 @@ export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick, ha
                 selected={selectionMode && selectedIds?.has(photo.id)}
                 selectionMode={selectionMode}
                 onClick={() => onPhotoClick(photo)}
-                displayMode={displayMode}
+                layoutMode={layoutMode}
                 draggable={sort === 'manual'}
                 onDragStart={onDragStart ? () => onDragStart(photo.id) : undefined}
                 onDragOver={onDragOver ? (e) => onDragOver(e, photo.id) : undefined}

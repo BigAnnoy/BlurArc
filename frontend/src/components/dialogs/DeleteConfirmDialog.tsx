@@ -55,7 +55,7 @@ export function DeleteConfirmDialog({ isOpen, onClose, paths, onDelete }: Delete
         </>
       }
     >
-      <div className="text-center py-4">
+      <div className="text-center py-4 px-5">
         <div className="text-4xl mb-4">🗑️</div>
         <p className="text-lg font-medium mb-2">{t('delete.confirmMessage')}</p>
         <p className="text-sm text-text-secondary">
