@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Blur Arc - Timeline 年/月卡片设计 v1</title>
+<style>
+  :root {
+    --primary: #0891b2;
+    --bg-page: #f8fafc;
+    --bg-card: #ffffff;
+    --border: #e2e8f0;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-tertiary: #94a3b8;
+    --radius-md: 8px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    padding: 32px;
+  }
+  h1 { font-size: 20px; margin-bottom: 8px; }
+  h2 { font-size: 15px; margin: 24px 0 12px; color: var(--text-secondary); }
+  .desc { font-size: 13px; color: var(--text-tertiary); margin-bottom: 16px; line-height: 1.6; }
+
+  /* ===== 网格（与相册集一致）===== */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-auto-rows: 220px;
+    gap: 8px;
+  }
+
+  /* ===== 卡片（与相册卡片同构）===== */
+  .card {
+    position: relative;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.15s, transform 0.15s;
+    background: var(--bg-card);
+  }
+  .card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+
+  /* 封面区域：填满卡片 */
+  .card-cover {
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    background-color: var(--bg-page);
+  }
+
+  /* 4 张拼贴 */
+  .tile-4 {
+    width: 100%; height: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 2px;
+  }
+  .tile-4 > div { background-size: cover; background-position: center; }
+
+  /* 默认封面占位 */
+  .cover-default {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cover-default svg { width: 200px; height: 200px; }
+
+  /* 文字叠加层（与相册卡片一致）*/
+  .card-label {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 12px;
+    background: linear-gradient(to top, rgba(0,0,0,0.65), transparent);
+    color: white;
+  }
+  .card-label .title {
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-label .count {
+    font-size: 11px;
+    font-family: 'SF Mono', monospace;
+    opacity: 0.85;
+    margin-top: 2px;
+  }
+
+  /* 对比：旧版纵向布局（文字在封面下方）*/
+  .card-old {
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    background: var(--bg-card);
+    height: 220px;
+    display: flex;
+    flex-direction: column;
+  }
+  .card-old .cover {
+    height: calc(100% - 44px);
+    background-size: cover;
+    background-position: center;
+  }
+  .card-old .info {
+    padding: 12px;
+  }
+  .card-old .info .title { font-size: 14px; font-weight: 500; }
+  .card-old .info .count { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+
+  .label-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+  .label-new { background: #dcfce7; color: #15803d; }
+  .label-old { background: #fee2e2; color: #b91c1c; }
+</style>
+</head>
+<body>
+
+<h1>Timeline 年/月卡片设计 v1</h1>
+<p class="desc">
+  问题：旧版年/月卡片用"封面上 + 文字下"纵向布局，固定 220px 高度下文字区仅 44px，计数被截断。<br>
+  方案：改用相册卡片同构样式——封面填满整个卡片，文字叠加在封面底部（渐变遮罩 + 白字）。
+</p>
+
+<h2>① 新方案：年视图（封面填满 + 文字叠加底部）</h2>
+<span class="label-tag label-new">新</span>
+<div class="grid">
+  <!-- 4 张拼贴封面 -->
+  <div class="card">
+    <div class="card-cover">
+      <div class="tile-4">
+        <div style="background-image:url(https://picsum.photos/seed/y1/200/200)"></div>
+        <div style="background-image:url(https://picsum.photos/seed/y2/200/200)"></div>
+        <div style="background-image:url(https://picsum.photos/seed/y3/200/200)"></div>
+        <div style="background-image:url(https://picsum.photos/seed/y4/200/200)"></div>
+      </div>
+    </div>
+    <div class="card-label">
+      <div class="title">2026</div>
+      <div class="count">54 张</div>
+    </div>
+  </div>
+  <!-- 单张封面 -->
+  <div class="card">
+    <div class="card-cover" style="background-image:url(https://picsum.photos/seed/y5/400/400)"></div>
+    <div class="card-label">
+      <div class="title">2025</div>
+      <div class="count">128 张</div>
+    </div>
+  </div>
+  <!-- 默认封面 -->
+  <div class="card">
+    <div class="card-cover">
+      <div class="cover-default">
+        <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="s1" x="-30%" y="-30%" width="160%" height="160%">
+              <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.18"/>
+            </filter>
+          </defs>
+          <g transform="rotate(-16 50 65)" opacity="0.32">
+            <rect x="10" y="35" width="80" height="60" rx="3" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+          </g>
+          <g transform="rotate(11 140 80)" opacity="0.58">
+            <rect x="100" y="50" width="80" height="60" rx="3" fill="#fff" stroke="#94a3b8" stroke-width="1.2"/>
+          </g>
+          <g transform="rotate(-4 100 100)" filter="url(#s1)">
+            <rect x="50" y="55" width="100" height="75" rx="3.5" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+            <rect x="58" y="61" width="84" height="63" fill="#e2e8f0" opacity="0.5"/>
+            <path d="M58 124 L74 104 L86 112 L100 96 L114 108 L128 90 L142 124" stroke="#0f172a" stroke-width="1.3" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+            <circle cx="124" cy="76" r="6" stroke="#0f172a" stroke-width="1.3" fill="none"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+    <div class="card-label">
+      <div class="title">2024</div>
+      <div class="count">0 张</div>
+    </div>
+  </div>
+</div>
+
+<h2>② 新方案：月视图（同年视图样式）</h2>
+<span class="label-tag label-new">新</span>
+<div class="grid">
+  <div class="card">
+    <div class="card-cover" style="background-image:url(https://picsum.photos/seed/m1/400/400)"></div>
+    <div class="card-label">
+      <div class="title">2026/6</div>
+      <div class="count">54 张</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-cover">
+      <div class="tile-4">
+        <div style="background-image:url(https://picsum.photos/seed/m2/200/200)"></div>
+        <div style="background-image:url(https://picsum.photos/seed/m3/200/200)"></div>
+        <div style="background-image:url(https://picsum.photos/seed/m4/200/200)"></div>
+        <div style="background-image:url(https://picsum.photos/seed/m5/200/200)"></div>
+      </div>
+    </div>
+    <div class="card-label">
+      <div class="title">2026/5</div>
+      <div class="count">32 张</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-cover" style="background-image:url(https://picsum.photos/seed/m6/400/400)"></div>
+    <div class="card-label">
+      <div class="title">2026/4</div>
+      <div class="count">18 张</div>
+    </div>
+  </div>
+</div>
+
+<h2>③ 对比：旧版纵向布局（计数被截断）</h2>
+<span class="label-tag label-old">旧</span>
+<div class="grid">
+  <div class="card-old">
+    <div class="cover" style="background-image:url(https://picsum.photos/seed/y1/400/200)"></div>
+    <div class="info">
+      <div class="title">2026</div>
+      <div class="count">54 张</div>
+    </div>
+  </div>
+</div>
+<p class="desc" style="margin-top:8px;color:#b91c1c">↑ 220px 高度下文字区仅 44px，计数行被截断</p>
+
+<h2>④ 参照：相册集卡片样式（已实现）</h2>
+<span class="label-tag label-new">已实现</span>
+<div class="grid">
+  <div class="card">
+    <div class="card-cover" style="background-image:url(https://picsum.photos/seed/a1/400/400)"></div>
+    <div class="card-label">
+      <div class="title">旅游</div>
+      <div class="count">2 张</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-cover">
+      <div class="cover-default">
+        <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+          <g transform="rotate(-16 50 65)" opacity="0.32">
+            <rect x="10" y="35" width="80" height="60" rx="3" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+          </g>
+          <g transform="rotate(11 140 80)" opacity="0.58">
+            <rect x="100" y="50" width="80" height="60" rx="3" fill="#fff" stroke="#94a3b8" stroke-width="1.2"/>
+          </g>
+          <g transform="rotate(-4 100 100)">
+            <rect x="50" y="55" width="100" height="75" rx="3.5" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+            <rect x="58" y="61" width="84" height="63" fill="#e2e8f0" opacity="0.5"/>
+            <path d="M58 124 L74 104 L86 112 L100 96 L114 108 L128 90 L142 124" stroke="#0f172a" stroke-width="1.3" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+            <circle cx="124" cy="76" r="6" stroke="#0f172a" stroke-width="1.3" fill="none"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+    <div class="card-label">
+      <div class="title">12343</div>
+      <div class="count">0 张</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

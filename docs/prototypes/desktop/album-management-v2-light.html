@@ -940,48 +940,54 @@
     color: #fff;
   }
 
-  /* ===== v2 新增：概览图（spec §4.6 drill down） ===== */
+  /* ===== v2 新增：概览图（spec §4.6 drill down）— 对齐相册卡片样式 ===== */
   .overview-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px;
+    grid-auto-rows: 220px;
+    gap: 8px;
     padding: 20px 24px 32px 24px;
+    align-content: start;
   }
   .overview-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
+    position: relative;
     border-radius: var(--radius-md);
     overflow: hidden;
     cursor: pointer;
     transition: all 0.15s;
+    background: var(--bg-card);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   }
-  .overview-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-color: var(--primary); }
-  .overview-card .ov-header {
-    display: flex; align-items: baseline; justify-content: space-between;
-    padding: 12px 14px 8px 14px;
-  }
-  .overview-card .ov-title { font-size: 18px; font-weight: 600; }
-  .overview-card .ov-count {
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 12px; color: var(--text-tertiary);
-  }
+  .overview-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.10); transform: translateY(-2px); }
+  /* 封面填满整个卡片 */
+  .overview-card .ov-cover { width: 100%; height: 100%; }
   .overview-card .ov-strip {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: 1fr;
     gap: 2px;
-    padding: 0 2px 2px 2px;
+    width: 100%; height: 100%;
   }
   .overview-card .ov-strip > div {
-    aspect-ratio: 1;
     background-size: cover; background-position: center;
   }
-  .overview-card .ov-rep {
-    padding: 0 2px 8px 2px;
+  /* 文字叠加在封面底部（渐变遮罩 + 白字，与相册卡片一致）*/
+  .overview-card .ov-label {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 12px;
+    background: linear-gradient(to top, rgba(0,0,0,0.65), transparent);
+    color: white;
   }
-  .overview-card .ov-rep > div {
-    aspect-ratio: 16/9;
-    background-size: cover; background-position: center;
-    border-radius: 0;
+  .overview-card .ov-label .ov-title {
+    font-size: 14px; font-weight: 500;
+    color: white;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .overview-card .ov-label .ov-count {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px; opacity: 0.85; margin-top: 2px;
+    color: white;
   }
   .breadcrumb {
     padding: 8px 20px;
@@ -2428,14 +2434,16 @@
           const target = buildDrillTarget(it);
           return `
           <div class="overview-card" ondblclick="drillDownTimeline(${target})" title="双击查看照片">
-            <div class="ov-header">
-              <span class="ov-title">${it.title}</span>
-              <span class="ov-count">${it.count.toLocaleString()} 张</span>
+            <div class="ov-cover">
+              <div class="ov-strip">
+                <div class="${it.previews[0]}"></div>
+                <div class="${it.previews[1]}"></div>
+                <div class="${it.previews[2]}"></div>
+              </div>
             </div>
-            <div class="ov-strip">
-              <div class="${it.previews[0]}"></div>
-              <div class="${it.previews[1]}"></div>
-              <div class="${it.previews[2]}"></div>
+            <div class="ov-label">
+              <div class="ov-title">${it.title}</div>
+              <div class="ov-count">${it.count.toLocaleString()} 张</div>
             </div>
           </div>
         `}).join('')}

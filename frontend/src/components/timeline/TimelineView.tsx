@@ -320,28 +320,24 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
                 return (
                   <div
                     key={y.year}
-                    className="bg-card rounded-lg overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                    className="relative rounded-md overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
                     // D3: 双击直接进 All Photos（带 year filter）
                     onDoubleClick={() => setState({ view: 'all', year: y.year })}
                   >
-                    <div className="w-full h-[calc(100%-44px)] bg-page">
-                      {covers.length >= 4 ? (
-                        <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-0.5">
-                          {covers.slice(0, 4).map((p: string, i: number) => (
-                            <img key={i} src={api.getThumbnail(p)} alt="" className="w-full h-full object-cover" loading="lazy" />
-                          ))}
-                        </div>
-                      ) : covers.length > 0 ? (
-                        <img src={api.getThumbnail(covers[0])} alt="" className="w-full h-full object-cover" loading="lazy" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <AlbumCoverDefault size="tile" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-3">
-                      <div className="font-medium">{t('timeline.yearLabel', { year: y.year })}</div>
-                      <div className="text-xs text-text-tertiary">{t('main.photoCount', { count: y.count })}</div>
+                    {covers.length >= 4 ? (
+                      <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-0.5">
+                        {covers.slice(0, 4).map((p: string, i: number) => (
+                          <img key={i} src={api.getThumbnail(p)} alt="" className="w-full h-full object-cover" loading="lazy" />
+                        ))}
+                      </div>
+                    ) : covers.length > 0 ? (
+                      <img src={api.getThumbnail(covers[0])} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <AlbumCoverDefault size="tile" />
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-gradient-to-t from-black/65 to-transparent text-white">
+                      <div className="text-sm font-medium truncate">{t('timeline.yearLabel', { year: y.year })}</div>
+                      <div className="text-[11px] font-mono opacity-85 mt-0.5">{t('main.photoCount', { count: y.count })}</div>
                     </div>
                   </div>
                 );
@@ -371,28 +367,24 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
                 return (
                   <div
                     key={`${m.year}-${m.month}`}
-                    className="bg-card rounded-lg overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                    className="relative rounded-md overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
                     // D3: 双击直接进 All Photos（带 year+month filter）
                     onDoubleClick={() => setState({ view: 'all', year: m.year, month: m.month })}
                   >
-                    <div className="w-full h-[calc(100%-44px)] bg-page">
-                      {covers.length >= 4 ? (
-                        <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-0.5">
-                          {covers.slice(0, 4).map((p: string, i: number) => (
-                            <img key={i} src={api.getThumbnail(p)} alt="" className="w-full h-full object-cover" loading="lazy" />
-                          ))}
-                        </div>
-                      ) : covers.length > 0 ? (
-                        <img src={api.getThumbnail(covers[0])} alt="" className="w-full h-full object-cover" loading="lazy" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <AlbumCoverDefault size="tile" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-3">
-                      <div className="font-medium">{t('timeline.yearMonthLabel', { year: m.year, month: m.month })}</div>
-                      <div className="text-xs text-text-tertiary">{t('main.photoCount', { count: m.count })}</div>
+                    {covers.length >= 4 ? (
+                      <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-0.5">
+                        {covers.slice(0, 4).map((p: string, i: number) => (
+                          <img key={i} src={api.getThumbnail(p)} alt="" className="w-full h-full object-cover" loading="lazy" />
+                        ))}
+                      </div>
+                    ) : covers.length > 0 ? (
+                      <img src={api.getThumbnail(covers[0])} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <AlbumCoverDefault size="tile" />
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-gradient-to-t from-black/65 to-transparent text-white">
+                      <div className="text-sm font-medium truncate">{t('timeline.yearMonthLabel', { year: m.year, month: m.month })}</div>
+                      <div className="text-[11px] font-mono opacity-85 mt-0.5">{t('main.photoCount', { count: m.count })}</div>
                     </div>
                   </div>
                 );
