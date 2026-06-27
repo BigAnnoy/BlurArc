@@ -1,5 +1,5 @@
 import type { ImportPhoto, ImportProgress } from '../components/dialogs/ImportDialog/types';
-import type { DirNode, YearNode, MonthNode } from '../types';
+import type { DirNode } from '../types';
 
 const API_BASE = '/api';
 
@@ -42,51 +42,13 @@ export const api = {
   // Stats
   getStats: () => fetchJson<{ total_files: number; video_count: number; total_size_mb: number; last_import: string }>(`${API_BASE}/album/stats`),
 
-  // Directory tree - 支持多层级目录
+  // Directory tree - 不再做"年份"特殊处理，统一按实际目录结构递归展示
   getTree: async () => {
     const response = await fetchJson<DirNode & { type: string }>(`${API_BASE}/album/tree`);
 
-    // 过滤 YYYY-MM 格式的目录（用于按年份浏览）
-    const yearMonthDirs: DirNode[] = [];
-
-    for (const item of response.children || []) {
-      const match = item.name.match(/^(\d{4})-(\d{2})$/);
-      if (match) {
-        yearMonthDirs.push(item);
-      }
-    }
-
-    // 将 YYYY-MM 目录按年份分组
-    const yearMap = new Map<string, MonthNode[]>();
-    for (const item of yearMonthDirs) {
-      const match = item.name.match(/^(\d{4})-(\d{2})$/)!;
-      const year = match[1];
-      if (!yearMap.has(year)) {
-        yearMap.set(year, []);
-      }
-      yearMap.get(year)!.push({
-        name: item.name,
-        path: item.path,
-        count: item.count,
-      });
-    }
-
-    // 转换为按年份降序排列的数组
-    const yearGroups: YearNode[] = Array.from(yearMap.entries())
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([year, months]) => ({
-        year,
-        months: months.sort((a, b) => {
-          const numA = parseInt(a.name.match(/^(\d{4})-(\d{2})$/)?.[2] || '0');
-          const numB = parseInt(b.name.match(/^(\d{4})-(\d{2})$/)?.[2] || '0');
-          return numA - numB;
-        }),
-      }));
-
-    // 构造根目录节点（过滤掉 YYYY-MM 格式目录，避免与"按年份浏览"重复）
+    // 构造根目录节点（不再过滤 YYYY-MM 格式目录，按真实目录名展示）
     const sortChildren = (children: DirNode[]): DirNode[] => {
       return children
-        .filter((child) => !child.name.match(/^(\d{4})-(\d{2})$/))
         .map((child) => ({
           ...child,
           children: child.children ? sortChildren(child.children) : [],
@@ -101,12 +63,13 @@ export const api = {
       children: sortChildren(response.children || []),
     };
 
-    return { tree: yearGroups, rootDir };
+    // v0.7.1: 不再做"按年份浏览"特殊分组，years 保留为兼容旧版 API 的空数组
+    return { tree: [], rootDir };
   },
 
   // Photos - 支持分页
-  getPhotos: (path: string, page: number = 1, pageSize: number = 100) => fetchJson<{ 
-    photos: { id: string; name: string; path: string; size: number; date: string; type: string; duration?: string }[];
+  getPhotos: (path: string, page: number = 1, pageSize: number = 100) => fetchJson<{
+    photos: { id: string; name: string; path: string; size: number; date: string; type: string; duration?: string; is_favorite?: boolean }[];
     count: number;
     total_pages: number;
     page: number;
@@ -389,5 +352,202 @@ export const api = {
     fetchJson<{ status: string }>(`${API_BASE}/mobile/pending-flutter-uploads/clear`, {
       method: 'POST',
       body: JSON.stringify({ upload_dir: uploadDir }),
+    }),
+
+  // ============================================================================
+  // 相册管理 API (v0.7)
+  // ============================================================================
+
+  getAlbums: () =>
+    fetchJson<{ albums: { id: number; name: string; description: string; cover_photo_id: number | null; photo_count: number; created_at: string }[] }>(`${API_BASE}/albums`),
+
+  createAlbum: (name: string, description?: string, coverPhotoId?: number) =>
+    fetchJson<{ id: number; name: string; description: string; cover_photo_id: number | null; photo_count: number; created_at: string }>(`${API_BASE}/albums`, {
+      method: 'POST',
+      body: JSON.stringify({ name, description, cover_photo_id: coverPhotoId }),
+    }),
+
+  getAlbum: (albumId: number) =>
+    fetchJson<{ id: number; name: string; description: string; cover_photo_id: number | null; photo_count: number; created_at: string }>(`${API_BASE}/albums/${albumId}`),
+
+  updateAlbum: (albumId: number, data: { name?: string; description?: string; cover_photo_id?: number | null }) =>
+    fetchJson<{ id: number; name: string; description: string; cover_photo_id: number | null; photo_count: number; created_at: string }>(`${API_BASE}/albums/${albumId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteAlbum: (albumId: number) =>
+    fetchJson<{ status: string; id: number }>(`${API_BASE}/albums/${albumId}`, { method: 'DELETE' }),
+
+  getAlbumPhotos: (albumId: number, page?: number, pageSize?: number) =>
+    fetchJson<{ photos: { id: number; filename: string; path: string; size: number; date: string | null; type: string; is_favorite: boolean }[]; total: number }>(
+      `${API_BASE}/albums/${albumId}/photos${page && pageSize ? `?page=${page}&page_size=${pageSize}` : ''}`
+    ),
+
+  getPhotoAlbums: (photoId: number) =>
+    fetchJson<{ albums: { id: number; name: string; description: string | null; cover_photo_id: number | null; photo_count: number; created_at: string | null }[]; total: number }>(
+      `${API_BASE}/photos/${photoId}/albums`
+    ),
+
+  addPhotoToAlbum: (albumId: number, photoId: number) =>
+    fetchJson<{ status: string; album_id: number; photo_id: number }>(`${API_BASE}/albums/${albumId}/photos`, {
+      method: 'POST',
+      body: JSON.stringify({ photo_id: photoId }),
+    }),
+
+  removePhotoFromAlbum: (albumId: number, photoId: number) =>
+    fetchJson<{ status: string; album_id: number; photo_id: number }>(`${API_BASE}/albums/${albumId}/photos`, {
+      method: 'DELETE',
+      body: JSON.stringify({ photo_id: photoId }),
+    }),
+
+  batchAddPhotosToAlbum: (albumId: number, photoIds: number[]) =>
+    fetchJson<{ status: string; album_id: number; added: number; skipped: number }>(`${API_BASE}/albums/${albumId}/photos/batch`, {
+      method: 'POST',
+      body: JSON.stringify({ photo_ids: photoIds }),
+    }),
+
+  duplicateAlbum: (albumId: number) =>
+    fetchJson<{ album: { id: number; name: string; photo_count: number; created_at: string } }>(`${API_BASE}/albums/${albumId}/duplicate`, {
+      method: 'POST',
+    }),
+
+  mergeAlbums: (targetId: number, sourceId: number) =>
+    fetchJson<{ target_album_id: number; source_album_id: number; added_count: number; skipped_count: number }>(
+      `${API_BASE}/albums/${targetId}/merge`,
+      { method: 'POST', body: JSON.stringify({ source_id: sourceId }) }
+    ),
+
+  batchRemovePhotosFromAlbum: (albumId: number, photoIds: number[]) =>
+    fetchJson<{ status: string; album_id: number; removed: number; skipped: number }>(
+      `${API_BASE}/albums/${albumId}/photos/batch-remove`,
+      { method: 'POST', body: JSON.stringify({ photo_ids: photoIds }) }
+    ),
+
+  getPhotoIds: (params?: {
+    favorite?: boolean;
+    type?: string;
+    path?: string;
+    not_in_album?: boolean;
+    album_id?: number;
+    from?: string;
+    to?: string;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.favorite !== undefined) searchParams.set('favorite', String(params.favorite));
+    if (params?.type) searchParams.set('type', params.type);
+    if (params?.path) searchParams.set('path', params.path);
+    if (params?.not_in_album !== undefined) searchParams.set('not_in_album', String(params.not_in_album));
+    if (params?.album_id) searchParams.set('album_id', String(params.album_id));
+    if (params?.from) searchParams.set('from', params.from);
+    if (params?.to) searchParams.set('to', params.to);
+    const query = searchParams.toString();
+    return fetchJson<{ ids: number[]; total: number }>(
+      `${API_BASE}/photos/ids${query ? `?${query}` : ''}`
+    );
+  },
+
+  // ============================================================================
+  // 收藏功能 API (v0.7)
+  // ============================================================================
+
+  addFavorite: (photoId: number) =>
+    fetchJson<{ success: boolean; favorited_at: string }>(`${API_BASE}/photos/${photoId}/favorite`, { method: 'POST' }),
+
+  removeFavorite: (photoId: number) =>
+    fetchJson<{ success: boolean }>(`${API_BASE}/photos/${photoId}/favorite`, { method: 'DELETE' }),
+
+  batchFavorite: (photoIds: number[], favorite: boolean) =>
+    fetchJson<{ success: boolean; updated: number }>(`${API_BASE}/photos/batch-favorite`, {
+      method: 'POST',
+      body: JSON.stringify({ photo_ids: photoIds, favorite }),
+    }),
+
+  getFavorites: () =>
+    fetchJson<{ photos: { id: number; filename: string; path: string; size: number; date: string | null; type: string; is_favorite: boolean; favorited_at: string | null }[]; total: number }>(`${API_BASE}/photos/favorites`),
+
+  // ============================================================================
+  // 文件夹操作 API (v0.7)
+  // ============================================================================
+
+  openInExplorer: (path: string) =>
+    fetchJson<{ status: string; path: string }>(`${API_BASE}/folders/open-in-explorer`, {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    }),
+
+  scanDirectory: (path: string) =>
+    fetchJson<{ status: string; path: string; new_files: number; added_to_db: number }>(
+      `${API_BASE}/folders/scan-new`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ path }),
+      }
+    ),
+
+  // ============================================================================
+  // 时间线 API (v0.7)
+  // ============================================================================
+
+  // v0.7 概览图分批加载：limit/cursor 可选，不传时返回全部（兼容旧 API）
+  // 后端响应字段为 snake_case（next_cursor / has_next），前端类型保持一致
+  getTimelineYears: (limit?: number, cursor?: number) => {
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.set('limit', String(limit));
+    if (cursor !== undefined) params.set('cursor', String(cursor));
+    const query = params.toString();
+    return fetchJson<{
+      years: { year: number; count: number; cover_photo_id: number | null; cover_photo_path: string | null; cover_photo_paths?: string[] }[];
+      next_cursor: number | null;
+      has_next: boolean;
+    }>(`${API_BASE}/timeline/years${query ? `?${query}` : ''}`);
+  },
+
+  getTimelineMonths: (year?: number, limit?: number, cursor?: string) => {
+    const params = new URLSearchParams();
+    if (year !== undefined) params.set('year', String(year));
+    if (limit !== undefined) params.set('limit', String(limit));
+    if (cursor !== undefined) params.set('cursor', cursor);
+    const query = params.toString();
+    return fetchJson<{
+      months: { year: number; month: number; count: number; cover_photo_id: number | null; cover_photo_path: string | null; cover_photo_paths?: string[] }[];
+      next_cursor: string | null;
+      has_next: boolean;
+    }>(`${API_BASE}/timeline/months${query ? `?${query}` : ''}`);
+  },
+
+  getTimelinePhotos: (params?: { year?: number; month?: number; day?: string; page?: number; page_size?: number; sort?: string; filters?: string[] }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.year) searchParams.set('year', String(params.year));
+    if (params?.month) searchParams.set('month', String(params.month));
+    if (params?.day) searchParams.set('day', params.day);
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.page_size) searchParams.set('page_size', String(params.page_size));
+    if (params?.sort) searchParams.set('sort', params.sort);
+    if (params?.filters && params.filters.length > 0) searchParams.set('filters', params.filters.join(','));
+    const query = searchParams.toString();
+    return fetchJson<{
+      photos: { id: number; filename: string; path: string; size: number; date: string | null; type: string; is_favorite: boolean }[];
+      total: number;
+      page: number;
+      page_size: number;
+      total_pages: number;
+    }>(`${API_BASE}/timeline/photos${query ? `?${query}` : ''}`);
+  },
+
+  // ============================================================================
+  // XMP 同步 API (v0.7)
+  // ============================================================================
+
+  updatePhotoTitle: (photoId: number, title: string) =>
+    fetchJson<{ status: string; xmp_sync: boolean; message: string }>(`${API_BASE}/photos/${photoId}/title`, {
+      method: 'PUT',
+      body: JSON.stringify({ title }),
+    }),
+
+  updatePhotoDescription: (photoId: number, description: string) =>
+    fetchJson<{ status: string; xmp_sync: boolean; message: string }>(`${API_BASE}/photos/${photoId}/description`, {
+      method: 'PUT',
+      body: JSON.stringify({ description }),
     }),
 };

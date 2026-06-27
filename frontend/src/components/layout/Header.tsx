@@ -40,7 +40,7 @@ export function Header({ onSettings }: HeaderProps) {
         <div className="flex gap-1">
           <button
             onClick={() => setMobileManagerOpen(true)}
-            className={`w-[34px] h-[34px] rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center hover:bg-page transition-all duration-150 ${
+            className={`w-[34px] h-[34px] rounded-[6px] border-none bg-transparent cursor-pointer flex items-center justify-center hover:bg-page transition-all duration-150 ${
               mobileRunning ? 'text-primary' : 'text-text-secondary hover:text-primary'
             }`}
             title={t('mobileAccess.entry')}
@@ -52,7 +52,7 @@ export function Header({ onSettings }: HeaderProps) {
           </button>
           <button
             onClick={toggleTheme}
-            className="w-[34px] h-[34px] rounded-md border-none bg-transparent text-text-secondary cursor-pointer flex items-center justify-center hover:bg-page hover:text-primary transition-all duration-150"
+            className="w-[34px] h-[34px] rounded-[6px] border-none bg-transparent text-text-secondary cursor-pointer flex items-center justify-center hover:bg-page hover:text-primary transition-all duration-150"
             title={t('header.toggleTheme')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -62,7 +62,7 @@ export function Header({ onSettings }: HeaderProps) {
           </button>
           <button
             onClick={onSettings}
-            className="w-[34px] h-[34px] rounded-md border-none bg-transparent text-text-secondary cursor-pointer flex items-center justify-center hover:bg-page hover:text-primary transition-all duration-150"
+            className="w-[34px] h-[34px] rounded-[6px] border-none bg-transparent text-text-secondary cursor-pointer flex items-center justify-center hover:bg-page hover:text-primary transition-all duration-150"
             title={t('header.settings')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">

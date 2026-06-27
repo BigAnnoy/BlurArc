@@ -70,9 +70,10 @@ def test_frontend():
     
     files_to_check = [
         'index.html',
-        'js/main.js',
-        'js/api.js',
-        'css/style.css'
+        'package.json',
+        'vite.config.ts',
+        'src/main.tsx',
+        'src/App.tsx',
     ]
     
     missing_files = []

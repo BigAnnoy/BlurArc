@@ -70,11 +70,17 @@ python scripts/download_ffmpeg.py
 
 ### 路径约定
 
+> **v0.7 起所有用户数据统一放在 `~/Documents/BlurArc/`**，升级/卸载只动 exe 目录。
+
 - 相册目录：用户选择，媒体文件按 `YYYY/YYYY-MM/` 组织
-- 数据库：`项目根目录/.config/photo_manager.db`（开发模式）或 `exe所在目录/.config/`（打包模式）
-- 缩略图缓存：`~/.photomanager/thumbnails/`（用户主目录，跨相册共享）
-- MD5 记录：存储在 SQLite 数据库
-- 用户配置：`~/.photo_organizer_config.json`
+- 数据库：`~/Documents/BlurArc/.config/photo_manager.db`（v0.7 改；v0.6 在 exe 目录）
+- 缩略图缓存：`~/Documents/BlurArc/thumbnails/`（v0.7 改；v0.6 在 `~/.photomanager/`）
+- 通用缓存：`~/Documents/BlurArc/cache/`（v0.7 新增；视频预览帧等）
+- 用户配置：`~/Documents/BlurArc/.config/config.json`（v0.7 改；v0.6 在 `~/.photo_organizer_config.json`）
+- 手机上传：`~/Documents/BlurArc/.config/phone_upload/`
+- 手机配对 token：`~/Documents/BlurArc/.config/mobile_tokens.json`
+- 应用日志：`~/Documents/BlurArc/logs/`
+- 导出文件：`~/Documents/BlurArc/exports/`（v0.8+）
 - FFmpeg：`backend/ffmpeg_binaries/ffmpeg.exe`
 
 ## 功能说明
@@ -107,6 +113,7 @@ python scripts/download_ffmpeg.py
 - 打包使用 PyInstaller，配置在 `BlurArc.spec`
 - 修改 `_import_file()` 时需注意 `md5_cache` 参数传递
 - **UI 修改必须先设计原型**：任何 UI 变更，先在 `docs/prototypes/` 目录下用 HTML 设计原型，确认后再实施代码。详见 `docs/prototypes/README.md`。
+- **AI 编程必须遵守 `docs/AI-RULES.md`**：实施任何功能/修 bug 前，**先读 [docs/AI-RULES.md](docs/AI-RULES.md)**，按 §1 流程输出"影响面分析 + 反例清单 + 分步验证"三件套，再开始改代码。规则每次踩坑后追加。
 
 ## 前端开发
 

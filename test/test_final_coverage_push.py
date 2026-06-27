@@ -117,26 +117,26 @@ class TestImportManagerExtendedCoverage:
     """Test import_manager.py uncovered lines"""
     
     def test_import_manager_get_media_date_video_ffmpeg(self):
-        """Test getting media date from video with ffmpeg (line 262)"""
+        """Test getting media date from video with ffmpeg fallback to mtime"""
         from backend.import_manager import ImportManager
         
         manager = ImportManager()
         
         with tempfile.TemporaryDirectory() as tmpdir:
             video_file = Path(tmpdir) / 'test.mp4'
-            video_file.write_bytes(b'fake video')
+            video_file.write_bytes(b'\x00\x00\x00\x20ftypmp42' + b'\x00' * 100)
             
             with patch('backend.video_processor.VideoProcessor') as mock_vp:
                 mock_vp.extract_metadata.return_value = None
                 
-                result = manager._get_media_date(str(video_file))
+                result = manager._get_media_date(video_file)
             
-            # Should fallback to filename or mtime
+            # Should fallback to mtime
             assert result is not None
 
     def test_import_manager_import_file_exception(self):
-        """Test import file with exception (lines 284-286)"""
-        from backend.import_manager import ImportManager, ImportStatus
+        """Test import file with exception"""
+        from backend.import_manager import ImportManager, ImportProgress
         
         manager = ImportManager()
         
@@ -146,19 +146,19 @@ class TestImportManagerExtendedCoverage:
             target = Path(tmpdir) / 'target'
             target.mkdir()
             
-            # Create file
-            src_file = source / 'test.txt'
+            src_file = source / 'test.jpg'
             src_file.write_bytes(b'test')
             
-            # Mock shutil.copy2 to fail
+            progress = ImportProgress('test')
+            
             import shutil
             with patch.object(shutil, 'copy2', side_effect=Exception('copy error')):
-                result = manager._import_file(str(src_file), str(target / 'test.txt'), 'copy')
+                result = manager._import_file(src_file, target / 'test.jpg', {}, progress)
             
-            assert result is False
+            assert result is None
 
     def test_import_manager_prescan_oserror(self):
-        """Test prescan with OSError (lines 318-320)"""
+        """Test scan_source with OSError"""
         from backend.import_manager import ImportManager
         
         manager = ImportManager()
@@ -170,21 +170,22 @@ class TestImportManagerExtendedCoverage:
             
             # Mock stat to raise OSError
             with patch.object(Path, 'stat', side_effect=OSError('stat error')):
-                files, duplicates = manager._prescan_source(str(src))
+                files = manager._scan_source(src)
             
             # Should handle gracefully
             assert isinstance(files, list)
 
     def test_import_manager_target_records_oserror(self):
-        """Test loading target records with OSError (lines 334-335)"""
+        """Test loading target records with nonexistent path returns empty tuple"""
         from backend.import_manager import ImportManager
         
         manager = ImportManager()
         
         with patch('pathlib.Path.exists', return_value=False):
-            records = manager._load_target_records(Path('/nonexistent/records.json'))
+            records, size_to_md5s = manager._load_target_records(Path('/nonexistent/records.json'))
         
         assert isinstance(records, dict)
+        assert isinstance(size_to_md5s, dict)
 
 
 # ============================================================================
@@ -192,169 +193,130 @@ class TestImportManagerExtendedCoverage:
 # ============================================================================
 
 class TestConfigManagerExtendedCoverage:
-    """Test config_manager.py uncovered lines"""
-    
-    def test_config_manager_get_album_path_none(self):
-        """Test get_album_path when not set (line 31)"""
-        from backend.config_manager import ConfigManager
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_file = Path(tmpdir) / 'config.json'
-            config_file.write_text('{}')
-            
-            manager = ConfigManager(str(config_file))
-            result = manager.get_album_path()
-            
-            assert result is None
+    """Test config_manager.py with current API"""
 
-    def test_config_manager_set_album_path_exception(self):
-        """Test set_album_path with exception (lines 78-80)"""
-        from backend.config_manager import ConfigManager
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_file = Path(tmpdir) / 'config.json'
-            config_file.write_text('{}')
-            
-            manager = ConfigManager(str(config_file))
-            
+    def _make_manager(self, tmp_path):
+        """创建使用临时目录的 ConfigManager"""
+        from backend import config_manager as cm_mod
+        original = cm_mod._get_app_data_dir
+        cm_mod._get_app_data_dir = lambda: tmp_path
+        try:
+            manager = cm_mod.ConfigManager()
+            yield manager
+        finally:
+            cm_mod._get_app_data_dir = original
+
+    def test_config_manager_get_album_path_none(self, tmp_path):
+        """Test get_album_path when not set"""
+        from backend import config_manager as cm_mod
+        original = cm_mod._get_app_data_dir
+        cm_mod._get_app_data_dir = lambda: tmp_path
+        try:
+            manager = cm_mod.ConfigManager()
+            result = manager.get_album_path()
+            assert result is None
+        finally:
+            cm_mod._get_app_data_dir = original
+
+    def test_config_manager_set_album_path_exception(self, tmp_path):
+        """Test set_album_path with save error"""
+        from backend import config_manager as cm_mod
+        original = cm_mod._get_app_data_dir
+        cm_mod._get_app_data_dir = lambda: tmp_path
+        try:
+            manager = cm_mod.ConfigManager()
             with patch.object(manager, '_save_config', side_effect=Exception('save error')):
                 result = manager.set_album_path('/some/path')
-            
             assert result is False
+        finally:
+            cm_mod._get_app_data_dir = original
 
-    def test_config_manager_get_last_import_none(self):
-        """Test get_last_import when not set (lines 103-105)"""
-        from backend.config_manager import ConfigManager
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_file = Path(tmpdir) / 'config.json'
-            config_file.write_text('{}')
-            
-            manager = ConfigManager(str(config_file))
+    def test_config_manager_get_last_import_none(self, tmp_path):
+        """Test get_last_import when not set"""
+        from backend import config_manager as cm_mod
+        original = cm_mod._get_app_data_dir
+        cm_mod._get_app_data_dir = lambda: tmp_path
+        try:
+            manager = cm_mod.ConfigManager()
             result = manager.get_last_import()
-            
             assert result is None
+        finally:
+            cm_mod._get_app_data_dir = original
 
-    def test_config_manager_rebuild_md5_index_exception(self):
-        """Test rebuild_md5_index with exception (lines 134-136)"""
-        from backend.config_manager import ConfigManager
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_file = Path(tmpdir) / 'config.json'
-            config_file.write_text('{}')
-            
-            album_path = Path(tmpdir) / 'album'
-            album_path.mkdir()
-            
-            manager = ConfigManager(str(config_file))
-            manager.config['album_path'] = str(album_path)
-            
-            with patch.object(manager, '_rebuild_md5_index_for_album', side_effect=Exception('rebuild error')):
-                result = manager.rebuild_database_index(str(album_path))
-            
-            assert result is False
-
-    def test_config_manager_get_setting_default(self):
-        """Test get_setting with default value (lines 170-172, 177)"""
-        from backend.config_manager import ConfigManager
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_file = Path(tmpdir) / 'config.json'
-            config_file.write_text('{}')
-            
-            manager = ConfigManager(str(config_file))
+    def test_config_manager_get_setting_default(self, tmp_path):
+        """Test get_setting with default value"""
+        from backend import config_manager as cm_mod
+        original = cm_mod._get_app_data_dir
+        cm_mod._get_app_data_dir = lambda: tmp_path
+        try:
+            manager = cm_mod.ConfigManager()
             result = manager.get_setting('nonexistent_key', 'default_value')
-            
             assert result == 'default_value'
+        finally:
+            cm_mod._get_app_data_dir = original
 
-    def test_config_manager_set_setting_new(self):
-        """Test set_setting creating new setting (lines 192-195)"""
-        from backend.config_manager import ConfigManager
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_file = Path(tmpdir) / 'config.json'
-            config_file.write_text('{}')
-            
-            manager = ConfigManager(str(config_file))
-            manager.set_setting('new_key', 'new_value')
-            
+    def test_config_manager_update_setting_new(self, tmp_path):
+        """Test update_setting creating new setting"""
+        from backend import config_manager as cm_mod
+        original = cm_mod._get_app_data_dir
+        cm_mod._get_app_data_dir = lambda: tmp_path
+        try:
+            manager = cm_mod.ConfigManager()
+            manager.update_setting('new_key', 'new_value')
             result = manager.get_setting('new_key')
             assert result == 'new_value'
+        finally:
+            cm_mod._get_app_data_dir = original
 
-    def test_config_manager_update_records_exception(self):
-        """Test update_records with exception (lines 224-225)"""
-        from backend.config_manager import ConfigManager
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_file = Path(tmpdir) / 'config.json'
-            config_file.write_text('{}')
-            
-            manager = ConfigManager(str(config_file))
-            
-            with patch.object(manager, '_save_config', side_effect=Exception('save error')):
-                result = manager.update_md5_records({'md5': '/path/to/file'})
-            
-            assert result is False
-
-    def test_config_manager_clear_records_exception(self):
-        """Test clear_records with exception (lines 249-251)"""
-        from backend.config_manager import ConfigManager
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_file = Path(tmpdir) / 'config.json'
-            config_file.write_text('{}')
-            
-            manager = ConfigManager(str(config_file))
-            
-            with patch.object(manager, '_save_config', side_effect=Exception('save error')):
-                result = manager.clear_md5_records()
-            
-            assert result is False
-
-    def test_config_manager_get_all_album_files_exception(self):
-        """Test get_all_album_files with exception (lines 291-292)"""
-        from backend.config_manager import ConfigManager
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_file = Path(tmpdir) / 'config.json'
-            config_file.write_text('{}')
-            
-            manager = ConfigManager(str(config_file))
-            
-            # Non-existent album path
-            manager.config['album_path'] = '/nonexistent/path'
-            
-            files = manager.get_all_album_files()
-            assert files == []
-
-    def test_config_manager_find_file_by_md5_exception(self):
-        """Test find_file_by_md5 with exception (lines 309, 315-316)"""
-        from backend.config_manager import ConfigManager
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_file = Path(tmpdir) / 'config.json'
-            config_file.write_text('{}')
-            
-            manager = ConfigManager(str(config_file))
-            
-            result = manager.find_file_by_md5('nonexistent_md5')
-            assert result is None
-
-    def test_config_manager_reset_config_exception(self):
-        """Test reset_config with exception (lines 349-350)"""
-        from backend.config_manager import ConfigManager
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_file = Path(tmpdir) / 'config.json'
-            config_file.write_text('{}')
-            
-            manager = ConfigManager(str(config_file))
-            
+    def test_config_manager_reset_config_exception(self, tmp_path):
+        """Test reset_config with save error"""
+        from backend import config_manager as cm_mod
+        original = cm_mod._get_app_data_dir
+        cm_mod._get_app_data_dir = lambda: tmp_path
+        try:
+            manager = cm_mod.ConfigManager()
             with patch.object(manager, '_save_config', side_effect=Exception('save error')):
                 manager.reset_config()
-            
-            # Should catch exception and log error
             assert manager.config is not None
+        finally:
+            cm_mod._get_app_data_dir = original
+
+    def test_config_manager_is_first_run(self, tmp_path):
+        """Test is_first_run"""
+        from backend import config_manager as cm_mod
+        original = cm_mod._get_app_data_dir
+        cm_mod._get_app_data_dir = lambda: tmp_path
+        try:
+            manager = cm_mod.ConfigManager()
+            assert manager.is_first_run() is True
+        finally:
+            cm_mod._get_app_data_dir = original
+
+    def test_config_manager_get_all_config(self, tmp_path):
+        """Test get_all_config"""
+        from backend import config_manager as cm_mod
+        original = cm_mod._get_app_data_dir
+        cm_mod._get_app_data_dir = lambda: tmp_path
+        try:
+            manager = cm_mod.ConfigManager()
+            config = manager.get_all_config()
+            assert isinstance(config, dict)
+            assert 'settings' in config
+        finally:
+            cm_mod._get_app_data_dir = original
+
+    def test_config_manager_set_last_import(self, tmp_path):
+        """Test set_last_import"""
+        from backend import config_manager as cm_mod
+        original = cm_mod._get_app_data_dir
+        cm_mod._get_app_data_dir = lambda: tmp_path
+        try:
+            manager = cm_mod.ConfigManager()
+            manager.set_last_import('2024-01-01 00:00:00')
+            result = manager.get_last_import()
+            assert result == '2024-01-01 00:00:00'
+        finally:
+            cm_mod._get_app_data_dir = original
 
 
 # ============================================================================

@@ -118,8 +118,6 @@ class TestImportManagerExtended:
             temp_source_dir,
             temp_target_dir,
             import_mode="copy",
-            skip_source_duplicates=False,
-            skip_target_duplicates=False
         )
         
         # 验证线程被创建并启动
@@ -239,8 +237,6 @@ class TestImportManagerExtended:
             temp_source_dir,
             temp_target_dir,
             import_mode="copy",
-            skip_source_duplicates=False,
-            skip_target_duplicates=False
         )
         
         # 测试 move 模式
@@ -249,8 +245,6 @@ class TestImportManagerExtended:
             temp_source_dir,
             temp_target_dir,
             import_mode="move",
-            skip_source_duplicates=False,
-            skip_target_duplicates=False
         )
         
         # 测试默认模式（应该是 copy）
@@ -259,53 +253,27 @@ class TestImportManagerExtended:
             temp_source_dir,
             temp_target_dir,
             import_mode="invalid_mode",
-            skip_source_duplicates=False,
-            skip_target_duplicates=False
         )
         
         # 验证 _do_import 被调用了3次
         assert mock_do_import.call_count == 3
     
     @patch('backend.import_manager.ImportManager._do_import')
-    def test_start_import_with_duplicate_options(self, mock_do_import, import_manager, temp_source_dir, temp_target_dir):
-        """测试带有重复选项的导入"""
-        # 模拟 _do_import 方法
+    def test_start_import_multiple_calls(self, mock_do_import, import_manager, temp_source_dir, temp_target_dir):
+        """测试多次调用导入启动方法"""
         mock_do_import.return_value = None
         
-        import_id = "test_import_duplicates"
+        import_id = "test_import_multi"
         import_manager.create_import(import_id, temp_source_dir, temp_target_dir)
         
-        # 测试跳过源重复
-        import_manager.start_import_async(
-            import_id,
-            temp_source_dir,
-            temp_target_dir,
-            import_mode="copy",
-            skip_source_duplicates=True,
-            skip_target_duplicates=False
-        )
+        for i in range(3):
+            import_manager.start_import_async(
+                import_id,
+                temp_source_dir,
+                temp_target_dir,
+                import_mode="copy",
+            )
         
-        # 测试跳过目标重复
-        import_manager.start_import_async(
-            import_id,
-            temp_source_dir,
-            temp_target_dir,
-            import_mode="copy",
-            skip_source_duplicates=False,
-            skip_target_duplicates=True
-        )
-        
-        # 测试跳过所有重复
-        import_manager.start_import_async(
-            import_id,
-            temp_source_dir,
-            temp_target_dir,
-            import_mode="copy",
-            skip_source_duplicates=True,
-            skip_target_duplicates=True
-        )
-        
-        # 验证 _do_import 被调用了3次
         assert mock_do_import.call_count == 3
     
     def test_import_manager_get_progress_multiple(self, import_manager, temp_source_dir, temp_target_dir):
@@ -414,17 +382,17 @@ class TestImportManagerExtended:
     
     def test_load_target_records(self, import_manager, temp_target_dir):
         """测试_load_target_records方法"""
-        # 将字符串转换为Path对象
         target_path = Path(temp_target_dir)
         
-        # 创建测试文件
         test_files = ["test1.jpg", "test2.png"]
         for file_name in test_files:
             file_path = target_path / file_name
             file_path.write_text("test content")
         
-        # 调用_load_target_records方法
         result = import_manager._load_target_records(target_path)
         
-        # 验证结果 - 应该返回字典类型
-        assert isinstance(result, dict)
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        records, size_to_md5s = result
+        assert isinstance(records, dict)
+        assert isinstance(size_to_md5s, dict)

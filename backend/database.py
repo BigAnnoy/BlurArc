@@ -7,18 +7,28 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Index, create_engine
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Index, create_engine, text
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from sqlalchemy.sql import func
 
-# 路径适配：打包模式下数据文件放在 exe 旁边，开发模式下放在项目根目录
-if getattr(sys, 'frozen', False):
-    _APP_DATA_ROOT = Path(sys.executable).parent
-else:
-    _APP_DATA_ROOT = Path(__file__).parent.parent
+# v0.7: 数据目录统一迁移到 ~/Documents/BlurArc/
+# 延迟导入避免循环依赖
+def _get_db_path():
+    """获取数据库路径"""
+    try:
+        from .config_manager import _get_user_data_dir
+        return _get_user_data_dir() / ".config" / "photo_manager.db"
+    except ImportError:
+        # 回退：直接计算
+        import os
+        if os.name == 'nt':
+            base = Path(os.environ.get('USERPROFILE', Path.home()))
+        else:
+            base = Path.home()
+        return base / 'Documents' / 'BlurArc' / '.config' / 'photo_manager.db'
 
 # 数据库文件路径
-DB_PATH = _APP_DATA_ROOT / ".config" / "photo_manager.db"
+DB_PATH = _get_db_path()
 
 # 创建数据库目录
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -51,7 +61,10 @@ class Photo(Base):
     extension = Column(String(10), nullable=False)
     thumbnail_path = Column(Text)
     imported_at = Column(DateTime(timezone=True), server_default=func.now())
-    is_favorite = Column(Boolean, default=False)
+    is_favorite = Column(Boolean, default=False, index=True)
+    favorited_at = Column(DateTime(timezone=True))  # v0.7 新增：收藏时间
+    title = Column(String(255))  # v0.7 新增：标题（XMP dc:title）
+    description = Column(Text)  # v0.7 新增：描述（XMP dc:description）
     
     # 关联关系
     tags = relationship("Tag", secondary="photo_tags", back_populates="photos")
@@ -80,16 +93,18 @@ class PhotoTag(Base):
 
 
 class Album(Base):
-    """相册表（预留功能，暂未启用）"""
+    """相册表（v0.7 启用）"""
     __tablename__ = "albums"
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, unique=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     description = Column(Text)
+    cover_photo_id = Column(Integer, ForeignKey('photos.id'), nullable=True)  # v0.7 新增：封面照片
     
     # 关联关系
     photos = relationship("Photo", secondary="album_photos", back_populates="albums")
+    cover_photo = relationship("Photo", foreign_keys=[cover_photo_id])
 
 
 class AlbumPhoto(Base):
@@ -205,6 +220,44 @@ def init_db():
         print(f"移除 MD5 唯一约束时出错（可能已不存在）: {e}")
         pass
     
+    # v0.7 迁移：为 photos 表添加新字段
+    try:
+        with engine.connect() as conn:
+            # 检查 photos 表现有列
+            result = conn.execute(text("PRAGMA table_info(photos)"))
+            photo_columns = [row[1] for row in result]
+
+            # 添加 favorited_at 字段
+            if 'favorited_at' not in photo_columns:
+                conn.execute(text("ALTER TABLE photos ADD COLUMN favorited_at DATETIME"))
+                conn.commit()
+                print("已添加 photos.favorited_at 字段")
+
+            # 添加 title 字段
+            if 'title' not in photo_columns:
+                conn.execute(text("ALTER TABLE photos ADD COLUMN title VARCHAR(255)"))
+                conn.commit()
+                print("已添加 photos.title 字段")
+
+            # 添加 description 字段
+            if 'description' not in photo_columns:
+                conn.execute(text("ALTER TABLE photos ADD COLUMN description TEXT"))
+                conn.commit()
+                print("已添加 photos.description 字段")
+
+            # 检查 albums 表现有列
+            result = conn.execute(text("PRAGMA table_info(albums)"))
+            album_columns = [row[1] for row in result]
+
+            # 添加 cover_photo_id 字段
+            if 'cover_photo_id' not in album_columns:
+                conn.execute(text("ALTER TABLE albums ADD COLUMN cover_photo_id INTEGER"))
+                conn.commit()
+                print("已添加 albums.cover_photo_id 字段")
+    except Exception as e:
+        print(f"v0.7 字段迁移时出错: {e}")
+        pass
+
     # 初始化默认设置
     db = SessionLocal()
     try:

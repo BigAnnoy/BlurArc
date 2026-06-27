@@ -8,6 +8,11 @@ export interface Photo {
   type: 'photo' | 'video';
   duration?: string; // for videos
   thumbnail?: string;
+  // v0.7 新增
+  title?: string;
+  description?: string;
+  is_favorite?: boolean;
+  favorited_at?: string | null;
 }
 
 // Directory tree types

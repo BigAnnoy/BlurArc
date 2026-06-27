@@ -473,11 +473,25 @@ def album_photos():
         for file in sorted(target_path.iterdir()):
             if file.is_file() and file.suffix.lower() in MEDIA_FORMATS:
                 all_files.append(file)
-        
+
+        # 预先查询数据库中本路径下文件的 is_favorite 状态（批量一次查完）
+        path_to_favorite = {}
+        try:
+            from database import SessionLocal, Photo
+            db_fav = SessionLocal()
+            try:
+                # 查询所有匹配路径的文件
+                photo_rows = db_fav.query(Photo.path, Photo.is_favorite).filter(Photo.path.in_([str(f) for f in all_files])).all()
+                path_to_favorite = {p.path: p.is_favorite for p in photo_rows}
+            finally:
+                db_fav.close()
+        except Exception as e:
+            logger.warning(f"批量查询 is_favorite 失败（不影响主流程）: {e}")
+
         # 分页计算
         total_count = len(all_files)
         total_pages = (total_count + page_size - 1) // page_size
-        
+
         # 边界检查
         if page < 1:
             page = 1
@@ -487,7 +501,7 @@ def album_photos():
             start_idx = (page - 1) * page_size
             end_idx = start_idx + page_size
             page_files = all_files[start_idx:end_idx]
-            
+
             photos = []
             for file in page_files:
                 stat = file.stat()
@@ -502,6 +516,7 @@ def album_photos():
                     'date': datetime.fromtimestamp(stat.st_mtime).isoformat(),
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
                     'type': file_type,
+                    'is_favorite': path_to_favorite.get(str(file), False),
                     'thumbnail_url': f'/api/album/thumbnail?path={encoded_path}',
                     'url': f'/api/album/file?path={encoded_path}',
                     # preview_url: 视频用 file 路由，图片用专用 preview 路由（支持 HEIC 等格式转换）
@@ -2665,6 +2680,1173 @@ def mobile_pairing_cancel():
             server._pairing.clear_pending()
         return jsonify({'status': 'cancelled'})
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# 相册管理 API (v0.7)
+# ============================================================================
+
+@app.route('/api/albums', methods=['GET'])
+def get_albums():
+    """获取所有相册列表"""
+    try:
+        from database import SessionLocal, Album, Photo
+        db = SessionLocal()
+        try:
+            albums = db.query(Album).all()
+            result = []
+            for album in albums:
+                cover_path = None
+                if album.cover_photo_id:
+                    cover_photo = db.query(Photo).filter(Photo.id == album.cover_photo_id).first()
+                    if cover_photo:
+                        cover_path = cover_photo.path
+                result.append({
+                    'id': album.id,
+                    'name': album.name,
+                    'description': album.description,
+                    'cover_photo_id': album.cover_photo_id,
+                    'cover_photo_path': cover_path,
+                    'photo_count': len(album.photos),
+                    'created_at': album.created_at.isoformat() if album.created_at else None,
+                })
+            return jsonify({'albums': result})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 获取相册列表失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/albums', methods=['POST'])
+def create_album():
+    """创建新相册"""
+    try:
+        from database import SessionLocal, Album
+        db = SessionLocal()
+        try:
+            data = request.get_json()
+            name = data.get('name', '').strip()
+            if not name:
+                return jsonify({'error': '相册名称不能为空'}), 400
+            
+            # 检查重名
+            existing = db.query(Album).filter(Album.name == name).first()
+            if existing:
+                return jsonify({'error': '相册名称已存在'}), 409
+            
+            album = Album(
+                name=name,
+                description=data.get('description', ''),
+                cover_photo_id=data.get('cover_photo_id'),
+            )
+            db.add(album)
+            db.commit()
+            
+            return jsonify({
+                'id': album.id,
+                'name': album.name,
+                'description': album.description,
+                'cover_photo_id': album.cover_photo_id,
+                'photo_count': 0,
+                'created_at': album.created_at.isoformat() if album.created_at else None,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 创建相册失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/albums/<int:album_id>', methods=['GET'])
+def get_album(album_id):
+    """获取单个相册详情"""
+    try:
+        from database import SessionLocal, Album
+        db = SessionLocal()
+        try:
+            album = db.query(Album).filter(Album.id == album_id).first()
+            if not album:
+                return jsonify({'error': '相册不存在'}), 404
+            
+            return jsonify({
+                'id': album.id,
+                'name': album.name,
+                'description': album.description,
+                'cover_photo_id': album.cover_photo_id,
+                'photo_count': len(album.photos),
+                'created_at': album.created_at.isoformat() if album.created_at else None,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 获取相册详情失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/albums/<int:album_id>', methods=['PUT'])
+def update_album(album_id):
+    """更新相册信息"""
+    try:
+        from database import SessionLocal, Album
+        db = SessionLocal()
+        try:
+            album = db.query(Album).filter(Album.id == album_id).first()
+            if not album:
+                return jsonify({'error': '相册不存在'}), 404
+            
+            data = request.get_json()
+            if 'name' in data:
+                new_name = data['name'].strip()
+                if not new_name:
+                    return jsonify({'error': '相册名称不能为空'}), 400
+                
+                # 检查重名（排除自己）
+                existing = db.query(Album).filter(Album.name == new_name, Album.id != album_id).first()
+                if existing:
+                    return jsonify({'error': '相册名称已存在'}), 409
+                
+                album.name = new_name
+            
+            if 'description' in data:
+                album.description = data['description']
+            
+            if 'cover_photo_id' in data:
+                album.cover_photo_id = data['cover_photo_id']
+            
+            db.commit()
+            
+            return jsonify({
+                'id': album.id,
+                'name': album.name,
+                'description': album.description,
+                'cover_photo_id': album.cover_photo_id,
+                'photo_count': len(album.photos),
+                'created_at': album.created_at.isoformat() if album.created_at else None,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 更新相册失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/albums/<int:album_id>', methods=['DELETE'])
+def delete_album(album_id):
+    """删除相册"""
+    try:
+        from database import SessionLocal, Album
+        db = SessionLocal()
+        try:
+            album = db.query(Album).filter(Album.id == album_id).first()
+            if not album:
+                return jsonify({'error': '相册不存在'}), 404
+            
+            db.delete(album)
+            db.commit()
+            
+            return jsonify({'status': 'deleted', 'id': album_id})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 删除相册失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/albums/<int:album_id>/photos', methods=['GET'])
+def get_album_photos(album_id):
+    """获取相册内的照片列表"""
+    try:
+        from database import SessionLocal, Album, Photo
+        db = SessionLocal()
+        try:
+            album = db.query(Album).filter(Album.id == album_id).first()
+            if not album:
+                return jsonify({'error': '相册不存在'}), 404
+            
+            photos = []
+            for photo in album.photos:
+                photos.append({
+                    'id': photo.id,
+                    'filename': photo.filename,
+                    'path': photo.path,
+                    'size': photo.size,
+                    'date': photo.media_date.isoformat() if photo.media_date else None,
+                    'type': photo.file_type,
+                    'is_favorite': photo.is_favorite,
+                })
+            
+            return jsonify({'photos': photos, 'total': len(photos)})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 获取相册照片失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/photos/<int:photo_id>/albums', methods=['GET'])
+def get_photo_albums(photo_id):
+    """获取照片所属的所有相册"""
+    try:
+        from database import SessionLocal, Album, Photo
+        db = SessionLocal()
+        try:
+            photo = db.query(Photo).filter(Photo.id == photo_id).first()
+            if not photo:
+                return jsonify({'error': '照片不存在'}), 404
+
+            albums = []
+            for album in photo.albums:
+                cover_path = None
+                if album.cover_photo_id:
+                    cover_photo = db.query(Photo).filter(Photo.id == album.cover_photo_id).first()
+                    if cover_photo:
+                        cover_path = cover_photo.path
+                albums.append({
+                    'id': album.id,
+                    'name': album.name,
+                    'description': album.description,
+                    'cover_photo_id': album.cover_photo_id,
+                    'cover_photo_path': cover_path,
+                    'photo_count': len(album.photos),
+                    'created_at': album.created_at.isoformat() if album.created_at else None,
+                })
+
+            return jsonify({'albums': albums, 'total': len(albums)})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 获取照片所属相册失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/albums/<int:album_id>/photos', methods=['POST'])
+def add_photo_to_album(album_id):
+    """添加照片到相册"""
+    try:
+        from database import SessionLocal, Album, Photo
+        db = SessionLocal()
+        try:
+            album = db.query(Album).filter(Album.id == album_id).first()
+            if not album:
+                return jsonify({'error': '相册不存在'}), 404
+            
+            data = request.get_json()
+            photo_id = data.get('photo_id')
+            if not photo_id:
+                return jsonify({'error': 'photo_id 不能为空'}), 400
+            
+            photo = db.query(Photo).filter(Photo.id == photo_id).first()
+            if not photo:
+                return jsonify({'error': '照片不存在'}), 404
+            
+            # 检查是否已在相册中
+            if photo in album.photos:
+                return jsonify({'error': '照片已在相册中'}), 409
+            
+            album.photos.append(photo)
+            db.commit()
+            
+            return jsonify({'status': 'added', 'album_id': album_id, 'photo_id': photo_id})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 添加照片到相册失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/albums/<int:album_id>/photos', methods=['DELETE'])
+def remove_photo_from_album(album_id):
+    """从相册移除照片"""
+    try:
+        from database import SessionLocal, Album, Photo
+        db = SessionLocal()
+        try:
+            album = db.query(Album).filter(Album.id == album_id).first()
+            if not album:
+                return jsonify({'error': '相册不存在'}), 404
+            
+            data = request.get_json()
+            photo_id = data.get('photo_id')
+            if not photo_id:
+                return jsonify({'error': 'photo_id 不能为空'}), 400
+            
+            photo = db.query(Photo).filter(Photo.id == photo_id).first()
+            if not photo:
+                return jsonify({'error': '照片不存在'}), 404
+            
+            if photo not in album.photos:
+                return jsonify({'error': '照片不在相册中'}), 404
+            
+            album.photos.remove(photo)
+            db.commit()
+            
+            return jsonify({'status': 'removed', 'album_id': album_id, 'photo_id': photo_id})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 从相册移除照片失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/albums/<int:album_id>/photos/batch', methods=['POST'])
+def batch_add_photos_to_album(album_id):
+    """批量添加照片到相册"""
+    try:
+        from database import SessionLocal, Album, Photo
+        db = SessionLocal()
+        try:
+            album = db.query(Album).filter(Album.id == album_id).first()
+            if not album:
+                return jsonify({'error': '相册不存在'}), 404
+            
+            data = request.get_json()
+            photo_ids = data.get('photo_ids', [])
+            if not photo_ids:
+                return jsonify({'error': 'photo_ids 不能为空'}), 400
+            
+            added = 0
+            skipped = 0
+            
+            for photo_id in photo_ids:
+                photo = db.query(Photo).filter(Photo.id == photo_id).first()
+                if photo and photo not in album.photos:
+                    album.photos.append(photo)
+                    added += 1
+                else:
+                    skipped += 1
+            
+            db.commit()
+            
+            return jsonify({
+                'status': 'completed',
+                'album_id': album_id,
+                'added': added,
+                'skipped': skipped,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 批量添加照片到相册失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/albums/<int:album_id>/duplicate', methods=['POST'])
+def duplicate_album(album_id):
+    """复制相册（含照片引用）"""
+    try:
+        from database import SessionLocal, Album, Photo
+        db = SessionLocal()
+        try:
+            album = db.query(Album).filter(Album.id == album_id).first()
+            if not album:
+                return jsonify({'error': '相册不存在'}), 404
+            
+            # 新名称加" 拷贝"后缀
+            new_name = f"{album.name} 拷贝"
+            counter = 1
+            while db.query(Album).filter(Album.name == new_name).first():
+                new_name = f"{album.name} 拷贝 {counter}"
+                counter += 1
+            
+            new_album = Album(
+                name=new_name,
+                description=album.description,
+                cover_photo_id=album.cover_photo_id,
+            )
+            db.add(new_album)
+            db.flush()
+            
+            # 复制照片引用
+            for photo in album.photos:
+                new_album.photos.append(photo)
+            
+            db.commit()
+            
+            return jsonify({
+                'album': {
+                    'id': new_album.id,
+                    'name': new_album.name,
+                    'photo_count': len(new_album.photos),
+                    'created_at': new_album.created_at.isoformat() if new_album.created_at else None,
+                }
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 复制相册失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/albums/<int:target_id>/merge', methods=['POST'])
+def merge_albums(target_id):
+    """合并相册（源相册保留）"""
+    try:
+        from database import SessionLocal, Album
+        data = request.get_json()
+        source_id = data.get('source_id')
+        
+        if not source_id:
+            return jsonify({'error': 'source_id 不能为空'}), 400
+        
+        db = SessionLocal()
+        try:
+            target = db.query(Album).filter(Album.id == target_id).first()
+            source = db.query(Album).filter(Album.id == source_id).first()
+            
+            if not target or not source:
+                return jsonify({'error': '相册不存在'}), 404
+            
+            added = 0
+            skipped = 0
+            
+            for photo in source.photos:
+                if photo in target.photos:
+                    skipped += 1
+                else:
+                    target.photos.append(photo)
+                    added += 1
+            
+            db.commit()
+            
+            return jsonify({
+                'target_album_id': target_id,
+                'source_album_id': source_id,
+                'added_count': added,
+                'skipped_count': skipped,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 合并相册失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/albums/<int:album_id>/photos/batch-remove', methods=['POST'])
+def batch_remove_photos_from_album(album_id):
+    """批量从相册移除照片"""
+    try:
+        from database import SessionLocal, Album
+        data = request.get_json()
+        photo_ids = data.get('photo_ids', [])
+        
+        db = SessionLocal()
+        try:
+            album = db.query(Album).filter(Album.id == album_id).first()
+            if not album:
+                return jsonify({'error': '相册不存在'}), 404
+            
+            removed = 0
+            skipped = 0
+            
+            for photo_id in photo_ids:
+                photo = next((p for p in album.photos if p.id == photo_id), None)
+                if photo:
+                    album.photos.remove(photo)
+                    removed += 1
+                else:
+                    skipped += 1
+            
+            db.commit()
+            
+            return jsonify({
+                'status': 'completed',
+                'album_id': album_id,
+                'removed': removed,
+                'skipped': skipped,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 批量移除照片失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# 时间线 API (v0.7)
+# ============================================================================
+
+@app.route('/api/timeline/years', methods=['GET'])
+def get_timeline_years():
+    """获取时间线 - 按年分组（支持分批加载）
+
+    查询参数：
+        limit  : 可选，每批数量。不传时返回全部（兼容旧 API）
+        cursor : 可选，整数年份，倒序分页游标，表示「返回该年份之前的年份」
+    响应新增字段：
+        next_cursor : 下一批起始年份（当前批次最小年份），无下一批时为 null
+        has_next    : 是否还有下一批
+    """
+    try:
+        from database import SessionLocal, Photo
+        from sqlalchemy import extract, func
+        db = SessionLocal()
+        try:
+            # 分批参数（都可选，不传时返回全部，兼容旧 API）
+            limit = request.args.get('limit', type=int)
+            cursor = request.args.get('cursor', type=int)  # 倒序分页：返回该年份之前的年份
+
+            # 按年分组统计
+            query = db.query(
+                extract('year', Photo.media_date).label('year'),
+                func.count(Photo.id).label('count')
+            ).filter(
+                Photo.media_date.isnot(None)
+            )
+
+            # 应用游标过滤（倒序：返回年份严格小于 cursor 的记录）
+            if cursor is not None:
+                query = query.filter(extract('year', Photo.media_date) < cursor)
+
+            query = query.group_by(
+                extract('year', Photo.media_date)
+            ).order_by(
+                extract('year', Photo.media_date).desc()
+            )
+
+            # 多取 1 条用于判断是否还有下一批
+            if limit is not None:
+                years_data = query.limit(limit + 1).all()
+                has_next = len(years_data) > limit
+                if has_next:
+                    years_data = years_data[:limit]
+            else:
+                years_data = query.all()
+                has_next = False
+
+            result = []
+            for year_data in years_data:
+                year = int(year_data.year)
+                # 获取该年的 4 张代表性缩略图（按日期均匀分布）
+                cover_photos = db.query(Photo).filter(
+                    extract('year', Photo.media_date) == year,
+                    Photo.file_type == 'photo'
+                ).order_by(Photo.media_date).limit(4).all()
+
+                result.append({
+                    'year': year,
+                    'count': year_data.count,
+                    'cover_photo_id': cover_photos[0].id if cover_photos else None,
+                    'cover_photo_path': cover_photos[0].path if cover_photos else None,
+                    'cover_photo_paths': [p.path for p in cover_photos],
+                })
+
+            # next_cursor 为当前批次最后一年（最小年份），仅在还有下一批时返回
+            next_cursor = result[-1]['year'] if result and has_next else None
+
+            return jsonify({
+                'years': result,
+                'next_cursor': next_cursor,
+                'has_next': has_next,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 获取时间线年份失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/timeline/months', methods=['GET'])
+def get_timeline_months():
+    """获取时间线 - 按月分组（支持分批加载）
+
+    查询参数：
+        year   : 可选，仅统计该年的月份
+        limit  : 可选，每批数量。不传时返回全部（兼容旧 API）
+        cursor : 可选，格式 "YYYY-MM"，倒序分页游标，表示「返回该月份之前的月份」
+    响应新增字段：
+        next_cursor : 下一批起始月份（"YYYY-MM"，当前批次最小年月），无下一批时为 null
+        has_next    : 是否还有下一批
+    """
+    try:
+        from database import SessionLocal, Photo
+        from sqlalchemy import extract, func, or_, and_
+        db = SessionLocal()
+        try:
+            year = request.args.get('year', type=int)
+            # 分批参数（都可选，不传时返回全部，兼容旧 API）
+            limit = request.args.get('limit', type=int)
+            cursor_str = request.args.get('cursor', type=str)  # "YYYY-MM"，倒序分页：返回该月份之前的月份
+
+            query = db.query(
+                extract('year', Photo.media_date).label('year'),
+                extract('month', Photo.media_date).label('month'),
+                func.count(Photo.id).label('count')
+            ).filter(
+                Photo.media_date.isnot(None)
+            )
+
+            if year:
+                query = query.filter(extract('year', Photo.media_date) == year)
+
+            # 应用游标过滤（倒序：返回早于 cursor 的月份）
+            if cursor_str:
+                parts = cursor_str.split('-')
+                if len(parts) == 2:
+                    cursor_year = int(parts[0])
+                    cursor_month = int(parts[1])
+                    query = query.filter(or_(
+                        extract('year', Photo.media_date) < cursor_year,
+                        and_(
+                            extract('year', Photo.media_date) == cursor_year,
+                            extract('month', Photo.media_date) < cursor_month,
+                        ),
+                    ))
+
+            query = query.group_by(
+                extract('year', Photo.media_date),
+                extract('month', Photo.media_date)
+            ).order_by(
+                extract('year', Photo.media_date).desc(),
+                extract('month', Photo.media_date).desc()
+            )
+
+            # 多取 1 条用于判断是否还有下一批
+            if limit is not None:
+                months_data = query.limit(limit + 1).all()
+                has_next = len(months_data) > limit
+                if has_next:
+                    months_data = months_data[:limit]
+            else:
+                months_data = query.all()
+                has_next = False
+
+            result = []
+            for month_data in months_data:
+                y = int(month_data.year)
+                m = int(month_data.month)
+                # 获取该月的 4 张代表性缩略图
+                cover_photos = db.query(Photo).filter(
+                    extract('year', Photo.media_date) == y,
+                    extract('month', Photo.media_date) == m,
+                    Photo.file_type == 'photo'
+                ).order_by(Photo.media_date).limit(4).all()
+
+                result.append({
+                    'year': y,
+                    'month': m,
+                    'count': month_data.count,
+                    'cover_photo_id': cover_photos[0].id if cover_photos else None,
+                    'cover_photo_path': cover_photos[0].path if cover_photos else None,
+                    'cover_photo_paths': [p.path for p in cover_photos],
+                })
+
+            # next_cursor 为当前批次最后一个月（最小年月），仅在还有下一批时返回
+            if result and has_next:
+                last = result[-1]
+                next_cursor = f"{last['year']}-{last['month']:02d}"
+            else:
+                next_cursor = None
+
+            return jsonify({
+                'months': result,
+                'next_cursor': next_cursor,
+                'has_next': has_next,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 获取时间线月份失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/timeline/days', methods=['GET'])
+def get_timeline_days():
+    """获取时间线 - 按日分组"""
+    try:
+        from database import SessionLocal, Photo
+        from sqlalchemy import extract, func
+        db = SessionLocal()
+        try:
+            year = request.args.get('year', type=int)
+            month = request.args.get('month', type=int)
+            
+            query = db.query(
+                func.date(Photo.media_date).label('date'),
+                func.count(Photo.id).label('count')
+            ).filter(
+                Photo.media_date.isnot(None)
+            )
+            
+            if year:
+                query = query.filter(extract('year', Photo.media_date) == year)
+            if month:
+                query = query.filter(extract('month', Photo.media_date) == month)
+            
+            days_data = query.group_by(
+                func.date(Photo.media_date)
+            ).order_by(
+                func.date(Photo.media_date).desc()
+            ).all()
+            
+            result = []
+            for day_data in days_data:
+                date_str = str(day_data.date)
+                # 获取该日的 4 张代表性缩略图
+                cover_photos = db.query(Photo).filter(
+                    func.date(Photo.media_date) == date_str,
+                    Photo.file_type == 'photo'
+                ).order_by(Photo.media_date).limit(4).all()
+
+                result.append({
+                    'date': date_str,
+                    'count': day_data.count,
+                    'cover_photo_id': cover_photos[0].id if cover_photos else None,
+                    'cover_photo_path': cover_photos[0].path if cover_photos else None,
+                    'cover_photo_paths': [p.path for p in cover_photos],
+                })
+
+            return jsonify({'days': result})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 获取时间线日期失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/timeline/photos', methods=['GET'])
+def get_timeline_photos():
+    """获取时间线照片列表"""
+    try:
+        from database import SessionLocal, Photo
+        from sqlalchemy import extract, func, Integer
+        db = SessionLocal()
+        try:
+            year = request.args.get('year', type=int)
+            month = request.args.get('month', type=int)
+            day = request.args.get('day', type=str)
+            page = request.args.get('page', 1, type=int)
+            page_size = request.args.get('page_size', 100, type=int)
+            sort = request.args.get('sort', 'media_date_desc')
+            filters_raw = request.args.get('filters', '')
+            filters = [f.strip() for f in filters_raw.split(',') if f.strip()] if filters_raw else []
+
+            query = db.query(Photo).filter(Photo.media_date.isnot(None))
+
+            if year:
+                query = query.filter(extract('year', Photo.media_date) == year)
+            if month:
+                query = query.filter(extract('month', Photo.media_date) == month)
+            if day:
+                # v0.7.1: SQLite 中 func.date() == '23' 不会匹配（string vs date）
+                # 前端可能传 '23'（day-of-month）或 '2026-06-23'（full date）
+                day_clean = day.lstrip('0') or '0'
+                query = query.filter(func.cast(func.strftime('%d', Photo.media_date), Integer) == int(day_clean))
+
+            # v0.7 §4.3：属性过滤
+            if 'photo' in filters:
+                query = query.filter(Photo.file_type == 'photo')
+            if 'video' in filters:
+                query = query.filter(Photo.file_type == 'video')
+            if 'favorite' in filters:
+                query = query.filter(Photo.is_favorite == True)
+            if 'not_in_album' in filters:
+                from database import PhotoAlbum
+                query = query.filter(~Photo.id.in_(db.query(PhotoAlbum.photo_id)))
+
+            # v0.7 §4.2.1：排序
+            if sort == 'media_date_asc':
+                query = query.order_by(Photo.media_date.asc())
+            elif sort == 'import_date_desc':
+                query = query.order_by(Photo.imported_at.desc())
+            elif sort == 'import_date_asc':
+                query = query.order_by(Photo.imported_at.asc())
+            else:  # media_date_desc（默认）
+                query = query.order_by(Photo.media_date.desc())
+
+            total = query.count()
+            photos = query.offset((page - 1) * page_size).limit(page_size).all()
+            
+            result = []
+            for photo in photos:
+                result.append({
+                    'id': photo.id,
+                    'filename': photo.filename,
+                    'path': photo.path,
+                    'size': photo.size,
+                    'date': photo.media_date.isoformat() if photo.media_date else None,
+                    'type': photo.file_type,
+                    'is_favorite': photo.is_favorite,
+                })
+            
+            return jsonify({
+                'photos': result,
+                'total': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': (total + page_size - 1) // page_size
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 获取时间线照片失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/photos/ids', methods=['GET'])
+def get_photo_ids():
+    """获取照片ID列表（用于二级全选）"""
+    try:
+        from database import SessionLocal, Photo, AlbumPhoto
+        from sqlalchemy import extract
+        
+        db = SessionLocal()
+        try:
+            query = db.query(Photo.id)
+            
+            # 应用筛选条件
+            favorite = request.args.get('favorite', type=bool)
+            if favorite is not None:
+                query = query.filter(Photo.is_favorite == favorite)
+            
+            photo_type = request.args.get('type')
+            if photo_type:
+                query = query.filter(Photo.file_type == photo_type)
+            
+            path = request.args.get('path')
+            if path:
+                query = query.filter(Photo.path.like(f'{path}%'))
+            
+            not_in_album = request.args.get('not_in_album', type=bool)
+            if not_in_album:
+                # 查找不在任何相册中的照片
+                subquery = db.query(AlbumPhoto.photo_id).subquery()
+                query = query.filter(~Photo.id.in_(subquery))
+            
+            album_id = request.args.get('album_id', type=int)
+            if album_id:
+                album = db.query(Album).filter(Album.id == album_id).first()
+                if album:
+                    photo_ids_in_album = [p.id for p in album.photos]
+                    query = query.filter(Photo.id.in_(photo_ids_in_album))
+            
+            from_date = request.args.get('from')
+            to_date = request.args.get('to')
+            if from_date:
+                query = query.filter(Photo.media_date >= from_date)
+            if to_date:
+                query = query.filter(Photo.media_date <= to_date)
+            
+            # 排序
+            query = query.order_by(Photo.media_date.desc(), Photo.id.desc())
+            
+            # 限制最大返回50000
+            ids = [r[0] for r in query.limit(50000).all()]
+            
+            return jsonify({'ids': ids, 'total': len(ids)})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 获取照片ID列表失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# 收藏 API (v0.7)
+# ============================================================================
+
+@app.route('/api/photos/<int:photo_id>/favorite', methods=['POST'])
+def add_favorite(photo_id):
+    """收藏照片"""
+    try:
+        from database import SessionLocal, Photo
+        db = SessionLocal()
+        try:
+            photo = db.query(Photo).filter(Photo.id == photo_id).first()
+            if not photo:
+                return jsonify({'error': '照片不存在'}), 404
+            
+            if photo.is_favorite:
+                return jsonify({'success': True, 'already_favorite': True})
+            
+            photo.is_favorite = True
+            photo.favorited_at = datetime.now()
+            db.commit()
+            
+            return jsonify({'success': True, 'favorited_at': photo.favorited_at.isoformat()})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 收藏失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/photos/<int:photo_id>/favorite', methods=['DELETE'])
+def remove_favorite(photo_id):
+    """取消收藏"""
+    try:
+        from database import SessionLocal, Photo
+        db = SessionLocal()
+        try:
+            photo = db.query(Photo).filter(Photo.id == photo_id).first()
+            if not photo:
+                return jsonify({'error': '照片不存在'}), 404
+            
+            if not photo.is_favorite:
+                return jsonify({'success': True, 'already_unfavorited': True})
+            
+            photo.is_favorite = False
+            photo.favorited_at = None
+            db.commit()
+            
+            return jsonify({'success': True})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 取消收藏失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/photos/batch-favorite', methods=['POST'])
+def batch_favorite():
+    """批量收藏/取消收藏"""
+    try:
+        from database import SessionLocal, Photo
+        data = request.get_json()
+        photo_ids = data.get('photo_ids', [])
+        favorite = data.get('favorite', True)
+        
+        db = SessionLocal()
+        try:
+            photos = db.query(Photo).filter(Photo.id.in_(photo_ids)).all()
+            now = datetime.now() if favorite else None
+            updated = 0
+            skipped = 0
+            
+            for photo in photos:
+                if photo.is_favorite == favorite:
+                    skipped += 1
+                else:
+                    photo.is_favorite = favorite
+                    photo.favorited_at = now
+                    updated += 1
+            
+            db.commit()
+            return jsonify({'success': True, 'updated_count': updated, 'skipped_count': skipped})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 批量收藏失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/photos/favorites', methods=['GET'])
+def get_favorites():
+    """获取收藏列表"""
+    try:
+        from database import SessionLocal, Photo
+        db = SessionLocal()
+        try:
+            page = request.args.get('page', 1, type=int)
+            per_page = request.args.get('per_page', 100, type=int)
+            sort = request.args.get('sort', 'favorited_at_desc')
+            
+            query = db.query(Photo).filter(Photo.is_favorite == True)
+            
+            if sort == 'favorited_at_asc':
+                query = query.order_by(Photo.favorited_at.asc())
+            elif sort == 'media_date_desc':
+                query = query.order_by(Photo.media_date.desc())
+            else:
+                query = query.order_by(Photo.favorited_at.desc())
+            
+            total = query.count()
+            photos = query.offset((page - 1) * per_page).limit(per_page).all()
+            
+            result = []
+            for p in photos:
+                result.append({
+                    'id': p.id,
+                    'filename': p.filename,
+                    'path': p.path,
+                    'size': p.size,
+                    'date': p.media_date.isoformat() if p.media_date else None,
+                    'type': p.file_type,
+                    'is_favorite': p.is_favorite,
+                    'favorited_at': p.favorited_at.isoformat() if p.favorited_at else None,
+                })
+            
+            return jsonify({'photos': result, 'total': total, 'page': page, 'per_page': per_page})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 获取收藏列表失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# XMP 同步 API (v0.7)
+# ============================================================================
+
+@app.route('/api/photos/<int:photo_id>/description', methods=['PUT'])
+def update_photo_description(photo_id):
+    """更新照片描述（同步写 XMP + DB）"""
+    try:
+        from database import SessionLocal, Photo
+        from .xmp_sync import write_xmp_description
+        
+        db = SessionLocal()
+        try:
+            photo = db.query(Photo).filter(Photo.id == photo_id).first()
+            if not photo:
+                return jsonify({'error': '照片不存在'}), 404
+            
+            data = request.get_json()
+            description = data.get('description', '')
+            
+            # 同步写 XMP
+            success, message = write_xmp_description(photo.path, description)
+            
+            # 无论如何都更新 DB
+            photo.description = description
+            db.commit()
+            
+            return jsonify({
+                'status': 'updated',
+                'xmp_sync': success,
+                'message': message
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 更新照片描述失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/photos/<int:photo_id>/title', methods=['PUT'])
+def update_photo_title(photo_id):
+    """更新照片标题（同步写 XMP + DB）"""
+    try:
+        from database import SessionLocal, Photo
+        from .xmp_sync import write_xmp_title
+        
+        db = SessionLocal()
+        try:
+            photo = db.query(Photo).filter(Photo.id == photo_id).first()
+            if not photo:
+                return jsonify({'error': '照片不存在'}), 404
+            
+            data = request.get_json()
+            title = data.get('title', '')
+            
+            # 同步写 XMP
+            success, message = write_xmp_title(photo.path, title)
+            
+            # 无论如何都更新 DB
+            photo.title = title
+            db.commit()
+            
+            return jsonify({
+                'status': 'updated',
+                'xmp_sync': success,
+                'message': message
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 更新照片标题失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# 文件夹操作 API (v0.7)
+# ============================================================================
+
+@app.route('/api/folders/open-in-explorer', methods=['POST'])
+def open_folder_in_explorer():
+    """在资源管理器中打开路径（文件夹或文件）
+    - 文件夹：直接打开
+    - 文件：打开父目录并选中该文件（仅 Windows）
+    """
+    try:
+        import subprocess
+
+        data = request.get_json()
+        target_path = data.get('path')
+
+        if not target_path:
+            return jsonify({'error': '缺少 path 参数'}), 400
+
+        target_path = Path(target_path)
+        if not target_path.exists():
+            return jsonify({'error': f'路径不存在: {target_path}'}), 404
+
+        if sys.platform == 'win32':
+            if target_path.is_dir():
+                subprocess.Popen(['explorer', str(target_path)])
+            else:
+                # Windows: 打开父目录并选中文件
+                subprocess.Popen(['explorer', '/select,', str(target_path)])
+        elif sys.platform == 'darwin':
+            if target_path.is_dir():
+                subprocess.Popen(['open', str(target_path)])
+            else:
+                subprocess.Popen(['open', '-R', str(target_path)])
+        else:
+            # Linux: 只能打开父目录（xdg-open 不支持选中文件）
+            parent = target_path if target_path.is_dir() else target_path.parent
+            subprocess.Popen(['xdg-open', str(parent)])
+
+        return jsonify({'status': 'opened', 'path': str(target_path)})
+    except Exception as e:
+        logger.error(f'[API] 打开资源管理器失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/folders/scan-new', methods=['POST'])
+def scan_new_files():
+    """扫描文件夹中的新增文件"""
+    try:
+        from database import SessionLocal, Photo
+        from .import_manager import scan_directory
+        
+        data = request.get_json()
+        folder_path = data.get('path')
+        
+        if not folder_path:
+            return jsonify({'error': '缺少 path 参数'}), 400
+        
+        folder_path = Path(folder_path)
+        if not folder_path.exists():
+            return jsonify({'error': f'路径不存在: {folder_path}'}), 404
+        
+        if not folder_path.is_dir():
+            return jsonify({'error': f'路径不是目录: {folder_path}'}), 400
+        
+        # 扫描新增文件
+        new_files = scan_directory(str(folder_path))
+        
+        db = SessionLocal()
+        try:
+            added_count = 0
+            for file_info in new_files:
+                # 检查是否已存在
+                existing = db.query(Photo).filter(Photo.path == file_info['path']).first()
+                if not existing:
+                    # 添加新文件到数据库
+                    new_photo = Photo(
+                        filename=file_info['filename'],
+                        path=file_info['path'],
+                        size=file_info['size'],
+                        md5_hash=file_info.get('md5'),
+                        media_date=file_info.get('date'),
+                        file_type=file_info.get('type', 'photo')
+                    )
+                    db.add(new_photo)
+                    added_count += 1
+            
+            db.commit()
+            return jsonify({
+                'status': 'scanned',
+                'path': str(folder_path),
+                'new_files': len(new_files),
+                'added_to_db': added_count
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f'[API] 扫描新增文件失败: {e}')
         return jsonify({'error': str(e)}), 500
 
 

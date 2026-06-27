@@ -713,33 +713,65 @@ class TestImportCheckTargetDuplicates:
             assert data['target_duplicates'] == {}
 
     @patch('backend.api_server.get_album_path')
-    @patch('backend.api_server._compute_md5')
-    def test_import_check_target_duplicates_found(self, mock_calc_md5, mock_get_album_path, client):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            src = Path(tmpdir) / 'src'
-            src.mkdir()
-            album = Path(tmpdir) / 'album'
-            album.mkdir()
+    def test_import_check_target_duplicates_found(self, mock_get_album_path, client):
+        """目标相册中存在相同 MD5 的照片时，应检测为目标重复"""
+        from backend.database import init_db, SessionLocal, Photo
+        from backend.utils import compute_md5
+        from datetime import datetime
 
-            src_file = src / 'photo1.jpg'
-            album_file = album / 'photo1.jpg'
-            content = b'same content for duplicate detection' * 100
-            src_file.write_bytes(content)
-            album_file.write_bytes(content)
+        init_db()
+        session = SessionLocal()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                src = Path(tmpdir) / 'src'
+                src.mkdir()
+                album = Path(tmpdir) / 'album'
+                album.mkdir()
 
-            mock_get_album_path.return_value = str(album)
-            mock_calc_md5.return_value = 'abc123'
+                src_file = src / 'photo1.jpg'
+                content = b'same content for duplicate detection' * 100
+                src_file.write_bytes(content)
+                file_size = len(content)
 
-            with patch('backend.api_server.get_config_manager') as mock_cm:
-                mock_cfg = MagicMock()
-                mock_cfg.get_last_import.return_value = None
-                mock_cm.return_value = mock_cfg
+                # 计算源文件的真实 MD5
+                real_md5 = compute_md5(src_file)
 
-                resp = client.post('/api/import/check', json={'source_path': str(src)})
+                # 向数据库插入一条相册照片记录（与源文件同大小、同 MD5）
+                album_file = album / 'existing.jpg'
+                p = Photo(
+                    filename='existing.jpg',
+                    path=str(album_file),
+                    size=file_size,
+                    md5_hash=real_md5,
+                    created_at=datetime(2024, 1, 1),
+                    modified_at=datetime(2024, 1, 1),
+                    media_date=None,
+                    file_type='photo',
+                    extension='.jpg',
+                    imported_at=datetime(2024, 1, 1),
+                )
+                session.add(p)
+                session.commit()
+                photo_id = p.id
 
-            assert resp.status_code == 200
-            data = json.loads(resp.data)
-            assert len(data['target_duplicates']) > 0
+                mock_get_album_path.return_value = str(album)
+
+                with patch('backend.api_server.get_config_manager') as mock_cm:
+                    mock_cfg = MagicMock()
+                    mock_cfg.get_last_import.return_value = None
+                    mock_cm.return_value = mock_cfg
+
+                    resp = client.post('/api/import/check', json={'source_path': str(src)})
+
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                # 源文件与 DB 记录同 size + 同 MD5，应被检测为目标重复
+                assert len(data['target_duplicates']) > 0
+                assert real_md5 in data['target_duplicates']
+        finally:
+            session.query(Photo).filter(Photo.id == photo_id).delete(synchronize_session=False)
+            session.commit()
+            session.close()
 
     @patch('backend.api_server.get_album_path')
     @patch('backend.api_server._compute_md5')

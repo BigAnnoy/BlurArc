@@ -2,6 +2,12 @@
 pytest fixtures - 测试配置和共享fixtures
 """
 
+import importlib.metadata
+import werkzeug
+
+if not hasattr(werkzeug, '__version__'):
+    werkzeug.__version__ = importlib.metadata.version('werkzeug')
+
 import pytest
 import tempfile
 import shutil

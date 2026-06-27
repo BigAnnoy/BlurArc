@@ -190,9 +190,8 @@ class TestImportManagerWithRealFiles:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / 'photo.jpg'
-            test_file.write_bytes(b'fake photo')
+            test_file.write_bytes(b'\xff\xd8\xff\xe0fake photo with jpeg header')
             
-            # Mock the PIL Image module directly
             import PIL.Image
             original_open = PIL.Image.open
             
@@ -233,8 +232,12 @@ class TestImportManagerWithRealFiles:
             target = Path(tmpdir) / 'target'
             target.mkdir()
             
-            records = manager._load_target_records(target)
+            result = manager._load_target_records(target)
+            assert isinstance(result, tuple)
+            assert len(result) == 2
+            records, size_to_md5s = result
             assert isinstance(records, dict)
+            assert isinstance(size_to_md5s, dict)
 
     def test_resolve_dest_path_no_conflict(self):
         from backend.import_manager import ImportManager
@@ -475,7 +478,7 @@ class TestImportManagerDoImport:
                     return 'same_hash_for_all'
                 
                 with patch.object(manager, '_compute_md5', fake_md5):
-                    manager._do_import("test_003", str(source), str(target), 'copy', skip_source_duplicates=True)
+                    manager._do_import("test_003", str(source), str(target), 'copy')
                 
                 progress = manager.get_progress("test_003")
                 # Should have processed at least some files

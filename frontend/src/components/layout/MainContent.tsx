@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import type { Photo } from '../../types';
 import { PhotoGrid } from '../photos/PhotoGrid';
+import { PhotoToolbar } from '../common/PhotoToolbar';
+import { SelectionBanner } from '../common/SelectionBanner';
 import { useI18n } from '../../contexts/I18nContext';
 
 interface MainContentProps {
@@ -15,59 +18,143 @@ interface MainContentProps {
   onDelete: () => void;
   hasMore?: boolean;
   onLoadMore?: () => void;
+  onFilterChange?: (filters: string[]) => void;
+  onSortChange?: (sort: string) => void;
+  onRemoveFromAlbum?: () => void;
+  albumId?: number | null;
+  // v0.7: 右键菜单
+  onJoinAlbum?: (photoId: string) => void;
+  onJoinAlbums?: (photoIds: string[]) => void;
+  onPhotoDelete?: (photoId: string) => void;
+  onFavoriteChange?: (photoId: string, isFavorite: boolean) => void;
 }
 
-export function MainContent({ title, count, photos, loading, selectionMode, selectedIds, onPhotoClick, onSelect, onSelectAll, onDelete, hasMore, onLoadMore }: MainContentProps) {
+export function MainContent({ title, count, photos, loading, selectionMode, selectedIds, onPhotoClick, onSelect, onSelectAll, onDelete, hasMore, onLoadMore, onFilterChange, onSortChange, onRemoveFromAlbum, albumId, onJoinAlbum, onJoinAlbums, onPhotoDelete, onFavoriteChange }: MainContentProps) {
   const selectedCount = selectedIds.size;
   const { t } = useI18n();
+  const [filters, setFilters] = useState<string[]>([]);
+  const [sort, setSort] = useState('media_date_desc');
+  const [group, setGroup] = useState<'all' | 'month' | 'year'>('all');
+  // v0.7 §3.2.2/§4.2：显示选项 + 缩放（与 PhotoToolbar 公共组件配合）
+  const [displayMode, setDisplayMode] = useState<'square' | 'original'>('square');
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [draggedPhoto, setDraggedPhoto] = useState<string | null>(null);
+  const [dragOverPhoto, setDragOverPhoto] = useState<string | null>(null);
+
+  const filterOptions = [
+    { key: 'photo', label: t('filter.photoOnly'), icon: '📷' },
+    { key: 'video', label: t('filter.videoOnly'), icon: '🎥' },
+    { key: 'favorite', label: t('filter.favoriteOnly'), icon: '⭐' },
+    { key: 'not_in_album', label: t('filter.notInAlbum'), icon: '📁' }
+  ];
+
+  const sortOptions = [
+    { key: 'media_date_desc', label: t('sort.dateDesc') },
+    { key: 'media_date_asc', label: t('sort.dateAsc') },
+    { key: 'import_date_desc', label: t('sort.importDesc') },
+    { key: 'import_date_asc', label: t('sort.importAsc') },
+    { key: 'manual', label: t('sort.manual') }
+  ];
+
+  const groupOptions = [
+    { key: 'all', label: '全部' },
+    { key: 'month', label: '按月' },
+    { key: 'year', label: '按年' }
+  ];
+
+  const handleFilterChange = (newFilters: string[]) => {
+    setFilters(newFilters);
+    onFilterChange?.(newFilters);
+  };
+
+  const handleSortChange = (newSort: string) => {
+    setSort(newSort);
+    onSortChange?.(newSort);
+  };
+
+  const handleDragStart = (photoId: string) => {
+    if (sort === 'manual' && albumId) {
+      setDraggedPhoto(photoId);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent, photoId: string) => {
+    e.preventDefault();
+    if (sort === 'manual' && albumId && draggedPhoto && draggedPhoto !== photoId) {
+      setDragOverPhoto(photoId);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetPhotoId: string) => {
+    e.preventDefault();
+    if (sort === 'manual' && albumId && draggedPhoto && draggedPhoto !== targetPhotoId) {
+      // 重新排序照片
+      const draggedIndex = photos.findIndex(p => p.id === draggedPhoto);
+      const targetIndex = photos.findIndex(p => p.id === targetPhotoId);
+      
+      if (draggedIndex !== -1 && targetIndex !== -1) {
+        const newPhotos = [...photos];
+        const [draggedItem] = newPhotos.splice(draggedIndex, 1);
+        newPhotos.splice(targetIndex, 0, draggedItem);
+        
+        // 这里应该调用后端 API 保存排序，但暂时只更新本地状态
+        // TODO: 调用 api.updateAlbumPhotoOrder(albumId, newPhotos.map(p => p.id))
+      }
+    }
+    
+    setDraggedPhoto(null);
+    setDragOverPhoto(null);
+  };
 
   return (
     <section className="flex-1 flex flex-col overflow-hidden bg-page min-h-0">
-      <div className="flex items-center justify-between px-5 py-3 bg-card border-b border-border">
-        <span className="text-sm font-medium">
-          <span className="text-primary font-semibold">{title}</span>
-          {count > 0 && <span className="text-text-secondary"> · {t('main.photoCount', { count })}</span>}
-          {selectionMode && selectedCount > 0 && <span className="text-primary ml-2">({t('main.selected', { count: selectedCount })})</span>}
-          {loading && <span className="text-text-tertiary ml-2">{t('main.loading')}</span>}
-        </span>
-        <div className="flex gap-2">
-          {selectionMode ? (
-            <>
-              <button
-                onClick={onSelect}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-card border border-border rounded-md text-[13px] text-text-primary cursor-pointer hover:border-primary hover:text-primary transition-all"
-              >
-                {t('common.cancelSelectMode')}
-              </button>
-              <button
-                onClick={onSelectAll}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-card border border-border rounded-md text-[13px] text-text-primary cursor-pointer hover:border-primary hover:text-primary transition-all"
-              >
-                {selectedCount === count ? t('common.cancelSelect') : t('common.selectAll')}
-              </button>
-              <button
-                onClick={onDelete}
-                disabled={selectedCount === 0}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-[13px] transition-all ${selectedCount > 0 ? 'bg-red-500 text-white cursor-pointer hover:bg-red-600' : 'bg-card text-text-tertiary cursor-not-allowed border border-border'}`}
-              >
-                🗑 {t('main.deleteSelected')}
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={onSelect}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-card border border-border rounded-md text-[13px] text-text-primary cursor-pointer hover:border-primary hover:text-primary transition-all"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <rect x="3" y="3" width="7" height="7" />
-                <rect x="14" y="3" width="7" height="7" />
-                <rect x="14" y="14" width="7" height="7" />
-                <rect x="3" y="14" width="7" height="7" />
-              </svg>
-              {t('main.selectMode')}
-            </button>
-          )}
-        </div>
+      {/* 公共工具栏（v0.7 §4.2：与 TimelineView 共用 PhotoToolbar） */}
+      <PhotoToolbar
+        title={title}
+        count={count}
+        loading={loading}
+        displayMode={displayMode}
+        onDisplayModeChange={setDisplayMode}
+        zoomLevel={zoomLevel}
+        onZoomChange={setZoomLevel}
+        filters={filters}
+        onFiltersChange={handleFilterChange}
+        filterOptions={filterOptions}
+        sort={sort}
+        onSortChange={handleSortChange}
+        sortOptions={sortOptions}
+        selectionMode={selectionMode}
+        onSelect={onSelect}
+      />
+      {/* 选择模式 banner（v0.7 §2.7：与 TimelineView 共用 SelectionBanner） */}
+      {selectionMode && (
+        <SelectionBanner
+          selectedCount={selectedCount}
+          totalCount={count}
+          selectedIds={selectedIds}
+          onSelectAll={onSelectAll}
+          onDelete={onDelete}
+          onJoinAlbums={onJoinAlbums}
+          onRemoveFromAlbum={albumId && onRemoveFromAlbum ? onRemoveFromAlbum : undefined}
+          onCancel={onSelect}
+        />
+      )}
+      {/* 分组方式 tabs */}
+      <div className="flex items-center gap-0.5 px-3 bg-card border-b border-border">
+        <span className="text-[11px] text-text-tertiary tracking-[0.05em] mr-1">{t('main.groupBy')}</span>
+        {groupOptions.map(option => (
+          <button
+            key={option.key}
+            onClick={() => setGroup(option.key as 'all' | 'month' | 'year')}
+            className={`px-3.5 py-2 text-[13px] cursor-pointer bg-transparent border-none border-b-2 transition-all ${
+              group === option.key
+                ? 'text-primary font-semibold border-b-primary'
+                : 'text-text-secondary font-medium border-b-transparent hover:text-text-primary hover:border-b-border'
+            }`}
+          >
+            {option.key === 'all' ? t('main.groupAll') : option.key === 'month' ? t('main.groupMonth') : t('main.groupYear')}
+          </button>
+        ))}
       </div>
       {loading && photos.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
@@ -81,6 +168,20 @@ export function MainContent({ title, count, photos, loading, selectionMode, sele
           onPhotoClick={onPhotoClick}
           hasMore={hasMore}
           onLoadMore={onLoadMore}
+          groupBy={group}
+          sort={sort}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          draggedPhoto={draggedPhoto}
+          dragOverPhoto={dragOverPhoto}
+          albumId={albumId}
+          onJoinAlbum={onJoinAlbum}
+          onDelete={onPhotoDelete}
+          onRemoveFromAlbum={onRemoveFromAlbum}
+          onFavoriteChange={onFavoriteChange}
+          displayMode={displayMode}
+          zoomLevel={zoomLevel}
         />
       )}
     </section>

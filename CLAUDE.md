@@ -79,11 +79,17 @@ python scripts/download_ffmpeg.py
 
 ### 路径约定
 
+> **v0.7 起所有用户数据统一放在 `~/Documents/BlurArc/`**，升级/卸载只动 exe 目录。
+
 - 相册目录：用户选择，媒体文件按 `YYYY/YYYY-MM/` 组织
-- 数据库：`项目根目录/.config/photo_manager.db`（开发模式）或 `exe所在目录/.config/`（打包模式）
-- 缩略图缓存：`~/.photomanager/thumbnails/`（用户主目录，跨相册共享）
-- MD5 记录：存储在 SQLite 数据库
-- 用户配置：`~/.photo_organizer_config.json`
+- 数据库：`~/Documents/BlurArc/.config/photo_manager.db`（v0.7 改；v0.6 在 exe 目录）
+- 缩略图缓存：`~/Documents/BlurArc/thumbnails/`（v0.7 改；v0.6 在 `~/.photomanager/`）
+- 通用缓存：`~/Documents/BlurArc/cache/`（v0.7 新增；视频预览帧等）
+- 用户配置：`~/Documents/BlurArc/.config/config.json`（v0.7 改；v0.6 在 `~/.photo_organizer_config.json`）
+- 手机上传：`~/Documents/BlurArc/.config/phone_upload/`
+- 手机配对 token：`~/Documents/BlurArc/.config/mobile_tokens.json`
+- 应用日志：`~/Documents/BlurArc/logs/`
+- 导出文件：`~/Documents/BlurArc/exports/`（v0.8+）
 - FFmpeg：`backend/ffmpeg_binaries/ffmpeg.exe`
 
 ## 功能说明
@@ -122,6 +128,7 @@ python scripts/download_ffmpeg.py
 - **方案/设计阶段不提交 git**：讨论和修改 spec 文档时只写文件，不 commit。等方案最终确认后一次性提交。实现阶段正常提交。
 - 设计方案文档放在 `docs/superpowers/specs/` 目录下。
 - **UI 修改必须先设计原型**：任何 UI 变更，先在 `docs/prototypes/` 目录下用 HTML 设计原型，确认后再实施代码。原型按 `docs/prototypes/<platform>/<feature>-v<version>[-<theme>].html` 命名，详见 `docs/prototypes/README.md`。
+- **AI 编程必须遵守 `docs/AI-RULES.md`**：实施任何功能/修 bug 前，**先读 [docs/AI-RULES.md](docs/AI-RULES.md)**，按 §1 流程输出"影响面分析 + 反例清单 + 分步验证"三件套，再开始改代码。规则每次踩坑后追加。
 
 ## 前端开发
 
@@ -211,4 +218,71 @@ ServiceInfo(SERVICE_TYPE, name, port=self.port, addresses=[...], ...)
 | 2026-06-19 | 原型 Logo SVG 统一管理 + 手机 App 实施计划 | [devlog](docs/devlogs/2026-06-19-prototype-logo-plan.md) |
 | 2026-06-19 | 移动端 UI 重设计实施（7 Phase 完成） | [devlog](.workbuddy/memory/2026-06-19.md) |
 | 2026-06-18 | 移动接入功能（手机上传、配对流程） | [devlog](docs/devlogs/2026-06-18-mobile-access.md) |
+
+---
+
+## 🧠 通用编码准则
+
+> 来源：[Andrej Karpathy 的 LLM 编码准则](https://github.com/forrestchang/andrej-karpathy-skills/blob/main/CLAUDE.md)
+> 与项目特定规则合并使用。**权衡：** 这些准则偏向谨慎而非速度，对琐碎任务可自行判断。
+
+### 1. 编码前先思考
+
+**不要假设。不要掩饰困惑。主动暴露权衡。**
+
+实施前：
+- 明确陈述假设。不确定就问。
+- 存在多种解释时，全部呈现 —— 不要默默选一个。
+- 有更简单的方案时，直说。必要时反驳。
+- 有不清楚的地方，停下。指出困惑点。问。
+
+### 2. 简单优先
+
+**用最少的代码解决问题。不做投机性设计。**
+
+- 不实现需求之外的功能。
+- 不为一次性代码做抽象。
+- 不做未要求的"灵活性"或"可配置性"。
+- 不为不可能发生的场景做错误处理。
+- 如果写了 200 行但 50 行就够，重写。
+
+自问："资深工程师会不会觉得这过度复杂？" 会的话，简化。
+
+### 3. 手术式修改
+
+**只动必须动的地方。只清理自己制造的混乱。**
+
+修改现有代码时：
+- 不要"顺手改进"相邻代码、注释或格式。
+- 不要重构没坏的东西。
+- 匹配现有风格，哪怕你会换种写法。
+- 注意到无关的死代码，提一下 —— 不要删。
+
+你的修改产生孤儿时：
+- 移除因**你的改动**而变得未使用的 import/变量/函数。
+- 不要移除预先存在的死代码，除非被要求。
+
+检验标准：每一行改动都能直接追溯到用户请求。
+
+### 4. 目标驱动执行
+
+**定义成功标准。循环验证直到通过。**
+
+把任务转化为可验证目标：
+- "加校验" → "为非法输入写测试，然后让它们通过"
+- "修 bug" → "写一个能复现 bug 的测试，然后让它通过"
+- "重构 X" → "确保前后测试都通过"
+
+多步任务，给出简短计划：
+```
+1. [步骤] → 验证：[检查点]
+2. [步骤] → 验证：[检查点]
+3. [步骤] → 验证：[检查点]
+```
+
+强成功标准让你独立循环。弱标准（"让它能跑"）需要不断澄清。
+
+---
+
+**这些准则起作用的标志：** diff 里不必要的改动更少、因过度复杂而重写更少、澄清问题出现在实施之前而非犯错之后。
 

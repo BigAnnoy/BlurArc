@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blur Arc - UI v3 (暗色) - 加入相册/相册封面/预览按钮/Stats 重新设计</title>
+<!--
+  v3 UI 重新设计（暗色版）
+  与 light 版同结构，关键差异：
+  - 背景/边框/文字色用 dark 变量
+  - 卡片背景略偏深，hover 更亮
+  - stats card 暗色下柔和（与 light 版 v3 同款）
+  - 预览页（深色场景）保持深色
+-->
+<style>
+  .dark {
+    --bg-page: #111827;
+    --bg-card: #1a1d27;
+    --bg-card-hover: #232634;
+    --bg-primary-light: rgba(34, 211, 238, 0.08);
+    --bg-overlay: rgba(0, 0, 0, 0.7);
+    --border: #2a2d3a;
+    --border-strong: #3a3d4a;
+    --text-primary: #e8eaed;
+    --text-secondary: #9ca3af;
+    --text-tertiary: #6b7280;
+    --primary: #22d3ee;
+    --primary-hover: #0891b2;
+    --primary-light: rgba(34, 211, 238, 0.45);
+    --primary-lighter: rgba(34, 211, 238, 0.18);
+    --danger: #ef4444;
+    --danger-hover: #dc2626;
+    --favorite: #fb7185;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+  }
+  :root {
+    --bg-page: #111827;
+    --bg-card: #1a1d27;
+    --bg-card-hover: #232634;
+    --bg-primary-light: rgba(34, 211, 238, 0.08);
+    --bg-overlay: rgba(0, 0, 0, 0.7);
+    --border: #2a2d3a;
+    --border-strong: #3a3d4a;
+    --text-primary: #e8eaed;
+    --text-secondary: #9ca3af;
+    --text-tertiary: #6b7280;
+    --primary: #22d3ee;
+    --primary-hover: #0891b2;
+    --primary-light: rgba(34, 211, 238, 0.45);
+    --primary-lighter: rgba(34, 211, 238, 0.18);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 24px;
+    user-select: none;
+  }
+  h2 { font-size: 18px; font-weight: 600; margin: 24px 0 12px; color: var(--text-primary); }
+  h3 { font-size: 14px; font-weight: 500; margin: 12px 0 6px; color: var(--text-secondary); }
+  .desc { font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px; line-height: 1.5; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+
+  /* ===== Section 1: 加入相册 modal v3 (dark) ===== */
+  .modal-mask {
+    position: fixed; inset: 0; z-index: 50;
+    background: var(--bg-overlay);
+    display: none; align-items: center; justify-content: center;
+  }
+  .modal-mask.open { display: flex; }
+  .modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 520px;
+    max-width: 90vw;
+    max-height: 85vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-title { font-size: 16px; font-weight: 600; }
+  .modal-close {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: none; background: transparent;
+    color: var(--text-secondary);
+    font-size: 18px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal-close:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); }
+
+  .modal-search { padding: 14px 20px 8px; }
+  .modal-search input {
+    width: 100%; height: 36px;
+    padding: 0 12px 0 36px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px; background: var(--bg-page);
+    color: var(--text-primary);
+    outline: none;
+  }
+  .modal-search input:focus { border-color: var(--primary); }
+  .modal-search-wrap { position: relative; }
+  .modal-search-wrap svg {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px; color: var(--text-tertiary);
+  }
+
+  .album-pick-grid {
+    padding: 8px 16px 12px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    overflow-y: auto;
+    max-height: 380px;
+  }
+  .album-card {
+    position: relative;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--bg-card);
+  }
+  .album-card:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-card-hover);
+  }
+  .album-card.selected {
+    border-color: var(--primary);
+    background: var(--primary-light);
+  }
+  .album-card .check {
+    position: absolute; top: 6px; right: 6px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--primary);
+    color: #111827;
+    display: none; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    box-shadow: 0 0 0 2px var(--bg-card);
+  }
+  .album-card.selected .check { display: flex; }
+  .album-card .cover {
+    width: 48px; height: 48px;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+    background: var(--bg-page);
+  }
+  .cover-4 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1px; }
+  .cover-4 > div { background-size: cover; background-position: center; }
+  .cover-1 { background-size: cover; background-position: center; }
+  .cover-default {
+    position: relative; width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.25) 0%, transparent 50%),
+      radial-gradient(circle at 70% 70%, rgba(8, 145, 178, 0.25) 0%, transparent 50%),
+      linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: var(--primary);
+    font-size: 24px;
+    gap: 4px;
+  }
+  .cover-default .label {
+    font-size: 10px; font-weight: 500; color: var(--text-tertiary);
+    letter-spacing: 0.5px;
+  }
+  .cover-empty {
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, var(--primary-light), var(--primary-lighter));
+    color: var(--primary);
+    font-size: 22px; font-weight: 500;
+  }
+  .album-card .info { flex: 1; min-width: 0; }
+  .album-card .name {
+    font-size: 13px; font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .album-card .count {
+    font-size: 11px; color: var(--text-secondary);
+    margin-top: 2px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  .album-card.create-new { border-style: dashed; background: transparent; }
+  .album-card.create-new:hover { border-color: var(--primary); background: var(--primary-light); }
+  .album-card.create-new .name { color: var(--primary); }
+
+  .modal-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-card);
+  }
+  .modal-footer .summary { font-size: 12px; color: var(--text-secondary); }
+  .modal-footer .summary strong { color: var(--primary); font-weight: 600; }
+  .btn {
+    height: 32px; padding: 0 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-left: 8px;
+  }
+  .btn:hover { background: var(--bg-card-hover); }
+  .btn.primary {
+    background: var(--primary); color: #111827; border-color: var(--primary);
+  }
+  .btn.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+  .btn.primary:disabled {
+    background: var(--text-tertiary); border-color: var(--text-tertiary);
+    cursor: not-allowed;
+  }
+
+  /* ===== Section 2: 相册集默认封面 (dark) ===== */
+  .album-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 16px; margin-top: 8px;
+  }
+  .album-tile { cursor: pointer; transition: transform 0.15s; }
+  .album-tile:hover { transform: translateY(-2px); }
+  .album-tile-cover {
+    position: relative; aspect-ratio: 1 / 1;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    background: var(--bg-card);
+  }
+  /* 拼贴 — absolute 撑满保证高度传递 */
+  .tile-4, .tile-3, .tile-2 { position: absolute; inset: 0; display: grid; gap: 2px; }
+  .tile-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+  .tile-4 > div { background-size: cover; background-position: center; }
+  .tile-3 { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; }
+  .tile-3 > div:first-child { grid-row: 1 / 3; background-size: cover; background-position: center; }
+  .tile-3 > div:nth-child(2) { background-size: cover; background-position: center; }
+  .tile-3 > div:nth-child(3) { background-size: cover; background-position: center; }
+  .tile-2 { grid-template-columns: 1fr 1fr; }
+  .tile-2 > div { background-size: cover; background-position: center; }
+  .tile-1 { background-size: cover; background-position: center; }
+  .tile-empty {
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, var(--primary-light), var(--primary-lighter));
+    color: var(--primary);
+    font-size: 42px; font-weight: 300;
+  }
+  /* 默认封面（所有相册都用这一个，含空相册） */
+  .tile-default {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.25) 0%, transparent 50%),
+      radial-gradient(circle at 70% 70%, rgba(8, 145, 178, 0.25) 0%, transparent 50%),
+      linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: var(--primary);
+    font-size: 28px;
+    gap: 4px;
+  }
+  .tile-default .label {
+    font-size: 11px; font-weight: 500; color: var(--text-tertiary);
+    letter-spacing: 0.5px;
+  }
+  .album-tile-logo {
+    position: absolute; top: 8px; left: 8px;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: rgba(26, 29, 39, 0.85);
+    color: var(--primary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    box-shadow: var(--shadow-sm);
+    backdrop-filter: blur(8px);
+    z-index: 2;
+  }
+  .album-tile-count {
+    position: absolute; bottom: 8px; right: 8px;
+    padding: 3px 8px; border-radius: 12px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white; font-size: 11px;
+    font-family: 'SF Mono', monospace;
+    backdrop-filter: blur(8px);
+    z-index: 2;
+  }
+  .album-tile-name {
+    margin-top: 8px; font-size: 13px; font-weight: 500;
+    color: var(--text-primary); text-align: center;
+  }
+  .album-tile-sub {
+    font-size: 11px; color: var(--text-tertiary);
+    text-align: center; margin-top: 2px;
+  }
+
+  /* ===== Section 3: 预览页 v3 (dark) ===== */
+  .preview-shell {
+    background: #050810; color: white;
+    height: 620px; border-radius: var(--radius-md);
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: 56px 1fr 100px;
+    grid-template-columns: 1fr 340px;
+    grid-template-areas:
+      "topbar topbar"
+      "main   panel"
+      "thumbs thumbs";
+  }
+  .preview-topbar {
+    grid-area: topbar;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+  }
+  .preview-main {
+    grid-area: main; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    background: #02050a; overflow: hidden;
+    padding: 20px;
+  }
+  /* v3：主图比 v2 略小（max 90%）让按钮不贴边，按钮位置 left-5/right-5 不变 */
+  .preview-image-frame {
+    width: 90%;
+    max-width: 900px;
+    height: auto;
+    aspect-ratio: 3 / 2;
+    max-height: 85%;
+    border-radius: var(--radius-md);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 24px 64px rgba(0, 0, 0, 0.4);
+    background: linear-gradient(135deg, #ff8a5b 0%, #c156e6 50%, #5b8def 100%);
+    background-size: cover;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .nav-arrow {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: white; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+    backdrop-filter: blur(12px);
+  }
+  .nav-arrow:hover { background: rgba(255, 255, 255, 0.2); transform: translateY(-50%) scale(1.06); }
+  .nav-arrow.prev { left: 20px; }
+  .nav-arrow.next { right: 20px; }
+  .nav-arrow svg { width: 20px; height: 20px; }
+  .preview-panel {
+    grid-area: panel;
+    background: rgba(255, 255, 255, 0.04);
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 20px;
+  }
+  .preview-thumbs {
+    grid-area: thumbs;
+    background: rgba(255, 255, 255, 0.04);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 20px;
+  }
+  .thumb {
+    width: 80px; height: 80px;
+    border-radius: var(--radius-sm);
+    background-size: cover; background-position: center;
+    opacity: 0.7; cursor: pointer;
+    border: 2px solid transparent;
+  }
+  .thumb.active { opacity: 1; border-color: var(--primary); }
+
+  .preview-old { margin-top: 12px; }
+  .preview-old .preview-image-frame {
+    max-width: 100%; max-height: 100%;
+    aspect-ratio: 3 / 2;
+    width: 100%; height: 100%;
+    border-radius: 0; box-shadow: none;
+  }
+  .preview-old .nav-arrow.prev { left: 36px; }
+  .preview-old .nav-arrow.next { right: 36px; }
+
+  /* ===== Section 4: Stats card v3 (dark) ===== */
+  .stats-card-v3 {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-md);
+    padding: 16px; width: 280px;
+  }
+  .stats-row { display: flex; justify-content: space-between; align-items: baseline; }
+  .stats-row .label { font-size: 12px; color: var(--text-secondary); }
+  .stats-row .value {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 18px; font-weight: 600;
+    color: var(--text-primary);
+  }
+  .stats-row + .stats-row { margin-top: 10px; }
+  .stats-card-v3 .divider {
+    height: 1px; background: rgba(255, 255, 255, 0.06); margin: 12px 0;
+  }
+  .stats-card-v3 .footer-hint {
+    font-size: 11px; color: var(--text-tertiary); margin-top: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .stats-card-v3 .footer-hint .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  }
+
+  .stats-card-old {
+    background: var(--bg-primary-light);
+    border-radius: var(--radius-md);
+    padding: 16px; width: 280px;
+  }
+  .stats-card-old .value { color: var(--primary); }
+</style>
+</head>
+<body>
+
+<h2 style="margin-top: 0;">v3 UI 重新设计 (暗色版)</h2>
+<p class="desc">本文件演示暗色模式下 4 项升级。预览页（深色）背景不受整体明暗影响。点击"打开 Modal"体验加入相册交互。</p>
+<hr>
+
+<h2>① 加入相册 Modal v3 (暗色)</h2>
+<p class="desc">暗色下：modal 背景 --bg-card 偏深，封面拼贴、emoji logo、选中态 cyan 边框都很清晰。</p>
+<button class="btn primary" onclick="document.getElementById('modal-join').classList.add('open')">打开 Modal</button>
+
+<div class="modal-mask" id="modal-join" onclick="if(event.target===this) this.classList.remove('open')">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">加入相册</div>
+      <button class="modal-close" onclick="document.getElementById('modal-join').classList.remove('open')">×</button>
+    </div>
+    <div class="modal-search">
+      <div class="modal-search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" placeholder="搜索相册名称…">
+      </div>
+    </div>
+    <div class="album-pick-grid" id="albumGrid">
+      <div class="album-card selected" onclick="this.classList.toggle('selected');updateFooter()">
+        <div class="check">✓</div>
+        <div class="cover"><div class="cover-default">
+          <span>📷</span>
+          <span class="label">PHOTOS</span>
+        </div></div>
+        <div class="info">
+          <div class="name">家庭相册</div>
+          <div class="count">12 张</div>
+        </div>
+      </div>
+      <div class="album-card" onclick="this.classList.toggle('selected');updateFooter()">
+        <div class="check">✓</div>
+        <div class="cover"><div class="cover-default">
+          <span>📷</span>
+          <span class="label">PHOTOS</span>
+        </div></div>
+        <div class="info">
+          <div class="name">旅行 2025</div>
+          <div class="count">45 张</div>
+        </div>
+      </div>
+      <div class="album-card" onclick="this.classList.toggle('selected');updateFooter()">
+        <div class="check">✓</div>
+        <div class="cover"><div class="cover-default">
+          <span>📷</span>
+          <span class="label">PHOTOS</span>
+        </div></div>
+        <div class="info">
+          <div class="name">2024 春节</div>
+          <div class="count">78 张</div>
+        </div>
+      </div>
+      <div class="album-card" onclick="this.classList.toggle('selected');updateFooter()">
+        <div class="check">✓</div>
+        <div class="cover"><div class="cover-default">
+          <span>📷</span>
+          <span class="label">PHOTOS</span>
+        </div></div>
+        <div class="info">
+          <div class="name">美食精选</div>
+          <div class="count">23 张</div>
+        </div>
+      </div>
+      <div class="album-card" onclick="this.classList.toggle('selected');updateFooter()">
+        <div class="check">✓</div>
+        <div class="cover"><div class="cover-empty">💼</div></div>
+        <div class="info">
+          <div class="name">工作截图</div>
+          <div class="count">0 张</div>
+        </div>
+      </div>
+      <div class="album-card create-new" onclick="alert('打开新建相册 modal')">
+        <div class="cover"><div class="cover-empty">+</div></div>
+        <div class="info">
+          <div class="name">新建相册…</div>
+          <div class="count">创建一个新相册</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span class="summary">已选 <strong id="selectedCount">1</strong> 个相册 · 含 3 张照片</span>
+      <div>
+        <button class="btn" onclick="document.getElementById('modal-join').classList.remove('open')">取消</button>
+        <button class="btn primary" id="joinBtn">加入 1 个相册</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr>
+
+<h2>② 相册集默认封面 / Logo (暗色)</h2>
+<p class="desc">所有相册（含空相册）共用一个默认封面：深 slate 渐变 + cyan 光晕 + 📷 图标 + "PHOTOS" 文字。照片数徽章贴在封面右下角；空相册无 count。</p>
+
+<div class="album-grid">
+  <div class="album-tile">
+    <div class="album-tile-cover">
+      <div class="tile-default">
+        <span>📷</span>
+        <span class="label">PHOTOS</span>
+      </div>
+      <div class="album-tile-count">12</div>
+    </div>
+    <div class="album-tile-name">家庭相册</div>
+    <div class="album-tile-sub">更新于 2 天前</div>
+  </div>
+  <div class="album-tile">
+    <div class="album-tile-cover">
+      <div class="tile-default">
+        <span>📷</span>
+        <span class="label">PHOTOS</span>
+      </div>
+      <div class="album-tile-count">45</div>
+    </div>
+    <div class="album-tile-name">旅行 2025</div>
+    <div class="album-tile-sub">更新于 1 周前</div>
+  </div>
+  <div class="album-tile">
+    <div class="album-tile-cover">
+      <div class="tile-default">
+        <span>📷</span>
+        <span class="label">PHOTOS</span>
+      </div>
+      <div class="album-tile-count">78</div>
+    </div>
+    <div class="album-tile-name">2024 春节</div>
+    <div class="album-tile-sub">更新于 1 月前</div>
+  </div>
+  <div class="album-tile">
+    <div class="album-tile-cover">
+      <div class="tile-default">
+        <span>📷</span>
+        <span class="label">PHOTOS</span>
+      </div>
+      <div class="album-tile-count">23</div>
+    </div>
+    <div class="album-tile-name">美食精选</div>
+    <div class="album-tile-sub">更新于 3 天前</div>
+  </div>
+  <div class="album-tile">
+    <div class="album-tile-cover">
+      <div class="tile-default">
+        <span>📷</span>
+        <span class="label">PHOTOS</span>
+      </div>
+      <div class="album-tile-count">2</div>
+    </div>
+    <div class="album-tile-name">猫猫相册</div>
+    <div class="album-tile-sub">更新于 5 天前</div>
+  </div>
+  <div class="album-tile">
+    <div class="album-tile-cover">
+      <div class="tile-default">
+        <span>📷</span>
+        <span class="label">PHOTOS</span>
+      </div>
+      <div class="album-tile-name">工作截图</div>
+    <div class="album-tile-sub">空相册</div>
+  </div>
+</div>
+
+<hr>
+
+<h2>③ 预览页 v3 (暗色版预览页背景已固定深色)</h2>
+<p class="desc">改动：主图从 100% 缩到 90% (max 900px)，按钮位置 left-5/right-5（20px）保持不变，主图缩小后按钮到主图边缘有 ~30px 间隙不贴边。预览壳高度调到 620px。</p>
+<h3>v3 — 主图缩小居中</h3>
+<div class="preview-shell">
+  <div class="preview-topbar">
+    <div style="font-size: 13px;">屏幕截图_2026-06-23.jpeg · 1 / 24</div>
+  </div>
+  <div class="preview-main">
+    <button class="nav-arrow prev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div class="preview-image-frame"></div>
+    <button class="nav-arrow next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></button>
+  </div>
+  <div class="preview-panel" style="font-size: 12px; opacity: 0.6;">右侧信息面板…</div>
+  <div class="preview-thumbs">
+    <div class="thumb active" style="background: linear-gradient(135deg, #ff8a5b, #c156e6)"></div>
+    <div class="thumb" style="background: linear-gradient(135deg, #5b8def, #c156e6)"></div>
+    <div class="thumb" style="background: linear-gradient(135deg, #f59e0b, #ef4444)"></div>
+  </div>
+</div>
+
+<h3>v2 旧版 — 主图撑满，按钮紧贴边缘</h3>
+<div class="preview-shell preview-old">
+  <div class="preview-topbar">
+    <div style="font-size: 13px;">屏幕截图_2026-06-23.jpeg · 1 / 24</div>
+  </div>
+  <div class="preview-main">
+    <button class="nav-arrow prev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div class="preview-image-frame"></div>
+    <button class="nav-arrow next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></button>
+  </div>
+  <div class="preview-panel" style="font-size: 12px; opacity: 0.6;">右侧信息面板…</div>
+  <div class="preview-thumbs">
+    <div class="thumb active" style="background: linear-gradient(135deg, #ff8a5b, #c156e6)"></div>
+    <div class="thumb" style="background: linear-gradient(135deg, #5b8def, #c156e6)"></div>
+    <div class="thumb" style="background: linear-gradient(135deg, #f59e0b, #ef4444)"></div>
+  </div>
+</div>
+
+<hr>
+
+<h2>④ Stats card v3 (暗色下柔和版)</h2>
+<p class="desc">数字色用 --text-primary 替代 --primary；背景用中性透明而非 cyan tint；新增底部"服务运行中"指示灯。</p>
+<div style="display: flex; gap: 24px;">
+  <div>
+    <h3>v2 旧版</h3>
+    <div class="stats-card-old">
+      <div class="stats-row">
+        <span class="label">总文件数</span>
+        <span class="value">12,786</span>
+      </div>
+      <div class="stats-row">
+        <span class="label">总大小</span>
+        <span class="value">42.6 GB</span>
+      </div>
+    </div>
+  </div>
+  <div>
+    <h3>v3 新版</h3>
+    <div class="stats-card-v3">
+      <div class="stats-row">
+        <span class="label">总文件数</span>
+        <span class="value">12,786</span>
+      </div>
+      <div class="stats-row">
+        <span class="label">总大小</span>
+        <span class="value">42.6 GB</span>
+      </div>
+      <div class="divider"></div>
+      <div class="footer-hint">
+        <span class="dot"></span>
+        <span>服务运行中</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function updateFooter() {
+    const cards = document.querySelectorAll('.album-card.selected:not(.create-new)');
+    const count = cards.length;
+    document.getElementById('selectedCount').textContent = count;
+    const btn = document.getElementById('joinBtn');
+    btn.textContent = `加入 ${count} 个相册`;
+    btn.disabled = count === 0;
+  }
+</script>
+
+</body>
+</html>

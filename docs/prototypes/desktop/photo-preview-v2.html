@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blur Arc - 照片预览 v2 (家用 · 与主页同风格)</title>
+<style>
+  /* ===== 与主页 album-management-v2-light.html 完全一致 ===== */
+  :root {
+    --bg-page: #f0f2f5;
+    --bg-card: #ffffff;
+    --bg-primary-light: rgba(8, 145, 178, 0.08);
+    --bg-hover: rgba(8, 145, 178, 0.05);
+    --border: #e5e7eb;
+    --border-strong: #d1d5db;
+    --text-primary: #1a2332;
+    --text-secondary: #6b7280;
+    --text-tertiary: #9ca3af;
+    --primary: #0891b2;
+    --primary-hover: #0e7490;
+    --primary-light: rgba(8, 145, 178, 0.08);
+    --danger: #ef4444;
+    --danger-hover: #dc2626;
+    --favorite: #f43f5e;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ===== 整体布局（与主页一致的 3 行：topbar / main+panel / thumbs）===== */
+  .preview-shell {
+    display: grid;
+    grid-template-rows: 56px 1fr 100px;
+    grid-template-columns: 1fr 340px;
+    grid-template-areas:
+      "topbar topbar"
+      "main   panel"
+      "thumbs thumbs";
+    height: 100vh;
+    width: 100vw;
+    background: var(--bg-page);
+  }
+  .preview-shell.no-panel {
+    grid-template-columns: 1fr 0;
+  }
+
+  /* ===== 顶部工具栏（与主页 header 同风格：白底浅边框）===== */
+  .topbar {
+    grid-area: topbar;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+    z-index: 10;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
+  .topbar-right { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+
+  .back-btn {
+    width: 34px; height: 34px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    background: transparent; border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .back-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .back-btn svg { width: 18px; height: 18px; }
+
+  .file-meta { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+  .file-name {
+    font-size: 14px; font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 380px;
+  }
+  .file-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    margin-top: 2px;
+  }
+  .file-sub .dot { margin: 0 6px; opacity: 0.4; }
+  .file-sub .index { color: var(--primary); font-weight: 600; }
+
+  /* icon button（与主页 header-btn 一致）*/
+  .icon-btn {
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    background: transparent; border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .icon-btn.active { color: var(--primary); background: var(--primary-light); }
+  .icon-btn.fav.active { color: var(--favorite); background: rgba(244, 63, 94, 0.08); }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .icon-btn:disabled { color: var(--text-tertiary); cursor: not-allowed; }
+
+  .divider-v { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+  .icon-btn-ghost { background: transparent !important; border-color: transparent !important; }
+  .icon-btn-ghost:hover { background: var(--bg-page) !important; }
+
+  /* 顶栏标题：类型徽章 + 位置 */
+  .topbar-title {
+    display: flex; align-items: center; gap: 10px;
+    margin-left: 8px;
+  }
+  .type-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 24px; padding: 0 10px;
+    font-size: 12px; font-weight: 500;
+    border-radius: 12px;
+  }
+  .type-badge svg { width: 10px; height: 10px; }
+  .type-badge.video { background: var(--primary-light); color: var(--primary); }
+  .type-badge.photo { background: var(--bg-page); color: var(--text-secondary); }
+  /* 非视频时显示照片徽章，隐藏视频徽章 */
+  .preview-shell.is-video .type-badge.video { display: none; }
+  .preview-shell:not(.is-video) .type-badge.photo { display: none; }
+  .position { font-size: 12px; color: var(--text-tertiary); font-family: 'SF Mono', monospace; }
+
+  /* ===== 主图区（浅灰底，与主页视图区同）===== */
+  .main-area {
+    grid-area: main;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    min-width: 0; min-height: 0;
+    padding: 24px;
+  }
+  .main-image-wrap {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  /* v0.7：主图尽量大，左右各留 76px：24 padding + 44 按钮 + 8 安全间隙 */
+  .main-image {
+    width: 100%;
+    max-width: calc(100% - 152px);
+    height: auto;
+    aspect-ratio: 3 / 2;
+    max-height: 100%;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    background: linear-gradient(135deg, #ff8a5b 0%, #c156e6 50%, #5b8def 100%);
+    flex-shrink: 0;
+  }
+  .main-image.portrait { aspect-ratio: 2 / 3; }
+  .main-image.square { aspect-ratio: 1 / 1; }
+  .main-image.landscape { aspect-ratio: 3 / 2; }
+
+  /* 视频主图：与图片同尺寸，默认隐藏 */
+  .main-video {
+    width: 90%;
+    max-width: 900px;
+    height: auto;
+    max-height: 85%;
+    aspect-ratio: 3 / 2;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    background: #000;
+    flex-shrink: 0;
+    display: none;
+    object-fit: contain;
+  }
+  /* 视频态：隐藏图片，显示视频 */
+  .preview-shell.is-video .main-image { display: none; }
+  .preview-shell.is-video .main-video { display: block; }
+  /* 隐藏视频原生控件（默认隐藏，hover 才显示由 JS 控制）*/
+  .main-video::-webkit-media-controls { display: none !important; }
+  .preview-shell.is-video.show-controls .main-video::-webkit-media-controls { display: flex !important; }
+
+  /* 左右翻页按钮（与主页风格统一：白底圆角浅边框）*/
+  .nav-arrow {
+    position: absolute;
+    top: 50%; transform: translateY(-50%);
+    width: 44px; height: 44px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    z-index: 5;
+    box-shadow: var(--shadow-md);
+  }
+  .nav-arrow:hover {
+    background: var(--bg-card);
+    color: var(--primary);
+    border-color: var(--primary);
+    transform: translateY(-50%) scale(1.05);
+  }
+  .nav-arrow:disabled { opacity: 0.4; cursor: not-allowed; }
+  .nav-arrow svg { width: 20px; height: 20px; }
+  .nav-prev { left: 0; }
+  .nav-next { right: 0; }
+
+  /* ===== 右侧面板（家用：少信息，多留白）===== */
+  .info-panel {
+    grid-area: panel;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex; flex-direction: column;
+  }
+  .info-panel::-webkit-scrollbar { width: 6px; }
+  .info-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .panel-section {
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-section:last-child { border-bottom: none; }
+
+  .panel-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 10px;
+  }
+
+  /* 标题（家用大字号） */
+  .title-input {
+    width: 100%;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-primary);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.35;
+    padding: 6px 8px;
+    margin: -6px -8px 4px;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .title-input:hover { background: var(--bg-page); }
+  .title-input:focus { outline: none; background: var(--bg-page); border-color: var(--primary); }
+  .title-input::placeholder { color: var(--text-tertiary); font-weight: 500; }
+
+  /* 描述（家用的"小日记"感） */
+  .desc-input {
+    width: 100%;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.65;
+    padding: 6px 8px;
+    margin: 0 -8px;
+    border-radius: var(--radius-sm);
+    resize: none;
+    font-family: inherit;
+    min-height: 48px;
+  }
+  .desc-input:hover { background: var(--bg-page); }
+  .desc-input:focus { outline: none; background: var(--bg-page); border-color: var(--primary); }
+  .desc-input::placeholder { color: var(--text-tertiary); }
+
+  /* 拍摄信息：日期行 + chip 组（统一字体） */
+  .meta-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 10px;
+  }
+  .meta-icon { width: 14px; height: 14px; color: var(--text-tertiary); flex-shrink: 0; }
+  .meta-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 400;
+  }
+  .meta-chips {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .meta-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 24px;
+    padding: 0 9px;
+    background: var(--bg-page);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .meta-chip:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+  .meta-chip svg { width: 12px; height: 12px; }
+
+  /* 所属相册（卡片式，醒目） */
+  .album-list { display: flex; flex-direction: column; gap: 8px; }
+  .album-link {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 10px;
+    background: var(--bg-page);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .album-link:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+  }
+  .album-link .thumb {
+    width: 48px; height: 48px;
+    border-radius: var(--radius-sm);
+    flex: 0 0 auto;
+    box-shadow: var(--shadow-sm);
+  }
+  .album-link .info { flex: 1; min-width: 0; }
+  .album-link .info .name {
+    font-size: 14px; font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .album-link .info .count {
+    font-size: 11px; color: var(--text-secondary);
+    margin-top: 2px;
+  }
+  .album-link .chevron { color: var(--text-tertiary); }
+  .album-link .chevron svg { width: 14px; height: 14px; }
+
+  /* 标签（家用的软标签） */
+  .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag {
+    padding: 5px 12px;
+    background: var(--bg-page);
+    color: var(--text-secondary);
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: all 0.15s;
+  }
+  .tag:hover { background: var(--primary-light); color: var(--primary); }
+  .tag.person { background: var(--primary-light); color: var(--primary); }
+  .tag.add-tag {
+    background: transparent;
+    border: 1px dashed var(--border-strong);
+    color: var(--text-tertiary);
+    cursor: pointer;
+  }
+  .tag.add-tag:hover { color: var(--primary); border-color: var(--primary); }
+
+  /* ===== 底部缩略图条（白底浅边框，与主页风格一致）===== */
+  .thumbs-bar {
+    grid-area: thumbs;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 20px;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .thumbs-bar::-webkit-scrollbar { height: 6px; }
+  .thumbs-bar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .thumb-item {
+    flex: 0 0 auto;
+    width: 80px; height: 80px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.15s;
+    position: relative;
+    background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+  }
+  .thumb-item:hover { transform: translateY(-2px); }
+  .thumb-item.active {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-light);
+  }
+  .thumb-item.video::after {
+    content: '';
+    position: absolute; top: 6px; right: 6px;
+    width: 18px; height: 18px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>');
+    background-size: 10px 10px; background-position: center; background-repeat: no-repeat;
+  }
+  /* 视频缩略图：左下角显示时长 */
+  .thumb-item.video .duration {
+    position: absolute; bottom: 4px; left: 4px;
+    font-size: 10px; color: white;
+    background: rgba(0, 0, 0, 0.65);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'SF Mono', monospace;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+
+<div class="preview-shell" id="previewShell">
+
+  <!-- ========== 顶部工具栏 ========== -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="back-btn" title="返回 (Esc)" onclick="alert('返回')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
+      <div class="file-meta">
+        <div class="file-name">IMG_4782.HEIC</div>
+        <div class="file-sub">
+          <span class="index">3 / 156</span>
+          <span class="dot">·</span>
+          <span>2026-10-25 14:32</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="topbar-left">
+      <button class="icon-btn icon-btn-ghost" title="关闭 (Esc)" onclick="alert('关闭预览')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
+      <div class="topbar-title">
+        <span class="type-badge video" id="typeBadge" title="视频">
+          <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          视频
+        </span>
+        <span class="type-badge photo" id="typeBadgePhoto" title="照片">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 3l-1.5 1.5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-12a2 2 0 0 0-2-2h-3.5L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>
+          照片
+        </span>
+        <span class="position" id="position">3 / 156</span>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <button class="icon-btn fav active" title="已收藏" id="favBtn" onclick="toggleFav()">
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      </button>
+      <div class="divider-v"></div>
+      <button class="icon-btn active" title="信息面板 (i)" id="panelBtn" onclick="togglePanel()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      </button>
+      <button class="icon-btn" title="幻灯片播放" id="slideshowBtn" onclick="toggleSlideshow()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== 主图区（图片/视频动态切换）========== -->
+  <div class="main-area">
+    <div class="main-image-wrap" id="mainWrap">
+      <button class="nav-arrow nav-prev" title="上一张 (←)" onclick="navPhoto(-1)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+
+      <!-- 图片模式：渐变占位（真实场景下是 <img>） -->
+      <div class="main-image landscape" id="mainImage"></div>
+
+      <!-- 视频模式：原生 <video>，默认隐藏 -->
+      <video class="main-video" id="mainVideo" muted loop playsinline controls
+             src="https://www.w3schools.com/html/mov_bbb.mp4"></video>
+
+      <button class="nav-arrow nav-next" title="下一张 (→)" onclick="navPhoto(1)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== 右侧面板（家用：少信息，多留白）========== -->
+  <div class="info-panel" id="infoPanel">
+
+    <!-- 标题 + 描述 -->
+    <div class="panel-section">
+      <input class="title-input" value="夕阳下的故宫角楼" placeholder="为这张照片添加标题" />
+      <textarea class="desc-input" placeholder="为这一刻写点什么…">去年秋天和家人一起去的，光线特别好，角楼的倒影也很美。</textarea>
+    </div>
+
+    <!-- 拍摄信息：日期 + 比例 + 尺寸（chip 样式，字体统一） -->
+    <div class="panel-section">
+      <div class="panel-label">拍摄信息</div>
+
+      <div class="meta-row">
+        <svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span class="meta-text">2026 年 10 月 25 日 · 14:32</span>
+      </div>
+
+      <div class="meta-chips">
+        <span class="meta-chip" title="宽高比">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="1"/></svg>
+          3 : 2
+        </span>
+        <span class="meta-chip" title="像素尺寸">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>
+          4032 × 3024
+        </span>
+        <span class="meta-chip" title="文件大小">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6a9 3 0 0 0 18 0V5"/><path d="M3 11v6a9 3 0 0 0 18 0v-6"/></svg>
+          4.2 MB
+        </span>
+      </div>
+    </div>
+
+    <!-- 所属相册 -->
+    <div class="panel-section">
+      <div class="panel-label">所属相册</div>
+      <div class="album-list">
+        <div class="album-link">
+          <div class="thumb" style="background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);"></div>
+          <div class="info">
+            <div class="name">2025 旅行</div>
+            <div class="count">78 张</div>
+          </div>
+          <span class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span>
+        </div>
+        <div class="album-link">
+          <div class="thumb" style="background: linear-gradient(135deg, #22d3ee 0%, #3b82f6 100%);"></div>
+          <div class="info">
+            <div class="name">北京回忆</div>
+            <div class="count">23 张</div>
+          </div>
+          <span class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span>
+        </div>
+        <div class="album-link">
+          <div class="thumb" style="background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);"></div>
+          <div class="info">
+            <div class="name">2025 春节</div>
+            <div class="count">156 张</div>
+          </div>
+          <span class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========== 底部缩略图条（动态渲染，混合视频/图片）========== -->
+  <div class="thumbs-bar" id="thumbsBar"></div>
+</div>
+
+<script>
+  /* ====== 模拟数据：156 张混排（包含 12 段视频） ====== */
+  const TOTAL = 156;
+  const videoIndices = new Set([3, 12, 27, 45, 58, 71, 84, 98, 112, 126, 140, 153]); // 0-based
+  const colors = [
+    'linear-gradient(135deg, #fb923c 0%, #f43f5e 100%)',
+    'linear-gradient(135deg, #f472b6 0%, #a855f7 100%)',
+    'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
+    'linear-gradient(135deg, #a78bfa 0%, #6366f1 100%)',
+    'linear-gradient(135deg, #60a5fa 0%, #06b6d4 100%)',
+    'linear-gradient(135deg, #34d399 0%, #10b981 100%)',
+    'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+    'linear-gradient(135deg, #f87171 0%, #dc2626 100%)',
+    'linear-gradient(135deg, #c084fc 0%, #8b5cf6 100%)',
+    'linear-gradient(135deg, #818cf8 0%, #4f46e5 100%)',
+    'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)',
+    'linear-gradient(135deg, #4ade80 0%, #16a34a 100%)',
+  ];
+  const durations = ['0:08', '0:15', '0:24', '0:32', '0:45', '1:02', '1:18', '1:34', '2:05', '2:48', '3:12', '4:30'];
+  // 标题（与图库混排风格一致）
+  const titles = [
+    '樱花盛开', '海边日落', '城市夜景', '山间小道', '窗台时光',
+    '午后咖啡', '旧城漫步', '老街味道', '海上日出', '森林深处',
+    '雪后初晴', '雨后彩虹'
+  ];
+  let current = 2; // 当前是第 3 张（视频演示用）
+
+  /* ====== 缩略图条渲染 ====== */
+  function renderThumbs() {
+    const bar = document.getElementById('thumbsBar');
+    let html = '';
+    for (let i = 0; i < TOTAL; i++) {
+      const isVideo = videoIndices.has(i);
+      const isActive = i === current;
+      const color = colors[i % colors.length];
+      let inner = '';
+      if (isVideo) {
+        const dur = durations[Math.floor(i / 13) % durations.length];
+        inner = `<span class="duration">${dur}</span>`;
+      }
+      html += `<div class="thumb-item${isVideo ? ' video' : ''}${isActive ? ' active' : ''}"
+                   style="background: ${color};"
+                   data-index="${i}"
+                   onclick="goToPhoto(${i})">${inner}</div>`;
+    }
+    bar.innerHTML = html;
+    // 滚到活动项居中
+    requestAnimationFrame(() => {
+      const active = bar.querySelector('.thumb-item.active');
+      if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    });
+  }
+
+  /* ====== 切换到某张：根据类型切换 DOM ====== */
+  function goToPhoto(idx) {
+    if (idx < 0 || idx >= TOTAL) return;
+    current = idx;
+    const shell = document.getElementById('previewShell');
+    const video = document.getElementById('mainVideo');
+    const image = document.getElementById('mainImage');
+    const isVideo = videoIndices.has(idx);
+
+    if (isVideo) {
+      shell.classList.add('is-video');
+      // 真实场景：video.src = `/api/photos/${id}/file`; video.play();
+      // 原型：保持 demo URL 即可
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    } else {
+      shell.classList.remove('is-video');
+      video.pause();
+    }
+
+    // 位置 / 徽章 / 缩略图高亮
+    document.getElementById('position').textContent = `${idx + 1} / ${TOTAL}`;
+    renderThumbs();
+  }
+
+  function navPhoto(dir) {
+    let next = current + dir;
+    if (next < 0) next = TOTAL - 1;
+    if (next >= TOTAL) next = 0;
+    goToPhoto(next);
+  }
+
+  /* ====== 视频放完自动跳下一张（仅视频态、且无手动翻页） ====== */
+  document.getElementById('mainVideo').addEventListener('ended', () => {
+    navPhoto(1);
+  });
+
+  /* ====== 视频态：hover / 移动显示原生控件 ====== */
+  const wrap = document.getElementById('mainWrap');
+  let hideTimer;
+  function showControls() {
+    document.getElementById('previewShell').classList.add('show-controls');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      document.getElementById('previewShell').classList.remove('show-controls');
+    }, 2500);
+  }
+  wrap.addEventListener('mousemove', showControls);
+  wrap.addEventListener('click', (e) => {
+    // 点击主图区（避开翻页按钮）显示/隐藏控件
+    if (e.target.closest('.nav-arrow')) return;
+    if (e.target.closest('.main-video')) {
+      const v = document.getElementById('mainVideo');
+      if (v.paused) v.play(); else v.pause();
+    }
+  });
+
+  function toggleFav() {
+    document.getElementById('favBtn').classList.toggle('active');
+  }
+  function togglePanel() {
+    const shell = document.getElementById('previewShell');
+    const panel = document.getElementById('infoPanel');
+    const btn = document.getElementById('panelBtn');
+    const isHidden = panel.style.display === 'none';
+    panel.style.display = isHidden ? 'flex' : 'none';
+    shell.classList.toggle('no-panel', !isHidden);
+    btn.classList.toggle('active', isHidden);
+  }
+  function toggleSlideshow() {
+    document.getElementById('slideshowBtn').classList.toggle('active');
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') alert('关闭预览 (Esc)');
+    if (e.key === 'ArrowLeft') navPhoto(-1);
+    if (e.key === 'ArrowRight') navPhoto(1);
+    if (e.key === 'i' || e.key === 'I') togglePanel();
+    if (e.key === ' ') {
+      // 空格：视频态切换播放/暂停
+      e.preventDefault();
+      const v = document.getElementById('mainVideo');
+      if (v.style.display !== 'none' && document.getElementById('previewShell').classList.contains('is-video')) {
+        if (v.paused) v.play(); else v.pause();
+      }
+    }
+  });
+
+  /* ====== 启动 ====== */
+  renderThumbs();
+  goToPhoto(current); // 初始化：第 3 张（视频演示）
+</script>
+</body>
+</html>

@@ -21,15 +21,27 @@ from .utils import compute_md5
 logger = logging.getLogger(__name__)
 
 
+def _get_user_data_dir() -> Path:
+    """
+    v0.7: 所有用户数据统一放在 ~/Documents/BlurArc/
+    升级/卸载只动 exe 目录，用户数据不受影响
+    """
+    if os.name == 'nt':  # Windows
+        base = Path(os.environ.get('USERPROFILE', Path.home()))
+    else:  # macOS / Linux
+        base = Path.home()
+    
+    data_dir = base / 'Documents' / 'BlurArc'
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+
 def _get_app_data_dir() -> Path:
     """
-    获取应用数据根目录（存放 .config/、缓存等）。
-    - 打包模式：exe 所在目录（方便用户找到配置）
-    - 开发模式：项目根目录
+    v0.7: 统一使用 ~/Documents/BlurArc/
+    旧版本（v0.6）在 exe 旁边，已迁移
     """
-    if getattr(sys, 'frozen', False):
-        return Path(sys.executable).parent
-    return Path(__file__).parent.parent
+    return _get_user_data_dir()
 
 
 class ConfigManager:

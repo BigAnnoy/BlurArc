@@ -145,52 +145,58 @@ class TestMobileServerEndpoints:
     def _make_client(self, monkeypatch, tmp_path):
         import backend.mobile_access_server as mod
         monkeypatch.setattr(mod, "TOKENS_FILE", tmp_path / "tokens.json")
-        monkeypatch.setattr(mod, "PAIR_RATE_LIMIT", 3)
         server = mod.MobileAccessServer()
         return server, server.app.test_client()
 
     def test_pair_rate_limit(self, monkeypatch, tmp_path):
-        """验证 /pair 端点 rate limiting"""
+        """验证 pairing/request 端点重复请求替换行为"""
         server, client = self._make_client(monkeypatch, tmp_path)
-        # 前 3 次应成功
-        for _ in range(3):
-            resp = client.get("/pair")
-            assert resp.status_code == 200
-            data = json.loads(resp.data)
-            assert "pairing_code" in data
-        # 第 4 次应被 429 拒绝
-        resp = client.get("/pair")
-        assert resp.status_code == 429
+        # 发起配对请求
+        resp = client.post("/api/mobile/pairing/request",
+                           json={"device_name": "Test Phone"})
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["status"] == "requested"
+        # 再次发起应替换旧请求
+        resp = client.post("/api/mobile/pairing/request",
+                           json={"device_name": "Phone 2"})
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["status"] == "requested"
 
     def test_full_pairing_flow(self, monkeypatch, tmp_path):
-        """完整配对流程：生成码 → 手机请求 → PC 确认 → 手机获取 token"""
+        """完整配对流程：手机请求 → PC 确认 → 手机提交码 → 获取 token"""
         server, client = self._make_client(monkeypatch, tmp_path)
 
-        # Step 1: PC 生成配对码
-        resp = client.get("/pair")
+        # Step 1: 手机发起配对请求
+        resp = client.post("/api/mobile/pairing/request",
+                           json={"device_name": "Test Phone"})
         data = json.loads(resp.data)
+        assert data["status"] == "requested"
+
+        # Step 2: 手机轮询状态（未确认，应为 pending）
+        resp = client.get("/api/mobile/pairing/pending")
+        data = json.loads(resp.data)
+        assert data["status"] == "pending"
+
+        # Step 3: PC 确认配对 → 生成配对码
+        resp = client.post("/api/mobile/pairing/confirm")
+        data = json.loads(resp.data)
+        assert data["status"] == "confirmed"
         code = data["pairing_code"]
 
-        # Step 2: 手机发送配对请求
-        resp = client.post("/api/mobile/pair-request",
+        # Step 4: 手机再次轮询，状态变为 confirmed
+        resp = client.get("/api/mobile/pairing/pending")
+        data = json.loads(resp.data)
+        assert data["status"] == "confirmed"
+
+        # Step 5: 手机提交配对码 → 获取 token
+        resp = client.post("/api/mobile/pairing/submit-code",
                            json={"code": code, "device_name": "Test Phone"})
         data = json.loads(resp.data)
-        assert data["status"] == "pending"
-
-        # Step 3: 手机轮询状态（还没确认，应为 pending）
-        resp = client.get(f"/api/mobile/pair-status?code={code}")
-        data = json.loads(resp.data)
-        assert data["status"] == "pending"
-
-        # Step 4: PC 确认配对
-        token = server.token_manager.confirm_pair_request(code)
+        assert data["status"] == "paired"
+        token = data["token"]
         assert token
-
-        # Step 5: 手机再次轮询，获取 token
-        resp = client.get(f"/api/mobile/pair-status?code={code}")
-        data = json.loads(resp.data)
-        assert data["status"] == "accepted"
-        assert data["token"] == token
 
         # Step 6: 使用 token 验证
         resp = client.get("/api/mobile/verify",
@@ -201,8 +207,8 @@ class TestMobileServerEndpoints:
     def test_cors_headers(self, monkeypatch, tmp_path):
         """验证 CORS headers 存在"""
         server, client = self._make_client(monkeypatch, tmp_path)
-        resp = client.get("/pair")
-        # flask_cors 应添加 CORS headers
+        resp = client.post("/api/mobile/pairing/request",
+                           json={"device_name": "Test Phone"})
         assert "Access-Control-Allow-Origin" in resp.headers
 
     def test_verify_endpoint_rejects_invalid(self, monkeypatch, tmp_path):
