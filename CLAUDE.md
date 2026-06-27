@@ -208,6 +208,8 @@ ServiceInfo(SERVICE_TYPE, name, port=self.port, addresses=[...], ...)
 
 | 日期 | 主题 | 文件 |
 |------|------|------|
+| 2026-06-27 | 相册默认封面拍立得堆叠设计 + 公共组件化 | [devlog](docs/devlogs/2026-06-27-album-cover-default.md) |
+| 2026-06-27 | Timeline 对齐 Apple Photos（3 tab + 双击导航） | [devlog](docs/devlogs/2026-06-27-timeline-apple-photos-refactor.md) |
 | 2026-06-22 | mDNS 广播修复（ServiceInfo 参数顺序 + 自动启动） | [devlog](docs/devlogs/2026-06-22-mdns-broadcast-fix.md) |
 | 2026-06-22 | 导入预检目标重复检测性能修复（删除 rglob 兜底） | [devlog](docs/devlogs/2026-06-22-import-target-dedup-perf.md) |
 | 2026-06-22 | 手机端首次连接照片加载卡死修复（Dio sendTimeout + SQL 索引） | [devlog](docs/devlogs/2026-06-22-mobile-first-load-fix.md) |
