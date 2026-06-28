@@ -85,3 +85,4 @@ test_pairing_*.py
 
 # ── Temporary debug files ────────────────────────────────
 .tmp_*.txt
+.*_diff*.txt
