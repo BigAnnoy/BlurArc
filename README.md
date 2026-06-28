@@ -1,14 +1,8 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/版本-v0.6.0-gold?style=flat-square" />
+  <img src="https://img.shields.io/badge/版本-v0.7.0-gold?style=flat-square" />
   <img src="https://img.shields.io/badge/Python-3.8+-blue?style=flat-square&logo=python" />
   <img src="https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square" />
   <img src="https://img.shields.io/badge/许可证-MIT-lightgrey?style=flat-square" />
-</p>
-
-<p align="center">
-  <img src="docs/badges/coverage-backend.svg" alt="Backend Coverage" />
-  <img src="docs/badges/coverage-frontend.svg" alt="Frontend Coverage" />
-  <img src="docs/badges/coverage-flutter.svg" alt="Flutter Coverage" />
 </p>
 
 <p align="center">
@@ -22,21 +16,64 @@
 
 市面上的照片管理工具要么依赖云端、要么停止维护。Blur Arc 是一个**完全本地**的照片/视频管理器——数据不离机，按拍摄日期自动归档，导入时智能去重。
 
-## 核心能力
+## 核心功能
 
-| | |
-|---|---|
-| **智能归档** | 读取 EXIF 拍摄时间，自动整理至 `YYYY/YYYY-MM/` 目录 |
-| **高效去重** | 文件大小预筛 + MD5 精确比对，减少 99% 无效 I/O |
-| **可暂停导入** | 多线程并行，实时进度，随时暂停/继续/取消 |
-| **视频支持** | FFmpeg 集成，HTTP Range 拖拽播放，自动提取时长与编码信息 |
-| **全格式预览** | HEIC / TIFF / BMP / RAW 自动转 JPEG 缩略图 |
-| **批量操作** | 多选删除、复制/移动导入、右键菜单、键盘快捷键 |
-| **手机互联** | Flutter 移动端 App，局域网无线浏览相册、推送照片（mDNS 发现 + 安全配对） |
-| **自动配对** | PC 端弹 6 位配对码 + Token 鉴权，避免二维码扫描失败 |
-| **mDNS 零配置** | PC 启动自动广播 `_blurarc._tcp.local.`，手机自动发现，无需手输 IP |
-| **跨设备适配** | 同一份代码适配手机竖屏 / 平板横屏 / 桌面 PC，统一暗/亮主题 |
-| **上传闭环** | 手机选图推送 → PC 自动归档 → ImportDialog 弹窗通知 → 一键导入 |
+### 智能归档
+
+- **EXIF 日期读取**：自动从照片/视频提取拍摄时间
+- **按日期归档**：整理至 `YYYY/YYYY-MM/` 目录结构
+- **原子计数器命名**：同秒连拍自动编号（`20240315_143022_001.jpg`）
+- **重复文件处理**：加 `_dup` 后缀保留，供用户手动审查
+
+### 高效导入
+
+- **两阶段去重**：文件大小预筛 + MD5 精确比对，减少 99% 无效 I/O
+- **可暂停导入**：多线程并行，实时进度，随时暂停/继续/取消
+- **复制/移动模式**：导入时选择保留源文件或移动导入
+- **HEIC/HEIF/AVIF 支持**：magic bytes 检测，iPhone 照片不丢日期
+- **10K 文件导入优化**：600s → ~140s（节省 77%）
+
+### 浏览体验
+
+- **时间线视图**：按年/月/日分组浏览，Apple Photos 风格
+- **文件夹树浏览**：侧边栏目录树，展开/折叠，快速导航
+- **相册管理**：创建/编辑/删除相册，照片可加入多个相册
+- **收藏功能**：一键收藏照片，快速访问收藏列表
+- **批量选择**：多选删除、批量操作，支持全选/反选
+- **缩放控制**：3 级缩放（小/中/大），适应不同屏幕
+- **暗/亮主题**：跟随系统或手动切换，统一视觉风格
+
+### 视频支持
+
+- **FFmpeg 集成**：视频缩略图生成、元数据提取
+- **HTTP Range 播放**：支持任意 Seek，拖拽进度条
+- **自动提取信息**：时长、分辨率、编码信息
+- **原生播放**：浏览器内直接播放，无需外部播放器
+
+### 全格式预览
+
+- **支持格式**：JPG / PNG / HEIC / TIFF / BMP / RAW / WEBP / GIF
+- **自动转换**：HEIC / TIFF / BMP / ICO 自动转 JPEG 缩略图
+- **视频预览**：MP4 / MOV / AVI / MKV 等主流格式
+- **错误占位图**：缩略图加载失败显示友好提示
+
+### 手机互联
+
+- **Flutter 移动端 App**：支持 Android / iOS / 平板
+- **局域网浏览**：手机无线浏览 PC 端相册，流畅滚动
+- **推送照片**：手机选图推送到 PC，自动归档到 `YYYY/YYYY-MM/`
+- **mDNS 自动发现**：PC 启动自动广播，手机自动发现，无需手输 IP
+- **安全配对**：6 位配对码 + Token 鉴权，避免二维码扫描失败
+- **上传闭环**：手机推送 → PC 自动归档 → 弹窗通知 → 一键导入
+
+### 其他功能
+
+- **右键菜单**：预览 / 打开文件 / 删除 / 打开资源管理器
+- **预览翻页**：← → 键翻页，显示「3/12」索引徽标
+- **Toast 通知**：操作反馈右下角滑入动画，不打断操作流
+- **统计信息**：照片数/视频数/时间跨度
+- **导出功能**：批量导出照片到指定目录
+- **索引重建**：支持增量/全量重建索引，保留收藏状态
 
 ## 快速开始
 
@@ -84,13 +121,13 @@ BlurArc/
 ├── src/BlurArc.py                 # 主入口
 ├── backend/
 │   ├── api_server.py              # REST API（35+ 端点）
-│   ├── mobile_access_server.py     # 移动接入服务（独立端口）
-│   ├── zeroconf_publisher.py     # mDNS 局域网广播
+│   ├── mobile_access_server.py    # 移动接入服务（独立端口）
+│   ├── zeroconf_publisher.py      # mDNS 局域网广播
 │   ├── import_manager.py          # 异步导入 + 两阶段去重
 │   ├── thumbnail_manager.py       # 缩略图生成与缓存
 │   ├── video_processor.py         # FFmpeg 视频处理
 │   ├── database.py                # 数据模型
-│   └── config_manager.py          # 配置管理
+│   └── config_manager.py          # 配置管理 + 索引重建
 ├── frontend/                      # React + TypeScript 前端
 ├── blurarc_app/                   # Flutter 移动端 App
 ├── docs/                          # 文档与落地页
@@ -120,8 +157,8 @@ Blur Arc 提供 Flutter 移动端伴侣 App（[blurarc_app/](blurarc_app/)），
 
 - **浏览相册**：按月份分组的照片墙，流畅滚动，缩略图 → 中等预览 → 一键下载原图
 - **推送照片**：手机相册批量选图，上传到 PC 端自动归档到 `YYYY/YYYY-MM/`
-- **mDNS 自动发现**：手机打开 App 即可看到同一局域网内的 PC（`_blurarc._tcp.local.`）
-- **安全配对**：PC 端弹 6 位配对码 + Token 鉴权，避免二维码扫描失败
+- **mDNS 自动发现**：手机打开 App 即可看到同一局域网内的 PC
+- **安全配对**：PC 端弹 6 位配对码 + Token 鉴权
 - **跨设备适配**：手机竖屏、平板横屏自动切换布局，统一暗/亮主题
 
 ### 启动流程
@@ -135,55 +172,6 @@ PC 端：python src/BlurArc.py    →  自动开启移动接入服务 + mDNS 广
 开始浏览 / 上传
 ```
 
-### 移动端相关端点
-
-```
-POST /api/mobile/pairing/request         # 发起配对
-POST /api/mobile/pairing/submit-code     # 提交配对码
-GET  /api/mobile/photos/sections         # 月份分组
-GET  /api/mobile/photos/by-month?ym=...  # 单月照片
-GET  /api/mobile/thumbnail?path=...      # 缩略图（带 Token）
-GET  /api/mobile/file?path=...           # 原图（带 Token）
-GET  /api/mobile/preview?path=...        # 中等预览
-POST /api/mobile/upload                  # 上传文件
-POST /api/mobile/upload/done             # 通知 PC 端有上传完成
-```
-
-完整移动端 API 与 PC 端 API 文档见 [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
-
-### 约束
-
-- **Android 模拟器不支持 mDNS**（NAT 隔离组播），自动发现只能在真机测试；模拟器需手动输入 `10.0.2.2:8900`
-- App 内部版本 `1.0` 与 PC 端 `v0.6.0` 解耦
-
----
-
-## API 概览
-
-```
-GET  /api/health                    # 健康检查
-GET  /api/album/stats               # 统计（照片数/视频数/时间跨度）
-GET  /api/album/tree                # 目录树
-GET  /api/album/photos?path=...     # 照片列表
-GET  /api/album/thumbnail?path=...  # 缩略图
-GET  /api/album/preview?path=...    # 特殊格式预览
-POST /api/import/check              # 导入预检（去重 + 统计）
-POST /api/import/start              # 启动异步导入
-GET  /api/import/progress/<id>      # 实时进度
-POST /api/import/pause/<id>         # 暂停
-POST /api/import/resume/<id>        # 继续
-POST /api/files/delete              # 批量删除
-GET  /api/mobile/status             # 移动接入开关
-POST /api/mobile/pairing/start      # PC 端发起配对（弹配对码）
-GET  /api/mobile/pairing/pending    # 等待手机输入的配对码
-POST /api/mobile/pairing/confirm    # PC 端确认
-GET  /api/mobile/devices            # 已配对设备列表
-POST /api/mobile/revoke             # 撤销单台设备
-POST /api/mobile/upload/done        # 移动端通知上传完成（弹 ImportDialog）
-```
-
-完整 API 文档见 [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
-
 ## 开发
 
 ```bash
@@ -195,6 +183,10 @@ python src/BlurArc.py
 cd frontend
 npm install
 npm run dev
+
+# 前端构建
+cd frontend
+npm run build
 ```
 
 ## 许可证
