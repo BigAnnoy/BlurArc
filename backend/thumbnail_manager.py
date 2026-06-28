@@ -23,9 +23,6 @@ try:
 except ImportError:
     _HEIF_AVAILABLE = False
 
-# 数据库模块
-from .database import SessionLocal, Photo
-
 # 视频处理模块
 from .video_processor import VideoProcessor
 
@@ -206,9 +203,6 @@ class ThumbnailManager:
             # 保存到缓存目录
             img.save(str(output_path), 'JPEG', quality=85, optimize=True, progressive=True)
             
-            # 更新数据库中的缩略图路径
-            self._update_photo_thumbnail_path(image_path, output_path)
-            
             return output_path
             
         except UnidentifiedImageError:
@@ -237,8 +231,6 @@ class ThumbnailManager:
             )
             
             if success:
-                # 更新数据库中的缩略图路径
-                self._update_photo_thumbnail_path(video_path, output_path)
                 return output_path
             else:
                 logger.error(f"生成视频缩略图失败: {video_path}")
@@ -247,27 +239,6 @@ class ThumbnailManager:
         except Exception as e:
             logger.error(f"生成视频缩略图失败 {video_path}: {e}")
             return None
-    
-    def _update_photo_thumbnail_path(self, file_path: Path, thumbnail_path: Path) -> None:
-        """
-        更新数据库中的缩略图路径
-        
-        Args:
-            file_path: 原始文件路径
-            thumbnail_path: 缩略图路径
-        """
-        db = SessionLocal()
-        try:
-            photo = db.query(Photo).filter(Photo.path == str(file_path)).first()
-            if photo:
-                photo.thumbnail_path = str(thumbnail_path)
-                photo.modified_at = datetime.now()
-                db.commit()
-        except Exception as e:
-            logger.warning(f"更新数据库缩略图路径失败: {e}")
-            db.rollback()
-        finally:
-            db.close()
     
     # -------------------------------------------------------------------------
     # HEIC / 特殊格式预览支持

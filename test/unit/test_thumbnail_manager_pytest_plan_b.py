@@ -355,48 +355,6 @@ class TestThumbnailEdgeCases:
 class TestThumbnailErrorHandling:
     """错误处理：DB 异常、cache_dir 不存在、并发下的异常"""
 
-    def test_update_db_path_with_no_photo_row(self, temp_thumb_dir):
-        """DB 中无对应 Photo 行时静默忽略"""
-        mgr = ThumbnailManager()
-        mgr.cache_dir = temp_thumb_dir
-        with patch("backend.thumbnail_manager.SessionLocal") as mock_session:
-            mock_db = MagicMock()
-            mock_db.query.return_value.filter.return_value.first.return_value = None
-            mock_session.return_value = mock_db
-            # 不应抛异常
-            mgr._update_photo_thumbnail_path(
-                Path("/fake/path.jpg"), Path("/fake/thumb.jpg")
-            )
-
-    def test_update_db_path_with_existing_photo(self, temp_thumb_dir):
-        """DB 中有对应 Photo 行时更新 thumbnail_path"""
-        mgr = ThumbnailManager()
-        mgr.cache_dir = temp_thumb_dir
-        with patch("backend.thumbnail_manager.SessionLocal") as mock_session:
-            mock_db = MagicMock()
-            mock_photo = MagicMock()
-            mock_db.query.return_value.filter.return_value.first.return_value = mock_photo
-            mock_session.return_value = mock_db
-            mgr._update_photo_thumbnail_path(
-                Path("/fake/path.jpg"), Path("/fake/thumb.jpg")
-            )
-            assert mock_photo.thumbnail_path == str(Path("/fake/thumb.jpg"))
-            mock_db.commit.assert_called_once()
-
-    def test_update_db_path_exception_is_swallowed(self, temp_thumb_dir):
-        """DB 更新失败时不抛异常（warn 日志后继续）"""
-        mgr = ThumbnailManager()
-        mgr.cache_dir = temp_thumb_dir
-        with patch("backend.thumbnail_manager.SessionLocal") as mock_session:
-            mock_db = MagicMock()
-            mock_db.query.side_effect = Exception("db down")
-            mock_session.return_value = mock_db
-            # 不应抛异常
-            mgr._update_photo_thumbnail_path(
-                Path("/fake/path.jpg"), Path("/fake/thumb.jpg")
-            )
-            mock_db.rollback.assert_called_once()
-
     def test_get_thumbnail_sync_exception_in_generate(self, tmp_path, make_image, temp_thumb_dir):
         """缩略图生成抛异常时返回 None（不崩溃）"""
         mgr = ThumbnailManager()

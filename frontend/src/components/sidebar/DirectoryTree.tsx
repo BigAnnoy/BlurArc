@@ -16,7 +16,7 @@ interface DirectoryTreeProps {
 
 export function DirectoryTree({ rootDir, selectedPath, onSelect, onRefreshCounters }: DirectoryTreeProps) {
   const { t } = useI18n();
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set([rootDir?.path || '']));
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null);
 
   const handleShowInExplorer = async (path: string) => {
@@ -99,7 +99,7 @@ export function DirectoryTree({ rootDir, selectedPath, onSelect, onRefreshCounte
         </div>
         {hasChildren && isExpanded && (
           <div>
-            {dir.children!.map((child) => renderDirNode(child, depth + 1))}
+            {[...dir.children!].reverse().map((child) => renderDirNode(child, depth + 1))}
           </div>
         )}
       </div>

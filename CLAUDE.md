@@ -129,6 +129,7 @@ python scripts/download_ffmpeg.py
 - 设计方案文档放在 `docs/superpowers/specs/` 目录下。
 - **UI 修改必须先设计原型**：任何 UI 变更，先在 `docs/prototypes/` 目录下用 HTML 设计原型，确认后再实施代码。原型按 `docs/prototypes/<platform>/<feature>-v<version>[-<theme>].html` 命名，详见 `docs/prototypes/README.md`。
 - **AI 编程必须遵守 `docs/AI-RULES.md`**：实施任何功能/修 bug 前，**先读 [docs/AI-RULES.md](docs/AI-RULES.md)**，按 §1 流程输出"影响面分析 + 反例清单 + 分步验证"三件套，再开始改代码。规则每次踩坑后追加。
+- **实施任务必须使用子代理**：任何实施任务都应拆分为子代理执行，目的是避免主 agent 上下文被大量代码修改/测试输出占满。拆分方式和数量根据实际情况灵活安排，可并行也可串行。例如：代码改动量大时拆实施子代理；测试输出多时拆测试子代理；需要评审时拆评审子代理。不必固定拆分几个、不必固定拆分哪些阶段。
 
 ## 前端开发
 

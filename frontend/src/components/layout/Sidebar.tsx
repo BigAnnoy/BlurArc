@@ -58,8 +58,7 @@ export function Sidebar({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; album: Album } | null>(null);
   const [editingAlbumId, setEditingAlbumId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState('');
-  const [albumSort, setAlbumSort] = useState<'name' | 'oldest' | 'newest'>('name');
-  const [showAlbumSort, setShowAlbumSort] = useState(false);
+  const [foldersCollapsed, setFoldersCollapsed] = useState(true);
 
   useEffect(() => {
     api.getAlbums().then(res => setAlbums(res.albums)).catch(console.error);
@@ -70,12 +69,6 @@ export function Sidebar({
     window.addEventListener('albums:changed', handler);
     return () => window.removeEventListener('albums:changed', handler);
   }, []);
-
-  const sortedAlbums = [...albums].sort((a, b) => {
-    if (albumSort === 'name') return a.name.localeCompare(b.name);
-    if (albumSort === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
 
   // v0.7.1: 统一通过 onCreateAlbum 回调触发 App.tsx 的 AlbumManageModal，
   // 避免双重 modal（原先 Sidebar 自己的 modal + App.tsx 的 modal）
@@ -133,32 +126,6 @@ export function Sidebar({
         {/* Section 3: 相册集 */}
         <div className="flex items-center justify-between text-[12px] font-bold uppercase tracking-[0.08em] text-text-secondary mt-5 mb-2 py-1">
           <span>{t('sidebar.albumSet')}</span>
-          <div className="flex items-center gap-0.5">
-            <div className="relative">
-              <button
-                onClick={() => setShowAlbumSort(!showAlbumSort)}
-                className="w-[18px] h-[18px] rounded-[6px] border-none bg-transparent text-text-tertiary cursor-pointer flex items-center justify-center text-[16px] hover:bg-page hover:text-primary transition-colors"
-                title={t('sidebar.sort')}
-              >
-                ↕
-              </button>
-              {showAlbumSort && (
-                <div className="absolute right-0 top-full mt-1 w-32 bg-card border border-border rounded-lg shadow-lg z-50">
-                  {(['name', 'oldest', 'newest'] as const).map(key => (
-                    <button
-                      key={key}
-                      onClick={() => { setAlbumSort(key); setShowAlbumSort(false); }}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-page transition-colors ${
-                        albumSort === key ? 'text-primary font-medium' : 'text-text-primary'
-                      }`}
-                    >
-                      {key === 'name' ? t('sidebar.sortByName') : key === 'oldest' ? t('sidebar.sortByOldest') : t('sidebar.sortByNewest')}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
         </div>
         {/* 所有相册入口 */}
         <button
@@ -181,7 +148,7 @@ export function Sidebar({
 
         {/* 相册列表 */}
         <div className="space-y-0.5">
-          {sortedAlbums.map(album => (
+          {albums.map(album => (
             editingAlbumId === album.id ? (
               <div key={album.id} className="flex items-center gap-2 px-2.5 py-1.5">
                 <input
@@ -299,9 +266,22 @@ export function Sidebar({
 
         {/* Section 4: 文件夹 */}
         <div className="flex items-center justify-between text-[12px] font-bold uppercase tracking-[0.08em] text-text-secondary mt-5 mb-2 py-1">
-          <span>{t('sidebar.folders')}</span>
+          <button
+            onClick={() => setFoldersCollapsed(!foldersCollapsed)}
+            className="flex items-center gap-1 text-text-secondary hover:text-text-primary transition-colors cursor-pointer bg-transparent border-none p-0"
+          >
+            <span
+              className="text-[10px] transition-transform duration-150"
+              style={{ transform: foldersCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}
+            >
+              ▶
+            </span>
+            <span>{t('sidebar.folders')}</span>
+          </button>
         </div>
-        <DirectoryTree years={years} rootDir={rootDir} selectedPath={selectedPath} onSelect={onSelectPath} onRefreshCounters={onRefreshCounters} />
+        {!foldersCollapsed && (
+          <DirectoryTree years={years} rootDir={rootDir} selectedPath={selectedPath} onSelect={onSelectPath} onRefreshCounters={onRefreshCounters} />
+        )}
       </div>
 
       {/* 导入按钮 */}

@@ -261,13 +261,16 @@ def _rebuild_md5_index_for_album(self, album_path: Path, progress_cb=None) -> No
                 # 用 os.sep 保证分隔符只出现一次，防止配置里末尾已带 \
                 old_prefix_with_sep = prev_abs.rstrip("\\/") + os.sep
                 new_prefix_with_sep = new_album_path_abs.rstrip("\\/") + os.sep
-                
-                # SQLite 字符串拼接：新前缀 + 旧路径去掉旧前缀的部分
-                # LIKE 'D:\Photos\%' ESCAPE '\\'  避免路径中 _ 被当通配符
-                # 路径里的 \ % _ 都要 escape
+
+                # SQLite LIKE pattern：
+                #   - 路径部分 escape \ % _，但这里的 \ 只是普通反斜杠字符
+                #   - 末尾拼接 "\\%" 表示 "字面反斜杠 + 通配符"
+                #   - 不能写成 "\\%"（仅一个反斜杠），否则 SQLite 会把它解析为字面 "%"
                 def _escape_like(s):
                     return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                
+
+                old_prefix_like = _escape_like(prev_abs) + "\\\\%"
+
                 db.execute(
                     text(
                         "UPDATE photos "
@@ -277,7 +280,7 @@ def _rebuild_md5_index_for_album(self, album_path: Path, progress_cb=None) -> No
                     {
                         "new_prefix": new_prefix_with_sep,
                         "old_prefix": old_prefix_with_sep,
-                        "old_prefix_like": _escape_like(old_prefix_with_sep) + "%",
+                        "old_prefix_like": old_prefix_like,
                     }
                 )
                 db.commit()

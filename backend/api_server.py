@@ -150,148 +150,63 @@ def _album_photo_ids(db, album_id: int) -> set:
     return {row[0] for row in db.query(AlbumPhoto.photo_id).filter(AlbumPhoto.album_id == album_id)}
 
 def get_album_stats():
-    """获取相册统计信息"""
+    """获取相册统计信息（纯 SQL 聚合，性能优化）"""
     album_path = get_album_path()
     if not album_path or not Path(album_path).exists():
         return None
     
-    album_path = Path(album_path)
-    
-    # 媒体格式分类（使用 constants 模块）
-    VIDEO_FORMATS = _VIDEO_FORMATS
-    MEDIA_FORMATS = _MEDIA_FORMATS
-    
-    years = {}
-    
-    # 优先从数据库获取准确的文件统计
     try:
         from database import SessionLocal, Photo
+        from sqlalchemy import func
+        
         db = SessionLocal()
         try:
-            # 获取所有照片记录
-            all_photos = db.query(Photo).all()
-            album_path_resolved = str(Path(album_path).resolve()).lower()
+            # 构造路径前缀过滤（防止跨相册残留数据污染）
+            album_path_str = str(album_path).rstrip('\\/')
+            album_path_prefix = album_path_str + os.sep
             
-            # 过滤出路径在相册目录下的照片
-            valid_photos = []
-            for photo in all_photos:
-                try:
-                    photo_path_resolved = str(Path(photo.path).resolve()).lower()
-                    if photo_path_resolved.startswith(album_path_resolved):
-                        valid_photos.append(photo)
-                except Exception:
-                    # 路径解析失败，跳过
-                    pass
+            # 一次连接，3 条聚合查询（性能优化：避免全表加载 + 磁盘 I/O）
+            total_files = db.query(func.count(Photo.id)).filter(
+                Photo.path.like(album_path_prefix + '%')
+            ).scalar() or 0
             
-            # 只有当有有效照片记录时，才使用数据库统计
-            if valid_photos:
-                db_total_files = len(valid_photos)
-                db_video_count = sum(1 for p in valid_photos if p.file_type == 'video')
-                db_total_size = sum(p.size for p in valid_photos)
-                logger.info(f'[get_album_stats] 数据库统计: {db_total_files} 个文件, {db_video_count} 个视频, {db_total_size} 字节')
-            else:
-                # 没有有效照片记录，使用文件系统统计
-                db_total_files = None
-                db_video_count = None
-                db_total_size = None
-                logger.info(f'[get_album_stats] 数据库中没有有效照片记录，将使用文件系统统计')
+            video_count = db.query(func.count(Photo.id)).filter(
+                Photo.path.like(album_path_prefix + '%'),
+                Photo.file_type == 'video'
+            ).scalar() or 0
+            
+            total_size = db.query(func.coalesce(func.sum(Photo.size), 0)).filter(
+                Photo.path.like(album_path_prefix + '%')
+            ).scalar() or 0
+            
+            logger.info(f'[get_album_stats] SQL 聚合统计: {total_files} 个文件, {video_count} 个视频, {total_size} 字节')
         finally:
             db.close()
-    except Exception as e:
-        logger.warning(f'[get_album_stats] 从数据库获取统计失败，将使用文件系统扫描: {e}')
-        db_total_files = None
-        db_video_count = None
-        db_total_size = None
-    
-    # 文件系统遍历（用于获取目录结构）
-    total_files = 0
-    total_size = 0
-    video_count = 0
-    
-    try:
-        # 递归遍历所有目录
-        def traverse_directory(directory, parent_info, rel_depth=0):
-            nonlocal total_files, total_size, video_count
-            
-            dir_files = 0
-            dir_size = 0
-            sub_dirs = {}
-            
-            try:
-                for item in sorted(directory.iterdir()):
-                    if item.is_dir():
-                        # 递归处理子目录
-                        sub_dir_info = {}
-                        sub_files, sub_size = traverse_directory(item, sub_dir_info, rel_depth + 1)
-                        sub_dirs[item.name] = {
-                            'count': sub_files,
-                            'size': sub_size,
-                            'subdirs': sub_dir_info
-                        }
-                        dir_files += sub_files
-                        dir_size += sub_size
-                    elif item.is_file():
-                        ext = item.suffix.lower()
-                        if ext not in MEDIA_FORMATS:
-                            continue
-                        # 处理文件
-                        total_files += 1
-                        if ext in VIDEO_FORMATS:
-                            video_count += 1
-                        file_size = item.stat().st_size
-                        total_size += file_size
-                        dir_files += 1
-                        dir_size += file_size
-            except Exception as e:
-                logger.error(f"处理目录 {directory} 失败: {e}")
-            
-            return dir_files, dir_size
         
-        # 遍历根目录下的所有目录
-        for dir_item in sorted(album_path.iterdir()):
-            if dir_item.is_dir():
-                dir_info = {}
-                dir_files, dir_size = traverse_directory(dir_item, dir_info, rel_depth=0)
-                
-                # 包含所有文件夹，即使没有照片
-                years[dir_item.name] = {
-                    'count': dir_files,
-                    'size': dir_size,
-                    'subdirs': dir_info
-                }
-            elif dir_item.is_file():
-                # 处理根目录下的文件
-                ext = dir_item.suffix.lower()
-                if ext in MEDIA_FORMATS:
-                    total_files += 1
-                    if ext in VIDEO_FORMATS:
-                        video_count += 1
-                    total_size += dir_item.stat().st_size
-                
+        # last_import 从 config_manager 获取（保持与旧版一致）
+        config = get_config_manager()
+        last_import = config.get_last_import() if config else None
+        
+        return {
+            'total_files': total_files,
+            'video_count': video_count,
+            'total_size': total_size,
+            'total_size_mb': round(total_size / (1024 * 1024), 2) if total_size > 0 else 0.0,
+            'years': {},  # 保持兼容，返回空 dict
+            'last_import': last_import
+        }
+        
     except Exception as e:
-        logger.error(f"获取统计信息失败: {e}")
+        logger.error(f"获取统计信息失败: {e}", exc_info=True)
         # 发生异常时返回空统计对象，而不是 None
         return {
             'total_files': 0,
             'video_count': 0,
             'total_size': 0,
             'total_size_mb': 0.0,
-            'years': {}
+            'years': {},
+            'last_import': None
         }
-    
-    # 始终使用文件系统统计（更准确，反映实际文件数量）
-    # 数据库统计仅作为备用（当文件系统扫描失败时）
-    final_total_files = total_files if total_files > 0 else (db_total_files or 0)
-    final_video_count = video_count if total_files > 0 else (db_video_count or 0)
-    final_total_size = total_size if total_files > 0 else (db_total_size or 0)
-
-    return {
-        'total_files': final_total_files,
-        'video_count': final_video_count,
-        'total_size': final_total_size,
-        'total_size_mb': round(final_total_size / (1024 * 1024), 2),
-        'years': years
-    }
 
 # ============================================================================
 # API 路由
@@ -332,7 +247,7 @@ def album_stats():
 
 @app.route('/api/album/tree', methods=['GET'])
 def album_tree():
-    """获取完整目录树"""
+    """获取完整目录树（数据库驱动，性能优化）"""
     logger.info('[API] 🌳 目录树请求')
     try:
         album_path = get_album_path()
@@ -342,131 +257,72 @@ def album_tree():
             logger.error(f'[API] 🌳 相册路径不存在: {album_path}')
             return jsonify({'error': '相册路径不存在'}), 404
         
-        # 迭代构建目录树（纯文件系统扫描，不依赖数据库）
-        # 目录层级和命名不固定，直接从文件系统读取
-        def build_tree(directory):
-            """
-            优化点：
-            1. 使用迭代方式替代递归，避免栈溢出风险
-            2. 使用os.scandir替代pathlib.iterdir，减少系统调用
-            3. 纯文件系统扫描，支持任意目录结构
-            4. 从深层目录开始处理，确保计数正确累加
-            """
-            import os
+        from database import SessionLocal, Photo
+        from collections import defaultdict
+        
+        db = SessionLocal()
+        try:
+            # 构造路径前缀过滤
+            album_path_str = str(album_path).rstrip('\\/')
+            album_path_prefix = album_path_str + os.sep
             
-            # 支持的媒体格式（使用 constants 模块）
-            MEDIA_FORMATS = _MEDIA_FORMATS
+            # 步骤 1：一次 SQL 拿所有 photo 的 path
+            rows = db.query(Photo.path).filter(
+                Photo.path.like(album_path_prefix + '%')
+            ).all()
             
-            directory_str = str(directory)
-            root_node = {
-                'name': directory.name,
-                'path': directory_str,
-                'type': 'root',
-                'count': 0,
-                'children': []
-            }
+            # 步骤 2：Python 内存里去重父目录 + 累加 count
+            dir_count = {}  # 相对路径 → 照片数
+            dir_set = set()  # 所有有照片的目录
             
-            # 使用栈存储待处理的目录
-            # 每个栈元素是 (目录路径, 父节点, 子节点, 是否已处理)
-            stack = []
-            
-            # 先处理根目录的直接子目录
-            try:
-                with os.scandir(directory_str) as entries:
-                    # 先收集所有条目并分类
-                    dir_entries = []
-                    file_count = 0
-                    
-                    for entry in entries:
-                        if entry.is_dir(follow_symlinks=False):
-                            dir_entries.append(entry)
-                        elif entry.is_file(follow_symlinks=False):
-                            # 只计数媒体文件
-                            if os.path.splitext(entry.name)[1].lower() in MEDIA_FORMATS:
-                                file_count += 1
-                    
-                    # 对子目录进行排序
-                    dir_entries.sort(key=lambda x: x.name)
-                    
-                    # 根目录的文件计数（直接从文件系统扫描）
-                    root_node['count'] = file_count
-                    
-                    # 为每个子目录创建节点并添加到栈中
-                    for dir_entry in dir_entries:
-                        child_node = {
-                            'name': dir_entry.name,
-                            'path': dir_entry.path,
-                            'type': 'directory',
-                            'count': 0,  # 初始为0，稍后从文件系统扫描
-                            'children': []
-                        }
-                        root_node['children'].append(child_node)
-                        # 将子目录加入栈中，标记为未处理
-                        stack.append((dir_entry.path, root_node, child_node, False))
-            except Exception as e:
-                logger.error(f"处理根目录 {directory_str} 时出错: {e}")
-                return root_node
-            
-            # 处理栈中的所有目录
-            while stack:
-                current_path, parent_node, current_node, processed = stack.pop()
+            for (full_path,) in rows:
+                try:
+                    rel = os.path.relpath(full_path, album_path_str)  # "2024/2024-03/IMG.jpg"
+                except ValueError:
+                    # Windows 跨盘符场景（如 full_path="E:\\photo.jpg", album_path="D:\\Photos"）
+                    # 跳过不属于当前相册的照片
+                    continue
                 
-                if not processed:
-                    # 第一次处理：收集所有子目录和文件计数
-                    try:
-                        with os.scandir(current_path) as entries:
-                            dir_entries = []
-                            file_count = 0
-                            
-                            for entry in entries:
-                                if entry.is_dir(follow_symlinks=False):
-                                    dir_entries.append(entry)
-                                elif entry.is_file(follow_symlinks=False):
-                                    # 只计数媒体文件
-                                    if os.path.splitext(entry.name)[1].lower() in MEDIA_FORMATS:
-                                        file_count += 1
-                            
-                            # 对子目录进行排序
-                            dir_entries.sort(key=lambda x: x.name)
-                            
-                            # 设置当前节点的文件计数（直接从文件系统扫描）
-                            current_node['count'] = file_count
-                            
-                            # 标记当前节点为已处理
-                            stack.append((current_path, parent_node, current_node, True))
-                            
-                            # 为每个子目录创建节点并添加到栈中
-                            for dir_entry in dir_entries:
-                                child_node = {
-                                    'name': dir_entry.name,
-                                    'path': dir_entry.path,
-                                    'type': 'directory',
-                                    'count': 0,  # 初始为0，稍后从文件系统扫描
-                                    'children': []
-                                }
-                                current_node['children'].append(child_node)
-                                # 将子目录加入栈中，标记为未处理
-                                stack.append((dir_entry.path, current_node, child_node, False))
-                    except Exception as e:
-                        logger.error(f"处理目录 {current_path} 时出错: {e}")
-                else:
-                    # 第二次处理：自下而上累加子目录计数
-                    for child in current_node['children']:
-                        current_node['count'] += child['count']
+                parts = rel.split(os.sep)
+                for i in range(1, len(parts)):  # 跳过最后文件本身
+                    parent_rel = os.sep.join(parts[:i])
+                    dir_count[parent_rel] = dir_count.get(parent_rel, 0) + 1
+                    dir_set.add(parent_rel)
             
-            return root_node
-        
-        # 构建完整树
-        tree_data = build_tree(Path(album_path))
-        
-        # 根节点的总文件数 = 根目录下的文件数 + 所有子节点的文件数
-        # build_tree 中已经设置了根目录下的文件数，这里只需要加上子节点的累加
-        children_count = sum(child.get('count', 0) for child in tree_data.get('children', []))
-        tree_data['count'] = tree_data.get('count', 0) + children_count
-        
-        logger.info(f'[API] 🌳 目录树构建完成: {len(tree_data["children"])} 个子目录')
-        logger.info(f'[API] 🌳 根节点计数: {tree_data["count"]}')
-        return jsonify(tree_data)
+            # 步骤 3：构建 children_map（父目录 → 直接子目录名集合）
+            children_map = defaultdict(set)
+            for rel in dir_set:
+                parts = rel.split(os.sep)
+                if len(parts) == 1:
+                    children_map[""].add(parts[0])  # 根目录的直接子目录
+                else:
+                    parent = os.sep.join(parts[:-1])
+                    children_map[parent].add(parts[-1])
+            
+            # 步骤 4：递归构造树
+            def build_node(rel_path: str) -> dict:
+                abs_path = album_path_str if not rel_path else os.path.join(album_path_str, rel_path)
+                direct_children = sorted(children_map.get(rel_path, set()))
+                return {
+                    'name': os.path.basename(abs_path) if rel_path else os.path.basename(album_path_str),
+                    'path': abs_path,
+                    'type': 'directory' if rel_path else 'root',
+                    'count': dir_count.get(rel_path, 0),
+                    'children': [build_node(os.path.join(rel_path, c)) for c in direct_children]
+                }
+            
+            tree_data = build_node("")
+            
+            # 根节点的 count = 所有子目录的 count 之和（表示整个相册的照片总数）
+            tree_data['count'] = sum(child['count'] for child in tree_data['children'])
+            
+            logger.info(f'[API] 🌳 目录树构建完成: {len(tree_data["children"])} 个子目录')
+            logger.info(f'[API] 🌳 根节点计数: {tree_data["count"]}')
+            return jsonify(tree_data)
+            
+        finally:
+            db.close()
+            
     except Exception as e:
         logger.error(f"[API] ❌ /api/album/tree 错误: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500

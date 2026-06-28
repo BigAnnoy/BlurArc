@@ -54,37 +54,61 @@ class TestAlbumTreeRealFiles:
         with tempfile.TemporaryDirectory() as tmpdir:
             subdir = Path(tmpdir) / '2024-01'
             subdir.mkdir()
-            (subdir / 'photo.jpg').write_bytes(b'fake')
+            photo_path = subdir / 'photo.jpg'
+            photo_path.write_bytes(b'fake')
 
             mock_config = MagicMock()
             mock_config.get_album_path.return_value = tmpdir
 
+            # Mock database to return the photo path
+            mock_db = MagicMock()
+            mock_db.query.return_value.filter.return_value.all.return_value = [(str(photo_path),)]
+            
+            mock_db_module = MagicMock()
+            mock_db_module.SessionLocal.return_value = mock_db
+            mock_db_module.Photo = MagicMock()
+            
             with patch('backend.api_server.get_config_manager', return_value=mock_config):
-                response = client.get('/api/album/tree')
-                assert response.status_code == 200
-                data = json.loads(response.data)
-                # API returns tree structure directly with 'children' key
-                assert 'children' in data
-                assert data['count'] >= 1
+                with patch.dict('sys.modules', {'database': mock_db_module}):
+                    response = client.get('/api/album/tree')
+                    assert response.status_code == 200
+                    data = json.loads(response.data)
+                    # API returns tree structure directly with 'children' key
+                    assert 'children' in data
+                    assert data['count'] >= 1
 
     def test_album_tree_with_mixed_files(self, client):
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir, 'photo1.jpg').write_bytes(b'fake1')
+            photo1_path = Path(tmpdir, 'photo1.jpg')
+            photo1_path.write_bytes(b'fake1')
             Path(tmpdir, 'readme.txt').write_bytes(b'text')
             sub = Path(tmpdir) / 'sub'
             sub.mkdir()
-            (sub / 'photo2.jpg').write_bytes(b'fake2')
+            photo2_path = sub / 'photo2.jpg'
+            photo2_path.write_bytes(b'fake2')
             (sub / 'notes.txt').write_bytes(b'text')
 
             mock_config = MagicMock()
             mock_config.get_album_path.return_value = tmpdir
 
+            # Mock database to return photo paths
+            mock_db = MagicMock()
+            mock_db.query.return_value.filter.return_value.all.return_value = [
+                (str(photo1_path),),
+                (str(photo2_path),)
+            ]
+            
+            mock_db_module = MagicMock()
+            mock_db_module.SessionLocal.return_value = mock_db
+            mock_db_module.Photo = MagicMock()
+
             with patch('backend.api_server.get_config_manager', return_value=mock_config):
-                response = client.get('/api/album/tree')
-                assert response.status_code == 200
-                data = json.loads(response.data)
-                # Should have children (sub directory)
-                assert 'children' in data
+                with patch.dict('sys.modules', {'database': mock_db_module}):
+                    response = client.get('/api/album/tree')
+                    assert response.status_code == 200
+                    data = json.loads(response.data)
+                    # Should have children (sub directory)
+                    assert 'children' in data
 
 
 class TestAlbumPhotosRealFiles:

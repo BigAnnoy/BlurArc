@@ -174,14 +174,8 @@ class TestThumbnailManager:
             # 模拟视频缩略图生成成功
             mock_generate_video_thumb.return_value = True
             
-            # 模拟数据库操作
-            with patch('backend.thumbnail_manager.SessionLocal') as mock_session:
-                mock_db = MagicMock()
-                mock_session.return_value.__enter__.return_value = mock_db
-                mock_db.query.return_value.filter.return_value.first.return_value = None
-                
-                result = thumbnail_manager._generate_video_thumbnail(video_path, Path('output.jpg'))
-                assert result == Path('output.jpg')
+            result = thumbnail_manager._generate_video_thumbnail(video_path, Path('output.jpg'))
+            assert result == Path('output.jpg')
     
     @patch('backend.thumbnail_manager.Image.open')
     def test_generate_image_thumbnail(self, mock_image_open, thumbnail_manager, temp_file):
@@ -192,14 +186,8 @@ class TestThumbnailManager:
         mock_img.thumbnail.return_value = None
         mock_image_open.return_value.__enter__.return_value = mock_img
         
-        # 模拟数据库操作
-        with patch('backend.thumbnail_manager.SessionLocal') as mock_session:
-            mock_db = MagicMock()
-            mock_session.return_value.__enter__.return_value = mock_db
-            mock_db.query.return_value.filter.return_value.first.return_value = None
-            
-            result = thumbnail_manager._generate_image_thumbnail(temp_file, Path('output.jpg'))
-            assert result == Path('output.jpg')
+        result = thumbnail_manager._generate_image_thumbnail(temp_file, Path('output.jpg'))
+        assert result == Path('output.jpg')
     
     def test_get_thumbnail_sync_nonexistent(self, thumbnail_manager):
         """测试同步获取不存在文件的缩略图"""
@@ -221,9 +209,8 @@ class TestThumbnailManager:
         manager2 = get_thumbnail_manager()
         assert manager is manager2
     
-    @patch('backend.thumbnail_manager.ThumbnailManager._update_photo_thumbnail_path')
     @patch('backend.thumbnail_manager.Image.open')
-    def test_generate_image_thumbnail_with_different_modes(self, mock_image_open, mock_update_db, thumbnail_manager, temp_file):
+    def test_generate_image_thumbnail_with_different_modes(self, mock_image_open, thumbnail_manager, temp_file):
         """测试不同图片模式的缩略图生成"""
         # 测试 RGBA 模式
         mock_img_rgba = MagicMock()

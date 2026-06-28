@@ -158,22 +158,6 @@ class TestVideoThumbnail:
             assert result is None
 
 
-class TestDatabaseUpdate:
-    """Test database thumbnail path update (lines 265-267)"""
-
-    def test_update_photo_thumbnail_path_exception(self):
-        from backend.thumbnail_manager import ThumbnailManager
-        
-        mock_db = MagicMock()
-        mock_db.query.side_effect = Exception('db error')
-        
-        with patch('backend.thumbnail_manager.SessionLocal', return_value=mock_db):
-            manager = ThumbnailManager()
-            manager._update_photo_thumbnail_path(Path('/fake/path.jpg'), Path('/fake/thumb.jpg'))
-        
-        mock_db.rollback.assert_called_once()
-
-
 class TestPreviewJPEG:
     """Test preview JPEG conversion (lines 308-309, 319-341)"""
 

@@ -126,9 +126,9 @@ class TestAlbumStatsDatabaseIntegration:
             mock_cfg.get_last_import.return_value = None
             mock_gcm.return_value = mock_cfg
             
-            # Empty DB, will use filesystem stats
+            # Mock DB to return 2 photos (1 image, 1 video)
             mock_db = MagicMock()
-            mock_db.query.return_value.all.return_value = []
+            mock_db.query.return_value.filter.return_value.scalar.side_effect = [2, 1, 1000]
             mock_db.__enter__ = MagicMock(return_value=mock_db)
             mock_db.__exit__ = MagicMock(return_value=False)
             
@@ -140,7 +140,8 @@ class TestAlbumStatsDatabaseIntegration:
                 resp = client.get('/api/album/stats')
             
             data = json.loads(resp.data)
-            assert data['total_files'] >= 1
+            assert data['total_files'] == 2
+            assert data['video_count'] == 1
 
 
 class TestAlbumStatsExceptionHandling:
