@@ -56,10 +56,15 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
   const [monthsCursor, setMonthsCursor] = useState<string | null>(null);
   const [monthsHasMore, setMonthsHasMore] = useState(false);
   const [monthsLoadingMore, setMonthsLoadingMore] = useState(false);
+  // 无限滚动状态（all photos）
+  const [photosPage, setPhotosPage] = useState(1);
+  const [photosHasMore, setPhotosHasMore] = useState(false);
+  const [photosLoadingMore, setPhotosLoadingMore] = useState(false);
 
   // D6: sentinel 节点引用（参考 PhotoGrid 的 IntersectionObserver 实现）
   const yearsSentinelRef = useRef<HTMLDivElement>(null);
   const monthsSentinelRef = useRef<HTMLDivElement>(null);
+  const photosSentinelRef = useRef<HTMLDivElement>(null);
 
   // D2: 判断是否为概览模式（年/月，§4.8 选择按钮在概览视图禁用），去掉 'days'
   const isOverviewMode = state.view === 'years' || state.view === 'months';
@@ -113,6 +118,7 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
           const res = await api.getTimelinePhotos({
             year: state.year,
             month: state.month,
+            page: 1,
             sort,
             filters,
           });
@@ -126,6 +132,8 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
             is_favorite: p.is_favorite || false,
           }));
           setPhotos(mapped);
+          setPhotosPage(1);
+          setPhotosHasMore(res.page < res.total_pages);
           // v0.7.1: 同步给 App 用于 PhotoPreview 上下张导航
           onPhotosChange?.(mapped);
         }
@@ -198,6 +206,55 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
     observer.observe(node);
     return () => observer.disconnect();
   }, [state.view, loadMoreMonths]);
+
+  // 无限滚动：加载更多照片（追加，不重置）
+  const loadMorePhotos = useCallback(async () => {
+    if (!photosHasMore || photosLoadingMore) return;
+    setPhotosLoadingMore(true);
+    try {
+      const nextPage = photosPage + 1;
+      const res = await api.getTimelinePhotos({
+        year: state.year,
+        month: state.month,
+        page: nextPage,
+        sort,
+        filters,
+      });
+      const mapped = res.photos.map(p => ({
+        id: String(p.id),
+        name: p.filename,
+        path: p.path,
+        size: p.size,
+        date: p.date || '',
+        type: p.type as 'photo' | 'video',
+        is_favorite: p.is_favorite || false,
+      }));
+      setPhotos(prev => [...prev, ...mapped]);
+      setPhotosPage(nextPage);
+      setPhotosHasMore(nextPage < res.total_pages);
+      // v0.7.1: 同步给 App 用于 PhotoPreview 上下张导航
+      onPhotosChange?.([...photos, ...mapped]);
+    } catch (error) {
+      console.error(t('timeline.loadFailed'), error);
+    }
+    setPhotosLoadingMore(false);
+  }, [photosHasMore, photosLoadingMore, photosPage, state.year, state.month, sort, filters, t, photos, onPhotosChange]);
+
+  // 无限滚动：all photos 滚动到底部触发加载
+  useEffect(() => {
+    if (state.view !== 'all') return;
+    const node = photosSentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting) loadMorePhotos();
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [state.view, loadMorePhotos]);
 
   // D5: 标题规则
   const title = state.view === 'all'
@@ -420,6 +477,12 @@ export function TimelineView({ onPhotoClick, selectionMode, selectedIds, onSelec
                 />
               </div>
             ))}
+            {/* 无限滚动 sentinel + loading 指示 */}
+            {photosHasMore && (
+              <div ref={photosSentinelRef} className="flex items-center justify-center py-6">
+                {photosLoadingMore && <div className="animate-spin w-6 h-6 border-2 border-border border-t-primary rounded-full" />}
+              </div>
+            )}
           </div>
         )}
       </div>
