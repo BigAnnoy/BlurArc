@@ -44,19 +44,29 @@ python scripts/download_ffmpeg.py
 - `backend/thumbnail_manager.py` - 缩略图生成与缓存
 - `backend/video_processor.py` - FFmpeg 视频处理（已集成 8.1.1）
 - `backend/database.py` - SQLAlchemy 数据模型
-- `backend/config_manager.py` - 配置管理
+- `backend/config_manager.py` - 配置管理 + 索引重建（增量/全量）
 - `backend/utils.py` - 工具函数（MD5 计算、文件指纹）
+- `backend/dest_filename.py` - 原子计数器（O(1) 目标文件命名）
+- `backend/constants.py` - 常量定义（视频格式、图片格式等）
+- `backend/mobile_access_server.py` - 移动端 API 服务（局域网浏览相册）
+- `backend/phone_upload_server.py` - 手机上传服务
+- `backend/xmp_sync.py` - XMP 元数据同步
+- `backend/zeroconf_publisher.py` - mDNS 服务广播
+- `backend/migrations/` - SQL 迁移脚本
 - `backend/ffmpeg_binaries/` - FFmpeg 二进制文件
 
 ### 前端 (React + TypeScript)
 
-- `frontend/src/App.tsx` - 主应用组件
+- `frontend/src/App.tsx` - 主应用组件（视图切换、选择模式状态管理）
+- `frontend/src/contexts/I18nContext.tsx` - 国际化上下文（zh/en 双语）
 - `frontend/src/components/` - UI 组件
-  - `common/` - 通用组件
-  - `dialogs/` - 对话框组件
-  - `layout/` - 布局组件
-  - `photos/` - 照片相关组件
-  - `sidebar/` - 侧边栏组件
+  - `common/` - 共享组件：`AlbumCoverDefault.tsx`（拍立得封面）、`ContextMenu.tsx`、`FilterMenu.tsx`、`SortMenu.tsx`、`Modal.tsx`、`PhotoToolbar.tsx`、`SelectionBanner.tsx`、`Toast.tsx`、`Logo.tsx`、`menuBuilders.ts`
+  - `dialogs/` - 对话框：`ImportDialog/`（多步导入向导）、`AlbumManageModal.tsx`、`DeleteConfirmDialog.tsx`、`JoinAlbumModal.tsx`、`MobileDeviceManager.tsx`、`PhotoPreview.tsx`、`SettingsDialog.tsx`
+  - `layout/` - 布局：`Header.tsx`、`MainContent.tsx`、`Sidebar.tsx`
+  - `photos/` - 照片：`PhotoCard.tsx`（含错误占位图）、`PhotoGrid.tsx`
+  - `sidebar/` - 侧边栏：`DirectoryTree.tsx`、`StatsCard.tsx`
+  - `timeline/` - 时间线：`TimelineView.tsx`（3 tab：所有照片/月/年）
+  - `WelcomeScreen.tsx` - 首次启动欢迎页（索引重建进度）
 - `frontend/src/services/api.ts` - API 服务
 - `frontend/src/hooks/` - 自定义 Hooks
 - `frontend/src/stores/` - 状态管理
@@ -108,10 +118,13 @@ python scripts/download_ffmpeg.py
 - 标题栏显示"已选 N 张"
 - 删除按钮在未选中时禁用
 - 全选后按钮变为"取消全选"
+- 选择模式仅在「所有照片」视图启用，概览视图（年/月）禁用
+- TimelineView 的 SelectionBanner 不显示「从相册移除」按钮（无相册上下文）
 
 **相关组件：**
-- `MainContent.tsx` - 工具栏按钮
-- `PhotoCard.tsx` - 选中状态样式
+- `PhotoToolbar.tsx` - 共享工具栏（TimelineView 和 MainContent 共用）
+- `SelectionBanner.tsx` - 选择模式蓝色 banner
+- `PhotoCard.tsx` - 选中状态样式 + 错误占位图
 - `PhotoGrid.tsx` - 传递选中状态
 - `App.tsx` - `selectionMode`/`selectedIds` 状态管理
 
@@ -213,22 +226,7 @@ ServiceInfo(SERVICE_TYPE, name, port=self.port, addresses=[...], ...)
 ## 📋 开发日志
 
 开发日志存放在 `docs/devlogs/` 目录，按 `YYYY-MM-DD-<topic>.md` 命名。
-每次实质性开发完成后自动新增或更新对应日志文件。查阅时直接读取该目录下列表即可。
-
-| 日期 | 主题 | 文件 |
-|------|------|------|
-| 2026-06-27 | 相册默认封面拍立得堆叠设计 + 公共组件化 | [devlog](docs/devlogs/2026-06-27-album-cover-default.md) |
-| 2026-06-27 | Timeline 对齐 Apple Photos（3 tab + 双击导航） | [devlog](docs/devlogs/2026-06-27-timeline-apple-photos-refactor.md) |
-| 2026-06-22 | mDNS 广播修复（ServiceInfo 参数顺序 + 自动启动） | [devlog](docs/devlogs/2026-06-22-mdns-broadcast-fix.md) |
-| 2026-06-22 | 导入预检目标重复检测性能修复（删除 rglob 兜底） | [devlog](docs/devlogs/2026-06-22-import-target-dedup-perf.md) |
-| 2026-06-22 | 手机端首次连接照片加载卡死修复（Dio sendTimeout + SQL 索引） | [devlog](docs/devlogs/2026-06-22-mobile-first-load-fix.md) |
-| 2026-06-21 | 移动接入 Bug 修复 + 上传通知导入 | [devlog](docs/devlogs/2026-06-21-upload-bug-fixes.md) |
-| 2026-06-20 | 移动端 4 个 Bug 排查报告 | [plan](docs/plans/2026-06-20-mobile-bugs-analysis.md) |
-| 2026-06-19 | Flutter mDNS 自动发现实现 | [devlog](docs/devlogs/2026-06-19-mdns-discovery.md) |
-| 2026-06-19 | 移动端 UI 重设计技术实现方案 | [spec](docs/superpowers/specs/2026-06-19-mobile-ui-redesign.md) |
-| 2026-06-19 | 原型 Logo SVG 统一管理 + 手机 App 实施计划 | [devlog](docs/devlogs/2026-06-19-prototype-logo-plan.md) |
-| 2026-06-19 | 移动端 UI 重设计实施（7 Phase 完成） | [devlog](.workbuddy/memory/2026-06-19.md) |
-| 2026-06-18 | 移动接入功能（手机上传、配对流程） | [devlog](docs/devlogs/2026-06-18-mobile-access.md) |
+需要查阅历史时，用 `ls docs/devlogs/` 列出所有日志，再按需读取具体文件。
 
 ---
 

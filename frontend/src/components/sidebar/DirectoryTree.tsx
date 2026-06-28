@@ -64,6 +64,7 @@ export function DirectoryTree({ rootDir, selectedPath, onSelect, onRefreshCounte
               : 'text-text-secondary hover:bg-page hover:text-text-primary'
           }`}
           style={{ paddingLeft: `${paddingLeft}px` }}
+          onClick={() => onSelect(dir.path)}
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -84,16 +85,10 @@ export function DirectoryTree({ rootDir, selectedPath, onSelect, onRefreshCounte
           ) : (
             <span className="w-3 mr-1 flex-shrink-0" />
           )}
-          <span
-            className="flex-1 truncate"
-            onClick={() => onSelect(dir.path)}
-          >
+          <span className="flex-1 truncate">
             {dir.name}
           </span>
-          <span
-            className="font-mono text-[11px] opacity-70 flex-shrink-0 ml-2 tabular-nums"
-            onClick={() => onSelect(dir.path)}
-          >
+          <span className="font-mono text-[11px] opacity-70 flex-shrink-0 ml-2 tabular-nums">
             {dir.count}
           </span>
         </div>

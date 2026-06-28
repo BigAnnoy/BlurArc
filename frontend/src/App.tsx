@@ -157,10 +157,7 @@ function AppContent() {
   }, []);
 
   // Load photos when path changes
-  const loadPhotos = useCallback(async (path: string, title: string, page: number = 1, append: boolean = false, sort?: string) => {
-    if (page === 1) {
-      setState((prev) => ({ ...prev, selectedPath: path, selectedTitle: title, loading: true }));
-    }
+  const loadPhotos = useCallback(async (path: string, _title: string, page: number = 1, append: boolean = false, sort?: string) => {
     try {
       const res = await api.getPhotos(path, page, 100, sort);
       const newPhotos = res.photos.map((p) => ({
@@ -216,7 +213,8 @@ function AppContent() {
     const dirName = parts[parts.length - 1] || path;
 
     // v0.7: 切到文件夹视图（独立 view，避免时间线 section 被同时高亮）
-    setState((prev) => ({ ...prev, currentView: 'folder', selectedAlbumId: null }));
+    // 合并 setState，避免 React 18 批处理导致 currentView 被覆盖
+    setState((prev) => ({ ...prev, currentView: 'folder', selectedAlbumId: null, selectedPath: path, selectedTitle: dirName, loading: true }));
 
     loadPhotos(path, dirName, 1, false, mainSort);
   }, [loadPhotos, mainSort]);
