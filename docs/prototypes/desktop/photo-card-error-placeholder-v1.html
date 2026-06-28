@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhotoCard 缩略图加载失败占位图原型 v1</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              DEFAULT: '#0891b2',
+              hover: '#0e7490'
+            },
+            favorite: '#ef4444',
+            page: '#f4f7f9',
+            border: '#d8e2e8',
+            text: {
+              primary: '#1a2a3a',
+              secondary: '#5a6a7a',
+              tertiary: '#8a9aaa'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .dark .bg-page { background-color: #1f2937; }
+    .dark .text-tertiary { color: #6b7280; }
+    .bg-page { background-color: #f4f7f9; }
+    .text-tertiary { color: #8a9aaa; }
+  </style>
+</head>
+<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen p-8 transition-colors">
+  <div class="max-w-6xl mx-auto">
+    <div class="flex items-center justify-between mb-8">
+      <div>
+        <h1 class="text-2xl font-semibold">PhotoCard 缩略图加载失败占位图</h1>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">P1 设计原型：grid / masonry 布局 + 选中状态</p>
+      </div>
+      <button
+        onclick="document.documentElement.classList.toggle('dark')"
+        class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-sm"
+      >
+        切换浅色/深色
+      </button>
+    </div>
+
+    <!-- Grid 布局 -->
+    <section class="mb-12">
+      <h2 class="text-lg font-medium mb-4">Grid 布局</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        <!-- 正常卡片 1 -->
+        <div class="group relative rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm hover:shadow-[0_0_0_2px_var(--color-primary),0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 transition-all cursor-pointer">
+          <img
+            src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=400&fit=crop"
+            alt="正常照片"
+            class="w-full aspect-square object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+          <button class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 hover:bg-black/60 transition-all duration-150 z-[2]">
+            <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- 占位图卡片 1：grid + 未选中 -->
+        <div class="group relative rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm hover:shadow-[0_0_0_2px_var(--color-primary),0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 transition-all cursor-pointer">
+          <div class="w-full aspect-square flex flex-col items-center justify-center bg-page text-tertiary transition-transform duration-300 group-hover:scale-105">
+            <svg class="w-10 h-10 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <polyline points="3 15 8 11 12 14 16 10 21 14" />
+              <line x1="6" y1="7" x2="18" y2="17" />
+            </svg>
+            <span class="text-xs">无法加载</span>
+          </div>
+          <button class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 hover:bg-black/60 transition-all duration-150 z-[2]">
+            <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- 正常卡片 2 -->
+        <div class="group relative rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm hover:shadow-[0_0_0_2px_var(--color-primary),0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 transition-all cursor-pointer">
+          <img
+            src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=400&h=400&fit=crop"
+            alt="正常照片"
+            class="w-full aspect-square object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+          <button class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 hover:bg-black/60 transition-all duration-150 z-[2]">
+            <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- 占位图卡片 2：grid + 选中 -->
+        <div class="group relative rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-[0_0_0_2px_var(--color-primary),0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 transition-all cursor-pointer">
+          <div class="w-full aspect-square flex flex-col items-center justify-center bg-page text-tertiary transition-transform duration-300">
+            <svg class="w-10 h-10 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <polyline points="3 15 8 11 12 14 16 10 21 14" />
+              <line x1="6" y1="7" x2="18" y2="17" />
+            </svg>
+            <span class="text-xs">无法加载</span>
+          </div>
+          <div class="absolute top-2 left-2 w-[22px] h-[22px] bg-primary rounded-full flex items-center justify-center shadow-md">
+            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- 正常卡片 3 -->
+        <div class="group relative rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm hover:shadow-[0_0_0_2px_var(--color-primary),0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 transition-all cursor-pointer">
+          <img
+            src="https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=400&h=400&fit=crop"
+            alt="正常照片"
+            class="w-full aspect-square object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+          <button class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 hover:bg-black/60 transition-all duration-150 z-[2]">
+            <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Masonry 布局 -->
+    <section class="mb-12">
+      <h2 class="text-lg font-medium mb-4">Masonry 布局</h2>
+      <div class="columns-2 sm:columns-3 md:columns-4 lg:columns-5 gap-3 space-y-3">
+        <!-- 正常卡片：竖图 -->
+        <div class="group relative rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm hover:shadow-[0_0_0_2px_var(--color-primary),0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 transition-all cursor-pointer break-inside-avoid">
+          <img
+            src="https://images.unsplash.com/photo-1519681393784-d120267933ba?w=400&h=600&fit=crop"
+            alt="正常照片"
+            class="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+          <button class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 hover:bg-black/60 transition-all duration-150 z-[2]">
+            <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- 占位图卡片：masonry -->
+        <div class="group relative rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm hover:shadow-[0_0_0_2px_var(--color-primary),0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 transition-all cursor-pointer break-inside-avoid">
+          <div class="w-full h-auto min-h-[160px] flex flex-col items-center justify-center bg-page text-tertiary transition-transform duration-300 group-hover:scale-105">
+            <svg class="w-10 h-10 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <polyline points="3 15 8 11 12 14 16 10 21 14" />
+              <line x1="6" y1="7" x2="18" y2="17" />
+            </svg>
+            <span class="text-xs">无法加载</span>
+          </div>
+          <button class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 hover:bg-black/60 transition-all duration-150 z-[2]">
+            <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- 正常卡片：横图 -->
+        <div class="group relative rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm hover:shadow-[0_0_0_2px_var(--color-primary),0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 transition-all cursor-pointer break-inside-avoid">
+          <img
+            src="https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=600&h=400&fit=crop"
+            alt="正常照片"
+            class="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+          <button class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 hover:bg-black/60 transition-all duration-150 z-[2]">
+            <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- 占位图卡片：masonry + 选中 -->
+        <div class="group relative rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-[0_0_0_2px_var(--color-primary),0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 transition-all cursor-pointer break-inside-avoid">
+          <div class="w-full h-auto min-h-[160px] flex flex-col items-center justify-center bg-page text-tertiary transition-transform duration-300">
+            <svg class="w-10 h-10 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <polyline points="3 15 8 11 12 14 16 10 21 14" />
+              <line x1="6" y1="7" x2="18" y2="17" />
+            </svg>
+            <span class="text-xs">无法加载</span>
+          </div>
+          <div class="absolute top-2 left-2 w-[22px] h-[22px] bg-primary rounded-full flex items-center justify-center shadow-md">
+            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- 正常卡片：竖图 -->
+        <div class="group relative rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm hover:shadow-[0_0_0_2px_var(--color-primary),0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 transition-all cursor-pointer break-inside-avoid">
+          <img
+            src="https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=400&h=600&fit=crop"
+            alt="正常照片"
+            class="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+          <button class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 hover:bg-black/60 transition-all duration-150 z-[2]">
+            <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 设计说明 -->
+    <section class="bg-gray-50 dark:bg-gray-800 rounded-xl p-6">
+      <h2 class="text-lg font-medium mb-4">设计说明</h2>
+      <ul class="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+        <li>占位图使用 <code>bg-page</code> + <code>text-tertiary</code>，与项目 tailwind.config.js 定义的主题一致。</li>
+        <li>Grid 模式下占位图使用 <code>aspect-square</code>，与正常缩略图尺寸完全一致。</li>
+        <li>Masonry 模式下占位图使用 <code>h-auto min-h-[160px]</code>，给卡片确定高度，避免破坏瀑布流布局。</li>
+        <li>选中状态使用蓝色边框 + 左上角勾选图标，与正常卡片一致。</li>
+        <li>hover 效果保留 <code>hover:scale-105</code> 和阴影，保持交互一致性。</li>
+        <li>不引入任何外部图片资源，仅用 SVG + Tailwind CSS。</li>
+      </ul>
+    </section>
+  </div>
+</body>
+</html>

@@ -12,7 +12,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 # 导入数据库模块（仅用于 MD5 索引重建）
-from .database import SessionLocal, Photo
+from sqlalchemy import text
+from .database import SessionLocal, Photo, Album, AlbumPhoto
 
 # 共享常量和工具
 from .constants import MEDIA_FORMATS, VIDEO_FORMATS
@@ -171,6 +172,11 @@ class ConfigManager:
         
         album_path_abs = str(album_path_obj.absolute())
         
+        # 把旧 album_path 挪到 previous_album_path，用于后续 path 迁移
+        old_album_path = self.config.get("album_path")
+        if old_album_path and old_album_path != album_path_abs:
+            self.config["previous_album_path"] = old_album_path
+        
         # 更新内存配置
         self.config["album_path"] = album_path_abs
         self.config["created_at"] = datetime.now().isoformat()
@@ -190,14 +196,21 @@ class ConfigManager:
 
     def _rebuild_md5_index_for_album(self, album_path: Path, progress_cb=None) -> None:
         """
-        重建当前相册目录的MD5索引：
-        1) 清空 photos 表（旧目录记录）
-        2) 扫描新目录媒体文件
-        3) 重建新目录的 path/md5 记录
-        
+        重建当前相册目录的索引（增量更新，保留用户数据）。
+
+        流程：
+        1) path 迁移（若相册根目录变了，把旧前缀替换成新前缀）
+        2) 查询现有所有 Photo
+        3) 扫描新目录媒体文件
+        4) 三分支比对：
+           - UPDATE：path 仍存在，按指纹判断是否重算 MD5
+           - INSERT：path 是新的
+           - DELETE：path 在 DB 有但磁盘没有，清掉记录 + 相册关联
+        5) 保留 is_favorite / favorited_at / title / description / id
+
         Args:
             album_path: 相册根目录
-            progress_cb: 可选回调 (message: str, percent: int)，用于上报进度
+            progress_cb: 可选回调 (message: str, percent: int)
         """
         def _cb(msg, pct):
             if progress_cb:
@@ -206,58 +219,144 @@ class ConfigManager:
                 except Exception:
                     pass
 
+        def _escape_like(s: str) -> str:
+            """转义 LIKE 通配符 \\ % _"""
+            return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
         media_formats = MEDIA_FORMATS
         video_formats = VIDEO_FORMATS
 
-
         db = SessionLocal()
         try:
-            _cb('正在清空旧索引...', 5)
-            # 清空旧相册记录（包含旧MD5）
-            db.query(Photo).delete()
-            db.commit()
+            # ============================================================
+            # Phase 1: path 迁移
+            # ============================================================
+            prev_album_path = self.config.get("previous_album_path")
+            new_album_path_abs = str(album_path.absolute()).rstrip("\\/")
 
-            # 先收集文件列表，以便计算进度
+            if prev_album_path:
+                prev_abs = prev_album_path.rstrip("\\/")
+                if prev_abs.lower() != new_album_path_abs.lower():
+                    _cb('检测到相册路径变化，迁移 path 前缀...', 3)
+                    # 严格匹配：必须以"旧前缀 + 路径分隔符"开头
+                    # 避免 D:\Photos 误匹配 D:\PhotosBackup
+                    old_prefix_with_sep = prev_abs.rstrip("\\/") + os.sep
+                    new_prefix_with_sep = new_album_path_abs.rstrip("\\/") + os.sep
+
+                    db.execute(
+                        text(
+                            "UPDATE photos "
+                            "SET path = :new_prefix || SUBSTR(path, LENGTH(:old_prefix) + 1) "
+                            "WHERE path LIKE :old_prefix_like ESCAPE '\\'"
+                        ),
+                        {
+                            "new_prefix": new_prefix_with_sep,
+                            "old_prefix": old_prefix_with_sep,
+                            "old_prefix_like": _escape_like(old_prefix_with_sep) + "%",
+                        }
+                    )
+                    db.commit()
+                    migrated = db.query(Photo).filter(Photo.path.like(new_prefix_with_sep + "%", escape="\\")).count()
+                    logger.info(f"[rebuild] path 迁移完成：{prev_abs} → {new_album_path_abs}，影响 {migrated} 条记录")
+
+                # 清除 previous_album_path（迁移完成或路径没变）
+                self.config["previous_album_path"] = None
+                self._save_config()
+
+            # ============================================================
+            # Phase 2: 查询现有所有 Photo
+            # ============================================================
+            _cb('正在查询现有索引...', 5)
+            existing_photos = db.query(Photo).all()
+            existing_map = {p.path: p for p in existing_photos}
+
+            # ============================================================
+            # Phase 3: 扫描新目录
+            # ============================================================
             _cb('正在扫描文件列表...', 10)
             all_files = [
                 f for f in album_path.rglob('*')
                 if f.is_file() and f.suffix.lower() in media_formats
             ]
             total = len(all_files)
-
+            new_paths_set = {str(f) for f in all_files}
             now = datetime.now()
 
+            # ============================================================
+            # Phase 4: 比对 + UPDATE + INSERT
+            # ============================================================
+            new_photos_to_add = []
             for idx, file in enumerate(all_files, 1):
-                pct = 10 + int(idx / total * 85) if total else 95
-                _cb(f'正在建立索引 ({idx}/{total})...', pct)
+                pct = 10 + int(idx / total * 70) if total else 80
+                _cb(f'正在比对 ({idx}/{total})...', pct)
 
+                file_path_str = str(file)
                 try:
                     stat = file.stat()
                 except Exception:
                     continue
 
                 ext = file.suffix.lower()
-                # md5_hash 不再有 unique 约束，直接保存所有文件的真实 MD5
-                # 保留重复 MD5 记录，确保去重检测能正常工作
-                md5_hash = self._compute_md5(file)
+                file_mtime = stat.st_mtime
 
-                photo = Photo(
-                    filename=file.name,
-                    path=str(file),
-                    size=stat.st_size,
-                    md5_hash=md5_hash,
-                    created_at=now,
-                    modified_at=datetime.fromtimestamp(stat.st_mtime),
-                    media_date=datetime.fromtimestamp(stat.st_mtime),
-                    file_type='video' if ext in video_formats else 'photo',
-                    extension=ext,
-                    imported_at=now,
+                existing = existing_map.get(file_path_str)
+                if existing:
+                    # path 已存在 → 看指纹决定是否重算 MD5
+                    existing_mtime = existing.modified_at.timestamp() if existing.modified_at else None
+                    if existing.size == stat.st_size and existing_mtime == file_mtime:
+                        # 指纹完全一致 → 跳过
+                        continue
+                    # 指纹变了 → 重算 MD5
+                    existing.md5_hash = self._compute_md5(file)
+                    existing.size = stat.st_size
+                    existing.modified_at = datetime.fromtimestamp(file_mtime)
+                    existing.media_date = datetime.fromtimestamp(file_mtime)
+                    # 不动 is_favorite / favorited_at / title / description / id
+                else:
+                    # 新文件 → 创建新 Photo
+                    new_photos_to_add.append(Photo(
+                        filename=file.name,
+                        path=file_path_str,
+                        size=stat.st_size,
+                        md5_hash=self._compute_md5(file),
+                        created_at=now,
+                        modified_at=datetime.fromtimestamp(file_mtime),
+                        media_date=datetime.fromtimestamp(file_mtime),
+                        file_type='video' if ext in video_formats else 'photo',
+                        extension=ext,
+                        imported_at=now,
+                    ))
+
+            # ============================================================
+            # Phase 5: DELETE 分支（清理已不存在文件 + 相册关联）
+            # ============================================================
+            _cb('正在清理已删除文件...', 85)
+            to_delete_ids = [p.id for p in existing_photos if p.path not in new_paths_set]
+            if to_delete_ids:
+                # Step 1: 清掉 album_photos 关联
+                db.query(AlbumPhoto).filter(AlbumPhoto.photo_id.in_(to_delete_ids)).delete(synchronize_session=False)
+                # Step 2: albums.cover_photo_id 置 NULL（保留相册本身）
+                db.query(Album).filter(Album.cover_photo_id.in_(to_delete_ids)).update(
+                    {Album.cover_photo_id: None}, synchronize_session=False
                 )
-                db.add(photo)
+                # Step 3: 删 photos 记录
+                db.query(Photo).filter(Photo.id.in_(to_delete_ids)).delete(synchronize_session=False)
+
+            # ============================================================
+            # Phase 6: INSERT 新文件
+            # ============================================================
+            _cb('正在写入新文件...', 90)
+            if new_photos_to_add:
+                db.add_all(new_photos_to_add)
 
             db.commit()
             _cb('索引重建完成', 100)
-            logger.info(f"✓ 已重建相册MD5索引: {album_path}，共 {total} 个文件")
+            logger.info(
+                f"✓ 重建索引完成: {album_path}，"
+                f"共 {total} 个文件，"
+                f"新增 {len(new_photos_to_add)} 个，"
+                f"删除 {len(to_delete_ids)} 个"
+            )
         except Exception:
             db.rollback()
             raise
@@ -273,7 +372,8 @@ class ConfigManager:
             album_path_obj = Path(album_path)
             if not album_path_obj.exists() or not album_path_obj.is_dir():
                 logger.warning(f"⚠️ 相册路径不存在或不是目录: {album_path}")
-                # 重置相册路径为 None
+                # 把旧值挪到 previous_album_path，用于后续 path 迁移
+                self.config["previous_album_path"] = album_path
                 self.config["album_path"] = None
                 self._save_config()
                 return None

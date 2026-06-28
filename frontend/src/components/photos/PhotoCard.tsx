@@ -29,6 +29,12 @@ export function PhotoCard({ photo, selected, selectionMode, onClick, onFavoriteC
   const thumbnailUrl = api.getThumbnail(photo.path);
   const [isFav, setIsFav] = useState(photo.is_favorite || false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  // photo.path 变化时重置加载失败状态
+  useEffect(() => {
+    setLoadError(false);
+  }, [photo.path]);
 
   // 同步 photo.is_favorite 变化（外部更新时保持一致）
   useEffect(() => {
@@ -87,12 +93,38 @@ export function PhotoCard({ photo, selected, selectionMode, onClick, onFavoriteC
         onClick={onClick}
         onContextMenu={handleContextMenu}
       >
-      <img
-        src={thumbnailUrl}
-        alt={photo.name}
-        className={`w-full ${layoutMode === 'grid' ? 'aspect-square object-cover' : 'h-auto object-cover'} transition-transform duration-300 ${selectionMode ? '' : 'hover:scale-105'}`}
-        loading="lazy"
-      />
+      {loadError ? (
+        <div
+          className={`w-full flex flex-col items-center justify-center bg-page text-tertiary transition-transform duration-300 ${
+            layoutMode === 'grid'
+              ? 'aspect-square'
+              : 'h-auto min-h-[160px]'
+          } ${selectionMode ? '' : 'hover:scale-105'}`}
+        >
+          <svg
+            className="w-10 h-10 mb-2"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <polyline points="3 15 8 11 12 14 16 10 21 14" />
+            <line x1="6" y1="7" x2="18" y2="17" />
+          </svg>
+          <span className="text-xs">无法加载</span>
+        </div>
+      ) : (
+        <img
+          src={thumbnailUrl}
+          alt={photo.name}
+          className={`w-full ${layoutMode === 'grid' ? 'aspect-square object-cover' : 'h-auto object-cover'} transition-transform duration-300 ${selectionMode ? '' : 'hover:scale-105'}`}
+          loading="lazy"
+          onError={() => setLoadError(true)}
+        />
+      )}
       
       {/* 收藏按钮（v0.7 §8.2 对齐原型：收藏后红色圆背景 + 白色心形，未收藏半透明黑底 + 白色描边心形） */}
       <button
