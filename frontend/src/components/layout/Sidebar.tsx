@@ -195,10 +195,10 @@ export function Sidebar({
                         const res = await api.getAlbums();
                         setAlbums(res.albums);
                         window.dispatchEvent(new CustomEvent('albums:changed'));
-                        showToast('重命名成功', 'success');
+                        showToast(t('sidebar.renameSuccess'), 'success');
                       } catch (error) {
                         console.error('重命名失败:', error);
-                        showToast('重命名失败', 'error');
+                        showToast(t('sidebar.renameFailed'), 'error');
                       }
                       setEditingAlbumId(null);
                     } else if (e.key === 'Escape') {
@@ -242,18 +242,18 @@ export function Sidebar({
                   if (photoId) {
                     try {
                       await api.addPhotoToAlbum(album.id, Number(photoId));
-                      showToast(`已添加到 ${album.name}`, 'success');
+                      showToast(t('sidebar.addedToAlbum', { name: album.name }), 'success');
                       await onRefreshCounters?.();
                     } catch (error) {
-                      showToast('添加失败', 'error');
+                      showToast(t('sidebar.addFailed'), 'error');
                     }
                   } else if (sourceAlbumId && Number(sourceAlbumId) !== album.id) {
                     try {
                       await api.mergeAlbums(Number(sourceAlbumId), album.id);
-                      showToast(`已合并到 ${album.name}`, 'success');
+                      showToast(t('sidebar.mergedToAlbum', { name: album.name }), 'success');
                       await onRefreshCounters?.();
                     } catch (error) {
-                      showToast('合并失败', 'error');
+                      showToast(t('sidebar.mergeFailed'), 'error');
                     }
                   }
                 }}

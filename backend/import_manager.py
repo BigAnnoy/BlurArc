@@ -940,3 +940,37 @@ def get_import_manager() -> ImportManager:
     if _import_manager is None:
         _import_manager = ImportManager()
     return _import_manager
+
+
+def scan_directory(folder_path: str) -> List[dict]:
+    """扫描目录中的媒体文件（供 /api/folders/scan-new 使用）
+
+    Args:
+        folder_path: 待扫描的目录路径
+
+    Returns:
+        媒体文件信息列表，每个元素包含 filename、path、size、md5、date、type
+    """
+    folder = Path(folder_path)
+    if not folder.exists() or not folder.is_dir():
+        return []
+
+    results = []
+    for file in folder.rglob('*'):
+        if not file.is_file():
+            continue
+        ext = file.suffix.lower()
+        if ext not in MEDIA_EXT_SET:
+            continue
+
+        stat = file.stat()
+        file_type = 'video' if ext in VIDEO_FORMATS else 'photo'
+        results.append({
+            'filename': file.name,
+            'path': str(file),
+            'size': stat.st_size,
+            'md5': None,
+            'date': datetime.fromtimestamp(stat.st_mtime),
+            'type': file_type,
+        })
+    return results

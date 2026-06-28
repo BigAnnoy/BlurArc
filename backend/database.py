@@ -254,6 +254,22 @@ def init_db():
                 conn.execute(text("ALTER TABLE albums ADD COLUMN cover_photo_id INTEGER"))
                 conn.commit()
                 print("已添加 albums.cover_photo_id 字段")
+
+            # 检查 album_photos 表现有列
+            result = conn.execute(text("PRAGMA table_info(album_photos)"))
+            album_photo_columns = [row[1] for row in result]
+
+            # 添加 added_at 字段
+            if 'added_at' not in album_photo_columns:
+                conn.execute(text("ALTER TABLE album_photos ADD COLUMN added_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+                conn.commit()
+                print("已添加 album_photos.added_at 字段")
+
+            # 添加 sort_order 字段（先建字段，拖动重排后续实现）
+            if 'sort_order' not in album_photo_columns:
+                conn.execute(text("ALTER TABLE album_photos ADD COLUMN sort_order INTEGER DEFAULT 0"))
+                conn.commit()
+                print("已添加 album_photos.sort_order 字段")
     except Exception as e:
         print(f"v0.7 字段迁移时出错: {e}")
         pass

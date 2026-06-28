@@ -632,12 +632,12 @@ def test_rebuild_empty_album_deletes_all_photos(temp_dir, in_memory_db):
 
 def test_rebuild_path_migration_prefix_collision(temp_dir, in_memory_db):
     r"""
-    path 迁移按字符串前缀匹配：当新路径以旧路径开头时，旧记录会被迁移过去。
+    path 迁移会替换所有以旧相册根目录 + 路径分隔符开头的记录。
 
-    这是 v1 的已知限制：无法区分「D:\Photos 改名为 D:\MyPhotos」
-    和「把相册路径误设为 D:\PhotosBackup」。前者期望迁移保留收藏，
-    后者期望不迁移；按前缀匹配会同时满足前者，也会把 Photo.jpg
-    这类旧路径迁移到 PhotosBackup\photo.jpg 上。
+    当新相册根目录与旧根目录具有相同前缀时（如 Photos vs PhotosBackup），
+    旧记录仍会被迁移到新根目录下。这是当前实现的已知行为：只要相对路径
+    在新目录下存在对应文件，收藏等用户数据就会保留；若用户误设路径，
+    也可能把旧记录迁移到意料之外的目录。
     """
     config_manager = create_config_manager_with_mock(temp_dir)
     db = in_memory_db()

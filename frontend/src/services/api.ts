@@ -39,6 +39,13 @@ export const api = {
   // Health check
   health: () => fetchJson<{ status: string }>(`${API_BASE}/health`),
 
+  // System locale - 用于首次启动自动选择语言
+  getSystemLocale: () =>
+    fetchJson<{ locale: string; language: 'zh' | 'en' }>(`${API_BASE}/system/locale`).catch(() => ({
+      locale: '',
+      language: 'zh' as const,
+    })),
+
   // Stats
   getStats: () => fetchJson<{ total_files: number; video_count: number; total_size_mb: number; last_import: string }>(`${API_BASE}/album/stats`),
 
@@ -222,9 +229,9 @@ export const api = {
         });
         return { album_path: newPath, task_id: res.task_id };
       }
-      throw new Error('未选择文件夹');
+      throw new Error('welcome.folderNotSelected');
     }
-    throw new Error('PyWebView API 不可用');
+    throw new Error('app.pywebviewNotAvailable');
   },
 
   // Select source folder for import
@@ -380,7 +387,7 @@ export const api = {
     fetchJson<{ status: string; id: number }>(`${API_BASE}/albums/${albumId}`, { method: 'DELETE' }),
 
   getAlbumPhotos: (albumId: number, page?: number, pageSize?: number, sort?: string) =>
-    fetchJson<{ photos: { id: number; filename: string; path: string; size: number; date: string | null; type: string; is_favorite: boolean }[]; total: number }>(
+    fetchJson<{ photos: { id: number; filename: string; path: string; size: number; date: string | null; type: string; is_favorite: boolean }[]; total: number; page: number; total_pages: number; page_size: number }>(
       `${API_BASE}/albums/${albumId}/photos${page && pageSize ? `?page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}` : (sort ? `?sort=${sort}` : '')}`
     ),
 

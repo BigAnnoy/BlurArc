@@ -8,7 +8,6 @@ interface WelcomeScreenProps {
 }
 
 const POLL_INTERVAL = 500;
-const MAX_POLL_TIME = 5 * 60 * 1000;
 const MAX_RETRY_COUNT = 5;
 
 export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
@@ -18,9 +17,9 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState('');
   const pollingRef = useRef<boolean>(false);
-  const startTimeRef = useRef<number>(0);
   const retryCountRef = useRef<number>(0);
   const onCompleteCalledRef = useRef<boolean>(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const finishAndNavigate = useCallback((errorMessage?: string) => {
     if (onCompleteCalledRef.current) return;
@@ -30,28 +29,21 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
     if (errorMessage) {
       showToast(errorMessage, 'error');
     }
-    setTimeout(() => {
+    timeoutRef.current = setTimeout(() => {
       onComplete();
     }, 100);
   }, [onComplete, showToast]);
 
   const pollRebuildProgress = async (taskId: string) => {
     pollingRef.current = true;
-    startTimeRef.current = Date.now();
     retryCountRef.current = 0;
 
     while (pollingRef.current) {
-      if (Date.now() - startTimeRef.current > MAX_POLL_TIME) {
-        finishAndNavigate(t('welcome.rebuildTimeout'));
-        return;
-      }
-
       try {
         const result = await api.getRebuildProgress(taskId);
         retryCountRef.current = 0;
 
         setProgress(result.progress ?? 0);
-        setProgressMessage(result.message ?? '');
 
         if (result.status === 'done') {
           finishAndNavigate();
@@ -90,9 +82,9 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
         finishAndNavigate();
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : t('welcome.selectFailed');
-      if (message !== t('welcome.folderNotSelected')) {
-        showToast(message, 'error');
+      const message = error instanceof Error ? error.message : 'welcome.selectFailed';
+      if (message !== 'welcome.folderNotSelected') {
+        showToast(t(message), 'error');
       }
       setLoading(false);
       pollingRef.current = false;
@@ -102,6 +94,9 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
   useEffect(() => {
     return () => {
       pollingRef.current = false;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
     };
   }, []);
 

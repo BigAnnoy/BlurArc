@@ -39,8 +39,11 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
   const [isSlideshow, setIsSlideshow] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [editTitle, setEditTitle] = useState(photo?.title || photo?.name || '');
+  const [editDescription, setEditDescription] = useState(photo?.description || '');
   const videoRef = useRef<HTMLVideoElement>(null);
   const thumbsRef = useRef<HTMLDivElement>(null);
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 延迟卸载模式：isOpen=false 时先播放退出动画，再真正卸载
   useEffect(() => {
@@ -62,6 +65,8 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
       const idx = photosList.findIndex((p) => p.id === photo.id);
       setCurrentIndex(idx >= 0 ? idx : 0);
       setIsFavorite((photo as any).is_favorite || false);
+      setEditTitle(photo.title || photo.name || '');
+      setEditDescription(photo.description || '');
     }
   }, [photo, photosList]);
 
@@ -77,6 +82,16 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
       .finally(() => { if (!cancelled) setAlbumsLoading(false); });
     return () => { cancelled = true; };
   }, [photo?.id]);
+
+  // 清理视频控制条 timeout
+  useEffect(() => {
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // 幻灯片播放（F2）
   useEffect(() => {
@@ -197,7 +212,10 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
   const handleMouseMove = () => {
     if (photo?.type === 'video') {
       setShowControls(true);
-      setTimeout(() => setShowControls(false), 2500);
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+      controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 2500);
     }
   };
 
@@ -306,7 +324,7 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
             className={`w-9 h-9 inline-flex items-center justify-center rounded-md transition-all duration-150 ${
               isSlideshow ? 'text-primary bg-primary-light' : 'text-text-secondary hover:bg-page hover:text-text-primary'
             }`}
-            title={`${t('preview.slideShow')} (Esc 退出)`}
+            title={`${t('preview.slideShow')} ${t('preview.slideShowEsc')}`}
           >
             {isSlideshow ? (
               <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -413,7 +431,8 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
             <div className="panel-section space-y-2 pb-5 border-b border-border">
               <input
                 type="text"
-                defaultValue={photo.title || photo.name}
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
                 onBlur={(e) => {
                   const newTitle = e.target.value;
                   if (newTitle !== (photo.title || photo.name)) {
@@ -429,7 +448,8 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
                 placeholder={t('preview.addTitle')}
               />
               <textarea
-                defaultValue={photo.description || ''}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
                 onBlur={(e) => {
                   const newDesc = e.target.value;
                   if (newDesc !== (photo.description || '')) {
@@ -448,7 +468,7 @@ export function PhotoPreview({ isOpen, onClose, photo, photos, onNavigate, onSel
 
             {/* 拍摄信息 */}
             <div className="panel-section py-5 border-b border-border">
-              <div className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.6px] mb-2">拍摄信息</div>
+              <div className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.6px] mb-2">{t('preview.shootingInfo')}</div>
               <div className="flex items-center gap-2 text-sm text-text-secondary mb-2.5">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <rect x="3" y="4" width="18" height="18" rx="2" />

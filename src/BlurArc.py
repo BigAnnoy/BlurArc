@@ -430,7 +430,7 @@ def main():
         # 这样 PyWebView 能正确注入 API 对象
         logger.info("🪟 创建 PyWebView 窗口...")
         window = webview.create_window(
-            title='Blur Arc v0.5.3',
+            title='Blur Arc v0.6.0',
             url=_load_url,  # Flask 就绪则直接加载；未就绪则显示本地等待页面
             width=1400,
             height=900,

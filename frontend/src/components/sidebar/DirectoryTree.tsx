@@ -109,7 +109,7 @@ export function DirectoryTree({ rootDir, selectedPath, onSelect, onRefreshCounte
   if (!rootDir) {
     return (
       <div className="text-[12px] text-text-tertiary px-2.5 py-1.5">
-        暂无文件夹
+        {t('directoryTree.noFolders')}
       </div>
     );
   }

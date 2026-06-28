@@ -9,7 +9,6 @@ import tempfile
 import shutil
 from pathlib import Path
 import unittest
-from unittest.mock import patch, MagicMock
 from datetime import datetime
 
 # 添加项目根目录到 Python 路径
@@ -27,7 +26,9 @@ class TestConfigManager(unittest.TestCase):
         # 创建临时目录作为测试配置目录
         self.temp_dir = tempfile.mkdtemp()
         self.config_file = Path(self.temp_dir) / "config.json"
-    
+        # 确保数据库表已创建（_rebuild_md5_index_for_album 需要访问 photos 等表）
+        Base.metadata.create_all(bind=engine)
+
     def tearDown(self):
         """测试后的清理工作"""
         # 删除临时目录
@@ -49,48 +50,34 @@ class TestConfigManager(unittest.TestCase):
     
     def _create_config_manager(self):
         """创建一个带有模拟属性的 ConfigManager 实例"""
-        # 创建模拟的 CONFIG_DIR 和 CONFIG_FILE 属性
-        mock_config_dir = MagicMock()
-        mock_config_dir.__get__ = MagicMock(return_value=Path(self.temp_dir))
-        
-        mock_config_file = MagicMock()
-        mock_config_file.__get__ = MagicMock(return_value=self.config_file)
-        
-        # 使用 patch.object 装饰器模拟属性
-        with patch.object(ConfigManager, 'CONFIG_DIR', mock_config_dir), \
-             patch.object(ConfigManager, 'CONFIG_FILE', mock_config_file):
-            
-            # 创建 ConfigManager 实例
-            config_manager = ConfigManager()
-            return config_manager
+        # 通过构造参数注入路径，避免测试写入用户真实的 Documents/BlurArc 目录
+        return ConfigManager(
+            config_dir=Path(self.temp_dir),
+            config_file=self.config_file,
+        )
     
     def test_initialization(self):
         """测试初始化配置"""
-        # 创建模拟的 CONFIG_DIR 和 CONFIG_FILE 属性
-        mock_config_dir = MagicMock()
-        mock_config_dir.__get__ = MagicMock(return_value=Path(self.temp_dir))
-        
-        mock_config_file = MagicMock()
-        mock_config_file.__get__ = MagicMock(return_value=self.config_file)
-        
-        # 在 with 块内创建 ConfigManager 实例并验证
-        with patch.object(ConfigManager, 'CONFIG_DIR', mock_config_dir), \
-             patch.object(ConfigManager, 'CONFIG_FILE', mock_config_file):
-            
-            # 创建 ConfigManager 实例
-            config_manager = ConfigManager()
-            
-            # 验证默认配置
-            default_config = config_manager._default_config()
-            self.assertEqual(config_manager.config, default_config)
-            
-            # 验证配置目录被创建
-            self.assertTrue(Path(self.temp_dir).exists())
-            
-            # 调用一个会保存配置的方法，验证配置文件被创建
-            with tempfile.TemporaryDirectory() as temp_album_dir:
-                config_manager.set_album_path(temp_album_dir)
-                self.assertTrue(self.config_file.exists())
+        # 通过构造参数注入路径，避免写入用户真实 Documents/BlurArc 目录
+        config_manager = ConfigManager(
+            config_dir=Path(self.temp_dir),
+            config_file=self.config_file,
+        )
+
+        # 重置为默认配置（ConfigManager 为全局单例，可能被其他测试污染）
+        config_manager.reset_config()
+
+        # 验证默认配置
+        default_config = config_manager._default_config()
+        self.assertEqual(config_manager.config, default_config)
+
+        # 验证配置目录被创建
+        self.assertTrue(Path(self.temp_dir).exists())
+
+        # 调用一个会保存配置的方法，验证配置文件被创建
+        with tempfile.TemporaryDirectory() as temp_album_dir:
+            config_manager.set_album_path(temp_album_dir)
+            self.assertTrue(self.config_file.exists())
     
     def test_is_first_run(self):
         """测试首次运行检测"""

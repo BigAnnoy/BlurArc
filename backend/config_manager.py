@@ -28,11 +28,22 @@ def _get_user_data_dir() -> Path:
     升级/卸载只动 exe 目录，用户数据不受影响
     """
     if os.name == 'nt':  # Windows
-        base = Path(os.environ.get('USERPROFILE', Path.home()))
+        # 优先读取注册表中用户实际设置的「文档」文件夹路径
+        # 以支持用户通过系统设置移动 Documents 位置的情况
+        try:
+            import winreg
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
+            ) as key:
+                personal, _ = winreg.QueryValueEx(key, 'Personal')
+                base = Path(os.path.expandvars(personal))
+        except Exception:
+            base = Path.home() / 'Documents'
     else:  # macOS / Linux
-        base = Path.home()
-    
-    data_dir = base / 'Documents' / 'BlurArc'
+        base = Path.home() / 'Documents'
+
+    data_dir = base / 'BlurArc'
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir
 
@@ -60,18 +71,34 @@ class ConfigManager:
     @property
     def CONFIG_DIR(self):
         """获取配置目录路径"""
+        # 测试场景允许通过实例属性覆盖真实路径
+        if hasattr(self, '_config_dir'):
+            return self._config_dir
         return _get_app_data_dir() / ".config"
-    
+
     @property
     def CONFIG_FILE(self):
         """获取配置文件路径"""
+        # 测试场景允许通过实例属性覆盖真实路径
+        if hasattr(self, '_config_file'):
+            return self._config_file
         return self.CONFIG_DIR / "config.json"
     
-    def __init__(self):
-        """初始化配置管理器"""
+    def __init__(self, config_dir=None, config_file=None):
+        """初始化配置管理器
+
+        Args:
+            config_dir: 可选，覆盖默认配置目录（主要用于测试）
+            config_file: 可选，覆盖默认配置文件（主要用于测试）
+        """
+        if config_dir is not None:
+            self._config_dir = config_dir
+        if config_file is not None:
+            self._config_file = config_file
+
         # 确保配置目录存在
         self._ensure_config_dir()
-        
+
         # 加载配置到内存
         self.config = self._load_config()
     
@@ -237,18 +264,15 @@ class ConfigManager:
             if prev_album_path:
                 prev_abs = prev_album_path.rstrip("\\/")
                 if prev_abs.lower() != new_album_path_abs.lower():
-                    _cb('检测到相册路径变化，迁移 path 前缀...', 3)
+                    _cb('rebuild.migrating', 3)
                     # 严格匹配：必须以"旧前缀 + 路径分隔符"开头
                     # 避免 D:\Photos 误匹配 D:\PhotosBackup
                     old_prefix_with_sep = prev_abs.rstrip("\\/") + os.sep
                     new_prefix_with_sep = new_album_path_abs.rstrip("\\/") + os.sep
 
-                    # LIKE pattern 必须用旧前缀（不含末尾分隔符）拼接 "\\%"，
-                    # 其中 "\\" 表示字面 "\"，"%" 是通配符。
-                    # 如果写成 "\\%"（仅一个反斜杠），SQLite 会把它解析为字面 "%"，
-                    # 导致匹配失败；如果写成旧写法 "_escape_like(old_prefix_with_sep) + '%'"，
-                    # 末尾的 "\\%" 又会被解析为字面 "%"，从而误匹配 PhotosBackup。
-                    old_prefix_like = _escape_like(prev_abs) + "\\\\%"
+                    # LIKE pattern：旧前缀 + 字面路径分隔符 + 通配符。
+                    # 用 _escape_like 处理 os.sep，Windows 下反斜杠会被正确转义。
+                    old_prefix_like = _escape_like(prev_abs) + _escape_like(os.sep) + "%"
 
                     db.execute(
                         text(
@@ -273,14 +297,14 @@ class ConfigManager:
             # ============================================================
             # Phase 2: 查询现有所有 Photo
             # ============================================================
-            _cb('正在查询现有索引...', 5)
+            _cb('rebuild.querying', 5)
             existing_photos = db.query(Photo).all()
             existing_map = {p.path: p for p in existing_photos}
 
             # ============================================================
             # Phase 3: 扫描新目录
             # ============================================================
-            _cb('正在扫描文件列表...', 10)
+            _cb('rebuild.scanning', 10)
             all_files = [
                 f for f in album_path.rglob('*')
                 if f.is_file() and f.suffix.lower() in media_formats
@@ -295,7 +319,7 @@ class ConfigManager:
             new_photos_to_add = []
             for idx, file in enumerate(all_files, 1):
                 pct = 10 + int(idx / total * 70) if total else 80
-                _cb(f'正在比对 ({idx}/{total})...', pct)
+                _cb('rebuild.comparing', pct)
 
                 file_path_str = str(file)
                 try:
@@ -337,7 +361,7 @@ class ConfigManager:
             # ============================================================
             # Phase 5: DELETE 分支（清理已不存在文件 + 相册关联）
             # ============================================================
-            _cb('正在清理已删除文件...', 85)
+            _cb('rebuild.cleaning', 85)
             to_delete_ids = [p.id for p in existing_photos if p.path not in new_paths_set]
             if to_delete_ids:
                 # Step 1: 清掉 album_photos 关联
@@ -352,12 +376,12 @@ class ConfigManager:
             # ============================================================
             # Phase 6: INSERT 新文件
             # ============================================================
-            _cb('正在写入新文件...', 90)
+            _cb('rebuild.writing', 90)
             if new_photos_to_add:
                 db.add_all(new_photos_to_add)
 
             db.commit()
-            _cb('索引重建完成', 100)
+            _cb('rebuild.complete', 100)
             logger.info(
                 f"✓ 重建索引完成: {album_path}，"
                 f"共 {total} 个文件，"

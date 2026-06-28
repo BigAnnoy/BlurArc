@@ -30,6 +30,7 @@ const translations: Record<Language, Record<string, string>> = {
     'common.rename': '重命名',
     'common.duplicate': '复制相簿',
     'common.locale': '中文',
+    'common.exit': '退出',
 
     // Header
     'header.toggleTheme': '切换主题',
@@ -63,6 +64,12 @@ const translations: Record<Language, Record<string, string>> = {
     'sidebar.albumHint': '相册是照片的虚拟集合，不复制原文件。一张照片可以同时属于多个相册。',
     'sidebar.albumCreated': '相册已创建',
     'sidebar.albumCreateFailed': '创建失败',
+    'sidebar.renameSuccess': '重命名成功',
+    'sidebar.renameFailed': '重命名失败',
+    'sidebar.addFailed': '添加失败',
+    'sidebar.mergeFailed': '合并失败',
+    'sidebar.addedToAlbum': '已添加到 {name}',
+    'sidebar.mergedToAlbum': '已合并到 {name}',
 
     // Main Content
     'main.selectToBrowse': '选择目录开始浏览',
@@ -84,6 +91,8 @@ const translations: Record<Language, Record<string, string>> = {
     'main.groupYear': '按年',
     'main.removeFromAlbum': '从相册移除',
     'main.joinAlbum': '加入相册',
+    'main.layoutGrid': '（网格）',
+    'main.layoutMasonry': '（瀑布流）',
 
     // Filter
     'filter.photoOnly': '仅照片',
@@ -132,6 +141,8 @@ const translations: Record<Language, Record<string, string>> = {
     'preview.infoPanel': '信息面板',
     'preview.favorite': '收藏',
     'preview.photoCount': '张',
+    'preview.shootingInfo': '拍摄信息',
+    'preview.slideShowEsc': '(Esc 退出)',
 
     // Delete Dialog
     'delete.title': '确认删除',
@@ -159,12 +170,19 @@ const translations: Record<Language, Record<string, string>> = {
     'settings.clearing': '清空中...',
     'settings.cacheCleared': '已清空缓存，释放 {size} MB',
     'settings.rebuildIndex': '重建索引（数据库 + 缩略图）',
+    'settings.rebuildStarting': '正在启动重建...',
     'settings.rebuilding': '重建中...',
     'settings.rebuildProgress': '{progress}%',
     'settings.rebuildStarted': '已清空 {count} 个缩略图，开始重建索引',
     'settings.rebuildComplete': '索引重建完成',
-    'settings.rebuildFailed': '重建失败: {message}',
+    'settings.rebuildFailed': '重建失败',
     'settings.themeChanged': '主题已更改',
+    'settings.missingAlbumPath': '缺少相册路径参数',
+    'settings.pathNotFound': '路径不存在',
+    'settings.pathNotDirectory': '路径不是目录',
+    'settings.configManagerInitFailed': '配置管理器初始化失败',
+    'settings.setAlbumPathFailed': '设置相册路径失败',
+    'settings.albumPathMissing': '未设置相册路径',
     'settings.languageChanged': '语言已更改',
     'settings.albumPathChanged': '相册路径已更改',
     'settings.loadFailed': '加载设置失败',
@@ -288,6 +306,14 @@ const translations: Record<Language, Record<string, string>> = {
     'photoPreview.close': '关闭',
     'photoPreview.openFile': '打开文件',
 
+    // Photo Card
+    'photoCard.loadFailed': '无法加载',
+    'photoCard.addFavorite': '加入收藏',
+    'photoCard.removeFavorite': '取消收藏',
+
+    // Directory Tree
+    'directoryTree.noFolders': '暂无文件夹',
+
     // Check Stage Text
     'checkStage.queued': '任务已排队',
     'checkStage.scanning': '正在扫描源目录...',
@@ -300,6 +326,13 @@ const translations: Record<Language, Record<string, string>> = {
     // App initialization
     'app.connectionFailed': '连接服务器失败，请重启应用',
     'app.loadPhotosFailed': '加载照片失败',
+    'app.maxSelectionReached': '最多选中 {count} 张',
+    'app.loadFavoritesFailed': '加载收藏失败',
+    'app.loadAlbumFailed': '加载相册失败',
+    'app.loadMoreFailed': '加载更多失败',
+    'app.albumDuplicated': '相册已复制',
+    'app.duplicateAlbumFailed': '复制相册失败',
+    'app.pywebviewNotAvailable': 'PyWebView API 不可用',
 
     // Phone Import
     'phoneImport.title': '从手机导入',
@@ -333,10 +366,47 @@ const translations: Record<Language, Record<string, string>> = {
     'welcome.selectFailed': '选择相册路径失败',
     'welcome.folderNotSelected': '未选择文件夹',
     'welcome.selectingFolder': '正在选择文件夹...',
-    'welcome.buildingIndex': '正在建立索引和缩略图...',
+    'welcome.buildingIndex': '正在建立索引...',
     'welcome.processing': '处理中',
     'welcome.rebuildFailed': '建立索引失败',
-    'welcome.rebuildTimeout': '建立索引超时',
+
+    // Rebuild Index Stages
+    'rebuild.migrating': '检测到相册路径变化，迁移 path 前缀...',
+    'rebuild.querying': '正在查询现有索引...',
+    'rebuild.scanning': '正在扫描文件列表...',
+    'rebuild.comparing': '正在比对...',
+    'rebuild.cleaning': '正在清理已删除文件...',
+    'rebuild.writing': '正在写入新文件...',
+    'rebuild.complete': '索引重建完成',
+    'rebuild.clearing': '正在清空旧索引...',
+    'rebuild.failed': '重建失败',
+
+    // Album Manage Modal
+    'albumModal.createTitle': '新建相册',
+    'albumModal.renameTitle': '重命名相册',
+    'albumModal.deleteTitle': '删除相册',
+    'albumModal.duplicateTitle': '复制相册',
+    'albumModal.nameRequired': '名称不能为空',
+    'albumModal.actionFailed': '操作失败',
+    'albumModal.deleteConfirm': '确定要删除相册「{name}」吗？',
+    'albumModal.duplicateConfirm': '将复制相册「{name}」及其所有照片引用。',
+    'albumModal.namePlaceholder': '输入相册名称...',
+    'albumModal.hint': '虚拟集合，不复制原文件',
+    'albumModal.deleteAlbum': '删除相册',
+    'albumModal.processing': '处理中...',
+    'albumModal.photosNotDeleted': '照片本身不会被删除，仍保留在主库中。',
+
+    // Join Album Modal
+    'joinAlbum.title': '加入相册',
+    'joinAlbum.selectedSummary': '已选 {count} 个相册 · 含 {photoCount} 张照片',
+    'joinAlbum.joining': '加入中...',
+    'joinAlbum.joinCount': '加入 {count} 个相册',
+    'joinAlbum.newAlbumPlaceholder': '新相册名称...',
+    'joinAlbum.searchPlaceholder': '搜索相册...',
+    'joinAlbum.noAlbums': '还没有相册，创建第一个相册开始使用',
+    'joinAlbum.noMatch': '没有匹配的相册',
+    'joinAlbum.createNewAlbum': '新建相册',
+    'joinAlbum.createNewAlbumDesc': '创建新相册',
 
     // Mobile Access
     'mobileAccess.title': '移动设备访问',
@@ -358,6 +428,9 @@ const translations: Record<Language, Record<string, string>> = {
     'mobileAccess.revokeAllConfirmDesc': '所有已配对设备将失去访问权限，需要重新配对。',
     'mobileAccess.revoking': '撤销中...',
     'mobileAccess.serviceDesc': '开启后已配对的设备可以浏览相册和上传照片。关闭后所有连接将立即断开。',
+    'mobileAccess.pairedCount': '{count} 台设备已配对',
+    'mobileAccess.unpair': '取消配对',
+    'mobileAccess.processing': '处理中',
 
     // Pairing Mode (新流程)
     'pairing.title': '配对模式',
@@ -406,6 +479,7 @@ const translations: Record<Language, Record<string, string>> = {
     'common.rename': 'Rename',
     'common.duplicate': 'Duplicate Album',
     'common.locale': 'English',
+    'common.exit': 'Exit',
 
     // Header
     'header.toggleTheme': 'Toggle Theme',
@@ -439,6 +513,12 @@ const translations: Record<Language, Record<string, string>> = {
     'sidebar.albumHint': 'An album is a virtual collection of photos. Files are not duplicated. A photo can belong to multiple albums.',
     'sidebar.albumCreated': 'Album created',
     'sidebar.albumCreateFailed': 'Create failed',
+    'sidebar.renameSuccess': 'Rename successful',
+    'sidebar.renameFailed': 'Rename failed',
+    'sidebar.addFailed': 'Add failed',
+    'sidebar.mergeFailed': 'Merge failed',
+    'sidebar.addedToAlbum': 'Added to {name}',
+    'sidebar.mergedToAlbum': 'Merged into {name}',
 
     // Main Content
     'main.selectToBrowse': 'Select a folder to browse',
@@ -460,6 +540,8 @@ const translations: Record<Language, Record<string, string>> = {
     'main.groupYear': 'By Year',
     'main.removeFromAlbum': 'Remove from Album',
     'main.joinAlbum': 'Add to Album',
+    'main.layoutGrid': '(Grid)',
+    'main.layoutMasonry': '(Masonry)',
 
     // Filter
     'filter.photoOnly': 'Photos Only',
@@ -508,6 +590,8 @@ const translations: Record<Language, Record<string, string>> = {
     'preview.infoPanel': 'Info Panel',
     'preview.favorite': 'Favorite',
     'preview.photoCount': 'photos',
+    'preview.shootingInfo': 'Shooting Info',
+    'preview.slideShowEsc': '(Esc to exit)',
 
     // Delete Dialog
     'delete.title': 'Confirm Delete',
@@ -535,12 +619,19 @@ const translations: Record<Language, Record<string, string>> = {
     'settings.clearing': 'Clearing...',
     'settings.cacheCleared': 'Cache cleared, freed {size} MB',
     'settings.rebuildIndex': 'Rebuild Index (Database + Thumbnails)',
+    'settings.rebuildStarting': 'Starting rebuild...',
     'settings.rebuilding': 'Rebuilding...',
     'settings.rebuildProgress': '{progress}%',
     'settings.rebuildStarted': 'Cleared {count} thumbnails, rebuilding index',
     'settings.rebuildComplete': 'Index rebuild complete',
-    'settings.rebuildFailed': 'Rebuild failed: {message}',
+    'settings.rebuildFailed': 'Rebuild failed',
     'settings.themeChanged': 'Theme changed',
+    'settings.missingAlbumPath': 'Missing album path parameter',
+    'settings.pathNotFound': 'Path not found',
+    'settings.pathNotDirectory': 'Path is not a directory',
+    'settings.configManagerInitFailed': 'Config manager initialization failed',
+    'settings.setAlbumPathFailed': 'Failed to set album path',
+    'settings.albumPathMissing': 'Album path not set',
     'settings.languageChanged': 'Language changed',
     'settings.albumPathChanged': 'Album path changed',
     'settings.loadFailed': 'Failed to load settings',
@@ -664,6 +755,14 @@ const translations: Record<Language, Record<string, string>> = {
     'photoPreview.close': 'Close',
     'photoPreview.openFile': 'Open File',
 
+    // Photo Card
+    'photoCard.loadFailed': 'Unable to load',
+    'photoCard.addFavorite': 'Add to favorites',
+    'photoCard.removeFavorite': 'Remove from favorites',
+
+    // Directory Tree
+    'directoryTree.noFolders': 'No folders',
+
     // Check Stage Text
     'checkStage.queued': 'Task queued',
     'checkStage.scanning': 'Scanning source directory...',
@@ -676,6 +775,13 @@ const translations: Record<Language, Record<string, string>> = {
     // App initialization
     'app.connectionFailed': 'Failed to connect to server, please restart the app',
     'app.loadPhotosFailed': 'Failed to load photos',
+    'app.maxSelectionReached': 'Maximum {count} selected',
+    'app.loadFavoritesFailed': 'Failed to load favorites',
+    'app.loadAlbumFailed': 'Failed to load album',
+    'app.loadMoreFailed': 'Failed to load more',
+    'app.albumDuplicated': 'Album duplicated',
+    'app.duplicateAlbumFailed': 'Failed to duplicate album',
+    'app.pywebviewNotAvailable': 'PyWebView API not available',
 
     // Phone Import
     'phoneImport.title': 'Import from Phone',
@@ -709,10 +815,47 @@ const translations: Record<Language, Record<string, string>> = {
     'welcome.selectFailed': 'Failed to select album path',
     'welcome.folderNotSelected': 'No folder selected',
     'welcome.selectingFolder': 'Selecting folder...',
-    'welcome.buildingIndex': 'Building index and thumbnails...',
+    'welcome.buildingIndex': 'Building index...',
     'welcome.processing': 'Processing',
     'welcome.rebuildFailed': 'Failed to build index',
-    'welcome.rebuildTimeout': 'Building index timed out',
+
+    // Rebuild Index Stages
+    'rebuild.migrating': 'Album path changed, migrating path prefix...',
+    'rebuild.querying': 'Querying existing index...',
+    'rebuild.scanning': 'Scanning file list...',
+    'rebuild.comparing': 'Comparing...',
+    'rebuild.cleaning': 'Cleaning deleted files...',
+    'rebuild.writing': 'Writing new files...',
+    'rebuild.complete': 'Index rebuild complete',
+    'rebuild.clearing': 'Clearing old index...',
+    'rebuild.failed': 'Rebuild failed',
+
+    // Album Manage Modal
+    'albumModal.createTitle': 'New Album',
+    'albumModal.renameTitle': 'Rename Album',
+    'albumModal.deleteTitle': 'Delete Album',
+    'albumModal.duplicateTitle': 'Duplicate Album',
+    'albumModal.nameRequired': 'Name is required',
+    'albumModal.actionFailed': 'Operation failed',
+    'albumModal.deleteConfirm': 'Delete album "{name}"?',
+    'albumModal.duplicateConfirm': 'Will duplicate album "{name}" and all its photo references.',
+    'albumModal.namePlaceholder': 'Enter album name...',
+    'albumModal.hint': 'Virtual collection, does not duplicate original files',
+    'albumModal.deleteAlbum': 'Delete Album',
+    'albumModal.processing': 'Processing...',
+    'albumModal.photosNotDeleted': 'Photos themselves will not be deleted and remain in the main library.',
+
+    // Join Album Modal
+    'joinAlbum.title': 'Add to Album',
+    'joinAlbum.selectedSummary': '{count} albums selected · {photoCount} photos',
+    'joinAlbum.joining': 'Adding...',
+    'joinAlbum.joinCount': 'Add to {count} albums',
+    'joinAlbum.newAlbumPlaceholder': 'New album name...',
+    'joinAlbum.searchPlaceholder': 'Search albums...',
+    'joinAlbum.noAlbums': 'No albums yet, create the first album to get started',
+    'joinAlbum.noMatch': 'No matching albums',
+    'joinAlbum.createNewAlbum': 'New Album',
+    'joinAlbum.createNewAlbumDesc': 'Create new album',
 
     // Mobile Access
     'mobileAccess.title': 'Mobile Access',
@@ -734,6 +877,9 @@ const translations: Record<Language, Record<string, string>> = {
     'mobileAccess.revokeAllConfirmDesc': 'All paired devices will lose access and need to pair again.',
     'mobileAccess.revoking': 'Revoking...',
     'mobileAccess.serviceDesc': 'When enabled, paired devices can browse photos and upload. Disabling will disconnect all devices immediately.',
+    'mobileAccess.pairedCount': '{count} paired devices',
+    'mobileAccess.unpair': 'Unpair',
+    'mobileAccess.processing': 'Processing',
 
     // Pairing Mode (新流程)
     'pairing.title': 'Pairing Mode',
@@ -777,10 +923,22 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       try {
         const settings = await api.getSettings();
         if (settings.language === 'zh' || settings.language === 'en') {
+          // 用户已手动设置过语言，优先使用保存值
           setLanguageState(settings.language);
+          return;
         }
       } catch (error) {
         console.error('Failed to load language:', error);
+      }
+
+      // 首次启动：未保存语言偏好，按系统语言自动选择
+      try {
+        const locale = await api.getSystemLocale();
+        if (locale.language === 'zh' || locale.language === 'en') {
+          setLanguageState(locale.language);
+        }
+      } catch (error) {
+        console.error('Failed to load system locale:', error);
       }
     };
     loadLanguage();

@@ -1,7 +1,7 @@
 # Blur Arc 项目总结
 
-**最新版本**: v0.5.3
-**完成日期**: 2026-06-23
+**最新版本**: v0.6.0
+**完成日期**: 2026-06-24
 **状态**: ✅ **完全可用**（PC 端 + 移动端）
 **代码质量**: 生产级
 
@@ -287,22 +287,22 @@ cd blurarc_app && flutter test && flutter analyze
 
 | 文档 | 内容 | 状态 |
 |------|------|------|
-| [README.md](README.md) | 项目主入口 | ✅ v0.5.3 |
-| [CHANGELOG.md](CHANGELOG.md) | 版本变更 | ✅ v0.5.3 |
-| [docs/QUICK_START.md](docs/QUICK_START.md) | 快速测试 | ✅ v0.5.3 |
-| [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md) | 快速参考 | ✅ v0.5.3 |
-| [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) | 入门指南 | ✅ v0.5.3 |
-| [docs/PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) | 本文件 | ✅ v0.5.3 |
-| [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) | 开发指南 | ✅ v0.5.3 |
-| [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | API 文档（PC+移动） | ✅ v0.5.3 |
+| [README.md](README.md) | 项目主入口 | ✅ v0.6.0 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变更 | ✅ v0.6.0 |
+| [docs/QUICK_START.md](docs/QUICK_START.md) | 快速测试 | ✅ v0.6.0 |
+| [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md) | 快速参考 | ✅ v0.6.0 |
+| [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) | 入门指南 | ✅ v0.6.0 |
+| [docs/PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) | 本文件 | ✅ v0.6.0 |
+| [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) | 开发指南 | ✅ v0.6.0 |
+| [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | API 文档（PC+移动） | ✅ v0.6.0 |
 | [docs/CODE_MAP.md](docs/CODE_MAP.md) | 代码地图 | ✅ 2026-06-22 |
-| [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | 依赖说明 | ✅ v0.5.3 |
-| [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) | 数据库表结构 | ✅ v0.5.3 |
+| [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | 依赖说明 | ✅ v0.6.0 |
+| [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) | 数据库表结构 | ✅ v0.6.0 |
 | [docs/prototypes/](docs/prototypes/) | UI 原型（PC/手机/平板） | ✅ 活跃维护 |
 | [docs/devlogs/](docs/devlogs/) | 每日开发日志 | ✅ 每日更新 |
 | [docs/superpowers/specs/](docs/superpowers/specs/) | 方案设计 | ✅ 活跃维护 |
-| [blurarc_app/README.md](blurarc_app/README.md) | 移动端 README | ✅ v0.5.3 |
-| [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) | AI 助手指引 | ✅ v0.5.3 |
+| [blurarc_app/README.md](blurarc_app/README.md) | 移动端 README | ✅ v0.6.0 |
+| [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) | AI 助手指引 | ✅ v0.6.0 |
 
 ---
 
@@ -390,5 +390,5 @@ cd blurarc_app && flutter test && flutter analyze
 
 ---
 
-**版本**: v0.5.3 · **完成日期**: 2026-06-23 · **代码行数**: ~30,000
+**版本**: v0.6.0 · **完成日期**: 2026-06-24 · **代码行数**: ~30,000
 **状态**: ✅ 完全可用（PC 端 + 移动端）· **质量**: 生产级

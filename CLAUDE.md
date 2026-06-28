@@ -148,6 +148,14 @@ npm run build
 npm run preview
 ```
 
+### 国际化（i18n）
+
+- **所有面向用户的文案必须通过 `useI18n().t('key')` 输出**，禁止在 TSX/TS 中硬编码中文或英文。
+- 新增文案时，同步在 `frontend/src/contexts/I18nContext.tsx` 的 `zh` 和 `en` 两个字典中添加 key。
+- key 命名采用 `模块.语义` 风格，例如 `settings.rebuildComplete`、`app.loadFavoritesFailed`。
+- 后端返回给前端展示的状态/进度消息，应返回 i18n key（如 `rebuild.scanning`），由前端根据当前语言渲染；避免后端直接返回人类可读的中文或英文字符串。
+- 复用已有 key，避免重复定义同义文案。
+
 ## Flutter App 开发
 
 Flutter App 位于 `blurarc_app/` 目录，用于手机/平板通过局域网浏览相册和推送照片。

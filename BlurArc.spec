@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Blur Arc v0.5.3 - PyInstaller 打包配置
+Blur Arc v0.6.0 - PyInstaller 打包配置
 """
 
 import sys
@@ -38,6 +38,7 @@ hiddenimports = [
     'sqlalchemy', 'sqlalchemy.dialects.sqlite', 'sqlalchemy.orm', 'sqlalchemy.ext.declarative',
     'PIL', 'PIL.Image', 'PIL.ExifTags', 'PIL.ImageOps',
     'pillow_heif',
+    'python_xmp_toolkit', 'libxmp', 'libxmp.consts', 'libxmp.core', 'libxmp.exempi', 'libxmp.files',
     'dateutil', 'dateutil.parser',
     'tkinter', 'tkinter.filedialog',
     'email', 'email.mime', 'email.mime.text', 'html.parser',

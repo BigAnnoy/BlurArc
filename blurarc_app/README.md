@@ -2,7 +2,7 @@
 
 > 局域网无线浏览相册、推送照片到 PC 端，与 [Blur Arc](../README.md) 配套使用。
 >
-> **版本：** 1.0.0+1（App 内部版本）· **配套 PC 端：** v0.5.3+
+> **版本：** 1.0.0+1（App 内部版本）· **配套 PC 端：** v0.6.0+
 
 ---
 
@@ -16,7 +16,7 @@
 - **上传照片**：手机相册批量选图，推送到 PC 端自动归档
 - **跨设备**：手机竖屏、平板横屏自动适配，统一暗/亮主题
 
-**App 内部版本 `1.0`** — 与 PC 端 `v0.5.3` 解耦，移动端 API 通过 `/api/mobile/upload/done` 通知 PC 端有新的 Flutter 上传需要处理。
+**App 内部版本 `1.0`** — 与 PC 端 `v0.6.0` 解耦，移动端 API 通过 `/api/mobile/upload/done` 通知 PC 端有新的 Flutter 上传需要处理。
 
 ---
 
@@ -206,7 +206,7 @@ flutter build web
 - **mDNS 在 Android 模拟器无效**：NAT 隔离，组播不通，必须用真机或手动输入 IP
 - **ServiceInfo 参数顺序**（PC 端）见 [../CLAUDE.md](../CLAUDE.md) 中的 mDNS 注意事项
 - **首屏秒加载**：`api_client.dart` 配置 `Dio(sendTimeout: 30s)` 防止卡死
-- **App 版本与 PC 端版本解耦**：App 内部版本 `1.0`，与 PC 端 `v0.5.3` 不绑定
+- **App 版本与 PC 端版本解耦**：App 内部版本 `1.0`，与 PC 端 `v0.6.0` 不绑定
 
 ---
 
@@ -232,4 +232,4 @@ flutter build web
 
 ---
 
-**状态：** ✅ 与 PC 端 v0.5.3 配套可用
+**状态：** ✅ 与 PC 端 v0.6.0 配套可用

@@ -713,14 +713,36 @@ class TestImportCheckTargetDuplicates:
             assert data['target_duplicates'] == {}
 
     @patch('backend.api_server.get_album_path')
-    def test_import_check_target_duplicates_found(self, mock_get_album_path, client):
+    def test_import_check_target_duplicates_found(self, mock_get_album_path, client, monkeypatch):
         """目标相册中存在相同 MD5 的照片时，应检测为目标重复"""
-        from backend.database import init_db, SessionLocal, Photo
+        import sys
+        from pathlib import Path
+        from sqlalchemy import create_engine
+        from sqlalchemy.pool import StaticPool
+        from sqlalchemy.orm import sessionmaker
+
+        # api_server 内部以顶层 `database` 模块访问 DB，确保patch的是同一模块
+        backend_dir = str(Path(__file__).parent.parent.parent / 'backend')
+        if backend_dir not in sys.path:
+            sys.path.insert(0, backend_dir)
+        import database as db_mod
+        from database import Photo
         from backend.utils import compute_md5
         from datetime import datetime
 
-        init_db()
-        session = SessionLocal()
+        # 使用内存 SQLite 隔离测试数据库，避免污染生产 DB
+        test_engine = create_engine(
+            "sqlite:///:memory:",
+            echo=False,
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        db_mod.Base.metadata.create_all(bind=test_engine)
+        TestSession = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+        monkeypatch.setattr(db_mod, "engine", test_engine)
+        monkeypatch.setattr(db_mod, "SessionLocal", TestSession)
+
+        session = TestSession()
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
                 src = Path(tmpdir) / 'src'
@@ -752,7 +774,6 @@ class TestImportCheckTargetDuplicates:
                 )
                 session.add(p)
                 session.commit()
-                photo_id = p.id
 
                 mock_get_album_path.return_value = str(album)
 
@@ -769,8 +790,6 @@ class TestImportCheckTargetDuplicates:
                 assert len(data['target_duplicates']) > 0
                 assert real_md5 in data['target_duplicates']
         finally:
-            session.query(Photo).filter(Photo.id == photo_id).delete(synchronize_session=False)
-            session.commit()
             session.close()
 
     @patch('backend.api_server.get_album_path')

@@ -118,6 +118,37 @@ def get_album_path():
         return config.get_album_path()
     return None
 
+
+def _parse_bool(value: str) -> bool:
+    """解析查询字符串中的布尔值"""
+    if value is None:
+        return False
+    return str(value).lower() in ('1', 'true', 'yes', 'on')
+
+
+def _escape_like(s: str) -> str:
+    """转义 LIKE 通配符 \\ % _"""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _album_photo_count(db, album_id: int) -> int:
+    """使用聚合计数获取相册照片数量"""
+    from database import AlbumPhoto
+    from sqlalchemy import func
+    return db.query(func.count(AlbumPhoto.photo_id)).filter(AlbumPhoto.album_id == album_id).scalar()
+
+
+def _photo_in_album(db, album_id: int, photo_id: int) -> bool:
+    """检查照片是否在相册中"""
+    from database import AlbumPhoto
+    return db.query(AlbumPhoto).filter_by(album_id=album_id, photo_id=photo_id).first() is not None
+
+
+def _album_photo_ids(db, album_id: int) -> set:
+    """获取相册中所有照片 ID"""
+    from database import AlbumPhoto
+    return {row[0] for row in db.query(AlbumPhoto.photo_id).filter(AlbumPhoto.album_id == album_id)}
+
 def get_album_stats():
     """获取相册统计信息"""
     album_path = get_album_path()
@@ -917,30 +948,30 @@ def set_album_path_api():
         new_path = data.get('album_path')
         
         if not new_path:
-            return jsonify({'error': '缺少 album_path 参数'}), 400
-        
+            return jsonify({'error': 'settings.missingAlbumPath'}), 400
+
         new_path = Path(new_path)
         if not new_path.exists():
-            return jsonify({'error': f'路径不存在: {new_path}'}), 404
-        
+            return jsonify({'error': 'settings.pathNotFound'}), 404
+
         if not new_path.is_dir():
-            return jsonify({'error': f'路径不是目录: {new_path}'}), 400
-        
+            return jsonify({'error': 'settings.pathNotDirectory'}), 400
+
         config = get_config_manager()
         if not config:
-            return jsonify({'error': '配置管理器初始化失败'}), 500
-        
+            return jsonify({'error': 'settings.configManagerInitFailed'}), 500
+
         new_path_abs = str(new_path.absolute())
-        
+
         # 只做配置写入（快，同步），跳过耗时的 MD5 重建
         try:
             success = config.set_album_path_only(new_path_abs)
         except AttributeError:
             # 兼容旧版：直接调用同步方法（会阻塞，但不至于崩溃）
             success = config.set_album_path(new_path_abs)
-        
+
         if not success:
-            return jsonify({'error': '设置相册路径失败'}), 500
+            return jsonify({'error': 'settings.setAlbumPathFailed'}), 500
         
         # 生成任务 ID，后台线程执行重建
         task_id = f"rebuild_{uuid.uuid4().hex[:8]}"
@@ -948,10 +979,10 @@ def set_album_path_api():
             _rebuild_tasks[task_id] = {
                 'status': 'running',
                 'album_path': new_path_abs,
-                'message': '正在扫描相册...',
+                'message': 'rebuild.scanning',
                 'progress': 0,
             }
-        
+
         def _do_rebuild(tid, path_abs):
             def _ttl_cleanup():
                 with _rebuild_lock:
@@ -966,26 +997,25 @@ def set_album_path_api():
                         if tid in _rebuild_tasks:
                             _rebuild_tasks[tid]['message'] = msg
                             _rebuild_tasks[tid]['progress'] = pct
-                
-                on_progress('正在清空旧索引...', 5)
+
                 cfg._rebuild_md5_index_for_album(Path(path_abs), progress_cb=on_progress)
-                
+
                 with _rebuild_lock:
                     _rebuild_tasks[tid]['status'] = 'done'
-                    _rebuild_tasks[tid]['message'] = '索引重建完成'
+                    _rebuild_tasks[tid]['message'] = 'rebuild.complete'
                     _rebuild_tasks[tid]['progress'] = 100
                 logger.info(f"[rebuild] 任务 {tid} 完成")
             except Exception as e:
                 logger.error(f"[rebuild] 任务 {tid} 失败: {e}")
                 with _rebuild_lock:
                     _rebuild_tasks[tid]['status'] = 'error'
-                    _rebuild_tasks[tid]['message'] = str(e)
+                    _rebuild_tasks[tid]['message'] = 'rebuild.failed'
             finally:
                 # 5 分钟后自动清理任务条目，防止内存泄漏
                 t_cleanup = threading.Timer(300, _ttl_cleanup)
                 t_cleanup.daemon = True
                 t_cleanup.start()
-        
+
         t = threading.Thread(target=_do_rebuild, args=(task_id, new_path_abs), daemon=True)
         t.start()
         
@@ -1036,7 +1066,7 @@ def rebuild_index():
     try:
         album_path = get_album_path()
         if not album_path:
-            return jsonify({'error': '未设置相册路径'}), 400
+            return jsonify({'error': 'settings.albumPathMissing'}), 400
 
         album_path_abs = str(Path(album_path).absolute())
 
@@ -1057,7 +1087,7 @@ def rebuild_index():
             _rebuild_tasks[task_id] = {
                 'status': 'running',
                 'album_path': album_path_abs,
-                'message': '正在重建索引...',
+                'message': 'rebuild.scanning',
                 'progress': 0,
             }
 
@@ -1079,14 +1109,14 @@ def rebuild_index():
 
                 with _rebuild_lock:
                     _rebuild_tasks[tid]['status'] = 'done'
-                    _rebuild_tasks[tid]['message'] = '索引重建完成'
+                    _rebuild_tasks[tid]['message'] = 'rebuild.complete'
                     _rebuild_tasks[tid]['progress'] = 100
                 logger.info(f"[rebuild] 任务 {tid} 完成")
             except Exception as e:
                 logger.error(f"[rebuild] 任务 {tid} 失败: {e}")
                 with _rebuild_lock:
                     _rebuild_tasks[tid]['status'] = 'error'
-                    _rebuild_tasks[tid]['message'] = str(e)
+                    _rebuild_tasks[tid]['message'] = 'rebuild.failed'
 
             # 5 分钟后自动清理任务记录
             t_cleanup = threading.Timer(300, _ttl_cleanup)
@@ -2724,7 +2754,7 @@ def get_albums():
                     'description': album.description,
                     'cover_photo_id': album.cover_photo_id,
                     'cover_photo_path': cover_path,
-                    'photo_count': len(album.photos),
+                    'photo_count': _album_photo_count(db, album.id),
                     'created_at': album.created_at.isoformat() if album.created_at else None,
                 })
             return jsonify({'albums': result})
@@ -2791,7 +2821,7 @@ def get_album(album_id):
                 'name': album.name,
                 'description': album.description,
                 'cover_photo_id': album.cover_photo_id,
-                'photo_count': len(album.photos),
+                'photo_count': _album_photo_count(db, album.id),
                 'created_at': album.created_at.isoformat() if album.created_at else None,
             })
         finally:
@@ -2838,7 +2868,7 @@ def update_album(album_id):
                 'name': album.name,
                 'description': album.description,
                 'cover_photo_id': album.cover_photo_id,
-                'photo_count': len(album.photos),
+                'photo_count': _album_photo_count(db, album.id),
                 'created_at': album.created_at.isoformat() if album.created_at else None,
             })
         finally:
@@ -2881,6 +2911,9 @@ def get_album_photos(album_id):
             if not album:
                 return jsonify({'error': '相册不存在'}), 404
             
+            # 分页参数
+            page = int(request.args.get('page', '1'))
+            page_size = int(request.args.get('page_size', '100'))
             sort = request.args.get('sort', '')
             
             # 基础查询
@@ -2893,8 +2926,13 @@ def get_album_photos(album_id):
                 query = query.order_by(Photo.media_date.asc())
             # 默认：按加入顺序（无排序）
             
+            total_count = query.count()
+            total_pages = (total_count + page_size - 1) // page_size
+            if page < 1:
+                page = 1
+            
             photos = []
-            for photo in query.all():
+            for photo in query.offset((page - 1) * page_size).limit(page_size).all():
                 photos.append({
                     'id': photo.id,
                     'filename': photo.filename,
@@ -2905,7 +2943,13 @@ def get_album_photos(album_id):
                     'is_favorite': photo.is_favorite,
                 })
             
-            return jsonify({'photos': photos, 'total': len(photos)})
+            return jsonify({
+                'photos': photos,
+                'total': total_count,
+                'page': page,
+                'total_pages': total_pages,
+                'page_size': page_size,
+            })
         finally:
             db.close()
     except Exception as e:
@@ -2937,7 +2981,7 @@ def get_photo_albums(photo_id):
                     'description': album.description,
                     'cover_photo_id': album.cover_photo_id,
                     'cover_photo_path': cover_path,
-                    'photo_count': len(album.photos),
+                    'photo_count': _album_photo_count(db, album.id),
                     'created_at': album.created_at.isoformat() if album.created_at else None,
                 })
 
@@ -2970,10 +3014,11 @@ def add_photo_to_album(album_id):
                 return jsonify({'error': '照片不存在'}), 404
             
             # 检查是否已在相册中
-            if photo in album.photos:
+            if _photo_in_album(db, album_id, photo_id):
                 return jsonify({'error': '照片已在相册中'}), 409
             
-            album.photos.append(photo)
+            from database import AlbumPhoto
+            db.add(AlbumPhoto(album_id=album_id, photo_id=photo_id))
             db.commit()
             
             return jsonify({'status': 'added', 'album_id': album_id, 'photo_id': photo_id})
@@ -3004,10 +3049,11 @@ def remove_photo_from_album(album_id):
             if not photo:
                 return jsonify({'error': '照片不存在'}), 404
             
-            if photo not in album.photos:
+            if not _photo_in_album(db, album_id, photo_id):
                 return jsonify({'error': '照片不在相册中'}), 404
             
-            album.photos.remove(photo)
+            from database import AlbumPhoto
+            db.query(AlbumPhoto).filter_by(album_id=album_id, photo_id=photo_id).delete()
             db.commit()
             
             return jsonify({'status': 'removed', 'album_id': album_id, 'photo_id': photo_id})
@@ -3034,16 +3080,18 @@ def batch_add_photos_to_album(album_id):
             if not photo_ids:
                 return jsonify({'error': 'photo_ids 不能为空'}), 400
             
+            existing_ids = _album_photo_ids(db, album_id)
+            valid_photos = {p[0] for p in db.query(Photo.id).filter(Photo.id.in_(photo_ids)).all()}
+
             added = 0
             skipped = 0
-            
+            from database import AlbumPhoto
             for photo_id in photo_ids:
-                photo = db.query(Photo).filter(Photo.id == photo_id).first()
-                if photo and photo not in album.photos:
-                    album.photos.append(photo)
-                    added += 1
-                else:
+                if photo_id not in valid_photos or photo_id in existing_ids:
                     skipped += 1
+                    continue
+                db.add(AlbumPhoto(album_id=album_id, photo_id=photo_id))
+                added += 1
             
             db.commit()
             
@@ -3087,8 +3135,10 @@ def duplicate_album(album_id):
             db.flush()
             
             # 复制照片引用
-            for photo in album.photos:
-                new_album.photos.append(photo)
+            from database import AlbumPhoto
+            photo_ids = _album_photo_ids(db, album_id)
+            for pid in photo_ids:
+                db.add(AlbumPhoto(album_id=new_album.id, photo_id=pid))
             
             db.commit()
             
@@ -3096,7 +3146,7 @@ def duplicate_album(album_id):
                 'album': {
                     'id': new_album.id,
                     'name': new_album.name,
-                    'photo_count': len(new_album.photos),
+                    'photo_count': _album_photo_count(db, new_album.id),
                     'created_at': new_album.created_at.isoformat() if new_album.created_at else None,
                 }
             })
@@ -3126,14 +3176,16 @@ def merge_albums(target_id):
             if not target or not source:
                 return jsonify({'error': '相册不存在'}), 404
             
+            source_ids = _album_photo_ids(db, source_id)
+            target_ids = _album_photo_ids(db, target_id)
             added = 0
             skipped = 0
-            
-            for photo in source.photos:
-                if photo in target.photos:
+            from database import AlbumPhoto
+            for pid in source_ids:
+                if pid in target_ids:
                     skipped += 1
                 else:
-                    target.photos.append(photo)
+                    db.add(AlbumPhoto(album_id=target_id, photo_id=pid))
                     added += 1
             
             db.commit()
@@ -3165,13 +3217,13 @@ def batch_remove_photos_from_album(album_id):
             if not album:
                 return jsonify({'error': '相册不存在'}), 404
             
+            existing_ids = _album_photo_ids(db, album_id)
             removed = 0
             skipped = 0
-            
+            from database import AlbumPhoto
             for photo_id in photo_ids:
-                photo = next((p for p in album.photos if p.id == photo_id), None)
-                if photo:
-                    album.photos.remove(photo)
+                if photo_id in existing_ids:
+                    db.query(AlbumPhoto).filter_by(album_id=album_id, photo_id=photo_id).delete()
                     removed += 1
                 else:
                     skipped += 1
@@ -3470,8 +3522,9 @@ def get_timeline_photos():
             if 'favorite' in filters:
                 query = query.filter(Photo.is_favorite == True)
             if 'not_in_album' in filters:
-                from database import PhotoAlbum
-                query = query.filter(~Photo.id.in_(db.query(PhotoAlbum.photo_id)))
+                from database import AlbumPhoto
+                subquery = db.query(AlbumPhoto.photo_id).subquery()
+                query = query.filter(~Photo.id.in_(subquery))
 
             # v0.7 §4.2.1：排序
             if sort == 'media_date_asc':
@@ -3524,9 +3577,9 @@ def get_photo_ids():
             query = db.query(Photo.id)
             
             # 应用筛选条件
-            favorite = request.args.get('favorite', type=bool)
+            favorite = request.args.get('favorite')
             if favorite is not None:
-                query = query.filter(Photo.is_favorite == favorite)
+                query = query.filter(Photo.is_favorite == _parse_bool(favorite))
             
             photo_type = request.args.get('type')
             if photo_type:
@@ -3534,19 +3587,18 @@ def get_photo_ids():
             
             path = request.args.get('path')
             if path:
-                query = query.filter(Photo.path.like(f'{path}%'))
+                query = query.filter(Photo.path.like(f'{_escape_like(path)}%', escape='\\'))
             
-            not_in_album = request.args.get('not_in_album', type=bool)
-            if not_in_album:
+            not_in_album = request.args.get('not_in_album')
+            if not_in_album is not None and _parse_bool(not_in_album):
                 # 查找不在任何相册中的照片
                 subquery = db.query(AlbumPhoto.photo_id).subquery()
                 query = query.filter(~Photo.id.in_(subquery))
             
             album_id = request.args.get('album_id', type=int)
             if album_id:
-                album = db.query(Album).filter(Album.id == album_id).first()
-                if album:
-                    photo_ids_in_album = [p.id for p in album.photos]
+                photo_ids_in_album = _album_photo_ids(db, album_id)
+                if photo_ids_in_album:
                     query = query.filter(Photo.id.in_(photo_ids_in_album))
             
             from_date = request.args.get('from')

@@ -39,7 +39,7 @@ export function SettingsDialog({ isOpen, onClose, onDataRefresh }: SettingsDialo
         language: (res.language as Settings['language']) || 'zh',
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : '加载设置失败';
+      const message = error instanceof Error ? t(error.message) : t('settings.loadFailed');
       showToast(message, 'error');
     }
   };
@@ -53,9 +53,9 @@ export function SettingsDialog({ isOpen, onClose, onDataRefresh }: SettingsDialo
       const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       const isDark = theme === 'dark' || (theme === 'system' && systemPrefersDark);
       document.documentElement.classList.toggle('dark', isDark);
-      showToast('主题已更改', 'success');
+      showToast(t('settings.themeChanged'), 'success');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '更改主题失败';
+      const message = error instanceof Error ? t(error.message) : t('settings.themeChangeFailed');
       showToast(message, 'error');
     }
   };
@@ -67,7 +67,7 @@ export function SettingsDialog({ isOpen, onClose, onDataRefresh }: SettingsDialo
       setLanguage(language as 'zh' | 'en');
       showToast(t('settings.languageChanged'), 'success');
     } catch (error) {
-      const message = error instanceof Error ? error.message : t('settings.languageChangeFailed');
+      const message = error instanceof Error ? t(error.message) : t('settings.languageChangeFailed');
       showToast(message, 'error');
     }
   };
@@ -76,40 +76,40 @@ export function SettingsDialog({ isOpen, onClose, onDataRefresh }: SettingsDialo
     try {
       const res = await api.changeAlbumPath();
       setSettings((prev) => ({ ...prev, albumPath: res.album_path }));
-      showToast('相册路径已更改，正在重建索引...', 'info');
+      showToast(t('settings.albumPathChanged'), 'info');
 
       // 开始轮询重建进度
       setRebuilding(true);
       setRebuildProgress(0);
-      setRebuildMessage('正在启动重建...');
+      setRebuildMessage(t('settings.rebuildStarting'));
 
       const pollProgress = async () => {
         try {
           const progress = await api.getRebuildProgress(res.task_id);
           setRebuildProgress(progress.progress);
-          setRebuildMessage(progress.message);
+          setRebuildMessage(progress.message ? t(progress.message) : '');
 
           if (progress.status === 'running') {
             setTimeout(pollProgress, 500);
           } else if (progress.status === 'done') {
             setRebuilding(false);
-            showToast('索引重建完成', 'success');
+            showToast(t('settings.rebuildComplete'), 'success');
             // 刷新预览内容
             if (onDataRefresh) {
               onDataRefresh();
             }
           } else if (progress.status === 'error') {
             setRebuilding(false);
-            showToast(`重建失败: ${progress.message}`, 'error');
+            showToast(t('settings.rebuildFailed'), 'error');
           }
         } catch (error) {
           setRebuilding(false);
-          showToast('查询进度失败', 'error');
+          showToast(t('settings.queryProgressFailed'), 'error');
         }
       };
       pollProgress();
     } catch (error) {
-      const message = error instanceof Error ? error.message : '更改相册路径失败';
+      const message = error instanceof Error ? t(error.message) : t('settings.albumPathChangeFailed');
       showToast(message, 'error');
     }
   };
@@ -118,9 +118,9 @@ export function SettingsDialog({ isOpen, onClose, onDataRefresh }: SettingsDialo
     setLoading(true);
     try {
       const res = await api.clearCache();
-      showToast(`已清空缓存，释放 ${res.freed_mb.toFixed(1)} MB`, 'success');
+      showToast(t('settings.cacheCleared', { size: res.freed_mb.toFixed(1) }), 'success');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '清空缓存失败';
+      const message = error instanceof Error ? t(error.message) : t('settings.clearCacheFailed');
       showToast(message, 'error');
     } finally {
       setLoading(false);
@@ -130,36 +130,36 @@ export function SettingsDialog({ isOpen, onClose, onDataRefresh }: SettingsDialo
   const handleRebuildIndex = async () => {
     setRebuilding(true);
     setRebuildProgress(0);
-    setRebuildMessage('正在启动重建...');
+    setRebuildMessage(t('settings.rebuildStarting'));
     try {
       const res = await api.rebuildIndex();
       const taskId = res.task_id;
-      showToast(`已清空 ${res.cache_cleared} 个缩略图，开始重建索引`, 'info');
+      showToast(t('settings.rebuildStarted', { count: res.cache_cleared }), 'info');
 
       // 轮询进度
       const pollProgress = async () => {
         try {
           const progress = await api.getRebuildProgress(taskId);
           setRebuildProgress(progress.progress);
-          setRebuildMessage(progress.message);
+          setRebuildMessage(progress.message ? t(progress.message) : '');
 
           if (progress.status === 'running') {
             setTimeout(pollProgress, 500);
           } else if (progress.status === 'done') {
             setRebuilding(false);
-            showToast('索引重建完成', 'success');
+            showToast(t('settings.rebuildComplete'), 'success');
           } else if (progress.status === 'error') {
             setRebuilding(false);
-            showToast(`重建失败: ${progress.message}`, 'error');
+            showToast(t('settings.rebuildFailed'), 'error');
           }
         } catch (error) {
           setRebuilding(false);
-          showToast('查询进度失败', 'error');
+          showToast(t('settings.queryProgressFailed'), 'error');
         }
       };
       pollProgress();
     } catch (error) {
-      const message = error instanceof Error ? error.message : '重建索引失败';
+      const message = error instanceof Error ? t(error.message) : t('settings.rebuildFailedGeneric');
       showToast(message, 'error');
       setRebuilding(false);
     }

@@ -47,14 +47,14 @@ def read_xmp_description(photo_path: str) -> Optional[str]:
             return None
         
         # 使用 libxmp
-        if 'libxmp' in globals():
+        if 'XMPFiles' in globals():
             xmp_file = XMPFiles(file_path=str(path), open_forupdate=False)
             xmp = xmp_file.get_xmp()
             if xmp:
                 desc = xmp.get_property(XMPConst.NS_DC, 'description')
                 xmp_file.close_file()
                 return desc if desc else None
-        
+
         # 使用 pyexiv2
         elif 'pyexiv2' in globals():
             metadata = pyexiv2.ImageMetadata(str(path))
@@ -92,24 +92,24 @@ def write_xmp_description(photo_path: str, description: str) -> Tuple[bool, str]
             return False, "原图为只读，仅保存到数据库"
         
         # 使用 libxmp
-        if 'libxmp' in globals():
+        if 'XMPFiles' in globals():
             xmp_file = XMPFiles(file_path=str(path), open_forupdate=True)
             xmp = xmp_file.get_xmp()
             if xmp is None:
                 xmp = XMPMeta()
-            
+
             # 写入描述
             if description:
                 xmp.set_property(XMPConst.NS_DC, 'description', description)
             else:
                 # 如果描述为空，删除该属性
                 xmp.delete_property(XMPConst.NS_DC, 'description')
-            
+
             # 保存
             xmp_file.put_xmp(xmp)
             xmp_file.close_file()
             return True, "已同步到 XMP 和数据库"
-        
+
         # 使用 pyexiv2
         elif 'pyexiv2' in globals():
             metadata = pyexiv2.ImageMetadata(str(path))
@@ -149,24 +149,24 @@ def read_xmp_title(photo_path: str) -> Optional[str]:
             return None
         
         # 使用 libxmp
-        if 'libxmp' in globals():
+        if 'XMPFiles' in globals():
             xmp_file = XMPFiles(file_path=str(path), open_forupdate=False)
             xmp = xmp_file.get_xmp()
             if xmp:
                 title = xmp.get_property(XMPConst.NS_DC, 'title')
                 xmp_file.close_file()
                 return title if title else None
-        
+
         # 使用 pyexiv2
         elif 'pyexiv2' in globals():
             metadata = pyexiv2.ImageMetadata(str(path))
             metadata.read()
             title = metadata.get('Xmp.dc.title')
             return title.value if title else None
-    
+
     except Exception as e:
         logger.error(f"读取 XMP 标题失败: {photo_path}, 错误: {e}")
-    
+
     return None
 
 
@@ -194,23 +194,23 @@ def write_xmp_title(photo_path: str, title: str) -> Tuple[bool, str]:
             return False, "原图为只读，仅保存到数据库"
         
         # 使用 libxmp
-        if 'libxmp' in globals():
+        if 'XMPFiles' in globals():
             xmp_file = XMPFiles(file_path=str(path), open_forupdate=True)
             xmp = xmp_file.get_xmp()
             if xmp is None:
                 xmp = XMPMeta()
-            
+
             # 写入标题
             if title:
                 xmp.set_property(XMPConst.NS_DC, 'title', title)
             else:
                 xmp.delete_property(XMPConst.NS_DC, 'title')
-            
+
             # 保存
             xmp_file.put_xmp(xmp)
             xmp_file.close_file()
             return True, "已同步到 XMP 和数据库"
-        
+
         # 使用 pyexiv2
         elif 'pyexiv2' in globals():
             metadata = pyexiv2.ImageMetadata(str(path))

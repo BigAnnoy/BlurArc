@@ -60,9 +60,9 @@ export function MainContent({ title, count, photos, loading, selectionMode, sele
   ];
 
   const groupOptions = [
-    { key: 'all', label: '全部' },
-    { key: 'month', label: '按月' },
-    { key: 'year', label: '按年' }
+    { key: 'all', label: t('main.groupAll') },
+    { key: 'month', label: t('main.groupMonth') },
+    { key: 'year', label: t('main.groupYear') }
   ];
 
   const handleFilterChange = (newFilters: string[]) => {

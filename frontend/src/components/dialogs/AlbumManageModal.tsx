@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { api } from '../../services/api';
+import { useI18n } from '../../contexts/I18nContext';
 
 interface AlbumManageModalProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface AlbumManageModalProps {
 }
 
 export function AlbumManageModal({ isOpen, onClose, mode, album, onSaved }: AlbumManageModalProps) {
+  const { t } = useI18n();
   const [name, setName] = useState(album?.name || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -25,7 +27,7 @@ export function AlbumManageModal({ isOpen, onClose, mode, album, onSaved }: Albu
 
   const handleSave = async () => {
     if (!name.trim() && mode !== 'delete') {
-      setError('名称不能为空');
+      setError(t('albumModal.nameRequired'));
       return;
     }
     
@@ -46,13 +48,13 @@ export function AlbumManageModal({ isOpen, onClose, mode, album, onSaved }: Albu
       onSaved();
       onClose();
     } catch (err: any) {
-      setError(err.message || '操作失败');
+      setError(err.message || t('albumModal.actionFailed'));
     }
     
     setLoading(false);
   };
 
-  const title = mode === 'create' ? '新建相册' : mode === 'rename' ? '重命名相册' : mode === 'delete' ? '删除相册' : '复制相册';
+  const title = mode === 'create' ? t('albumModal.createTitle') : mode === 'rename' ? t('albumModal.renameTitle') : mode === 'delete' ? t('albumModal.deleteTitle') : t('albumModal.duplicateTitle');
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title}>
@@ -60,20 +62,20 @@ export function AlbumManageModal({ isOpen, onClose, mode, album, onSaved }: Albu
         {mode === 'delete' ? (
           <div>
             <p className="text-text-primary mb-4">
-              确定要删除相册「{album?.name}」吗？
+              {t('albumModal.deleteConfirm', { name: album?.name ?? '' })}
             </p>
             <p className="text-sm text-text-secondary">
-              照片本身不会被删除，仍保留在主库中。
+              {t('albumModal.photosNotDeleted')}
             </p>
           </div>
         ) : mode === 'duplicate' ? (
           <p className="text-text-primary">
-            将复制相册「{album?.name}」及其所有照片引用。
+            {t('albumModal.duplicateConfirm', { name: album?.name ?? '' })}
           </p>
         ) : (
           <div>
             <label className="block text-sm font-medium text-text-primary mb-2">
-              相册名称
+              {t('sidebar.albumName')}
             </label>
             <input
               type="text"
@@ -84,12 +86,12 @@ export function AlbumManageModal({ isOpen, onClose, mode, album, onSaved }: Albu
                 if (e.key === 'Escape') onClose();
               }}
               className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:border-primary"
-              placeholder="输入相册名称..."
+              placeholder={t('albumModal.namePlaceholder')}
               autoFocus
             />
             {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
             <p className="text-xs text-text-tertiary mt-2">
-              虚拟集合，不复制原文件
+              {t('albumModal.hint')}
             </p>
           </div>
         )}
@@ -99,7 +101,7 @@ export function AlbumManageModal({ isOpen, onClose, mode, album, onSaved }: Albu
             onClick={onClose}
             className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSave}
@@ -110,7 +112,7 @@ export function AlbumManageModal({ isOpen, onClose, mode, album, onSaved }: Albu
                 : 'bg-primary text-white hover:bg-primary-hover'
             } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            {loading ? '处理中...' : mode === 'delete' ? '删除相册' : '确定'}
+            {loading ? t('albumModal.processing') : mode === 'delete' ? t('albumModal.deleteAlbum') : t('common.confirm')}
           </button>
         </div>
       </div>

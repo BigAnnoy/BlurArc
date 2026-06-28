@@ -15,7 +15,8 @@ interface ConfirmDialogProps {
   loading?: boolean;
   danger?: boolean;
 }
-function ConfirmDialog({ isOpen, title, desc, confirmLabel = '确认', onConfirm, onCancel, loading, danger }: ConfirmDialogProps) {
+function ConfirmDialog({ isOpen, title, desc, confirmLabel, onConfirm, onCancel, loading, danger }: ConfirmDialogProps) {
+  const { t } = useI18n();
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -29,7 +30,7 @@ function ConfirmDialog({ isOpen, title, desc, confirmLabel = '确认', onConfirm
             disabled={loading}
             className="flex-1 px-3 py-2 rounded-lg text-xs border border-border hover:bg-page transition-colors active:scale-95"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onConfirm(); }}
@@ -43,9 +44,9 @@ function ConfirmDialog({ isOpen, title, desc, confirmLabel = '确认', onConfirm
             {loading ? (
               <span className="flex items-center justify-center gap-1.5">
                 <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                处理中
+                {t('mobileAccess.processing')}
               </span>
-            ) : confirmLabel}
+            ) : confirmLabel || t('common.confirm')}
           </button>
         </div>
       </div>
@@ -264,7 +265,7 @@ export function MobileDeviceManager({ isOpen, onClose }: MobileDeviceManagerProp
             <p className="text-sm font-medium">{t('mobileAccess.service')}</p>
             <p className="text-xs text-text-tertiary">
               {running ? t('mobileAccess.running') : t('mobileAccess.stopped')}
-              {running && pairedDevices.length > 0 && ` · ${pairedDevices.length} 台设备已配对`}
+              {running && pairedDevices.length > 0 && ` · ${t('mobileAccess.pairedCount', { count: pairedDevices.length })}`}
             </p>
           </div>
           <button
@@ -348,7 +349,7 @@ export function MobileDeviceManager({ isOpen, onClose }: MobileDeviceManagerProp
               onClick={handleStopPairing}
               className="w-full mt-2 px-3 py-2 bg-card border border-border rounded-md text-sm hover:border-red-400 hover:text-red-400 active:scale-[0.98] transition-all"
             >
-              取消配对
+              {t('mobileAccess.unpair')}
             </button>
           </div>
         )}
@@ -400,7 +401,7 @@ export function MobileDeviceManager({ isOpen, onClose }: MobileDeviceManagerProp
           isOpen={!!revokeTarget}
           title={t('mobileAccess.revokeConfirmTitle')}
           desc={`"${revokeTarget.device_name}" ${t('mobileAccess.revokeConfirmDesc')}`}
-          confirmLabel="撤销"
+          confirmLabel={t('mobileAccess.revoke')}
           onConfirm={handleRevokeConfirm}
           onCancel={() => setRevokeTarget(null)}
           loading={revokeLoading}
@@ -415,7 +416,7 @@ export function MobileDeviceManager({ isOpen, onClose }: MobileDeviceManagerProp
           isOpen={revokeAllConfirm}
           title={t('mobileAccess.revokeAllConfirmTitle')}
           desc={t('mobileAccess.revokeAllConfirmDesc')}
-          confirmLabel="全部撤销"
+          confirmLabel={t('mobileAccess.revokeAll')}
           onConfirm={handleRevokeAllConfirm}
           onCancel={() => setRevokeAllConfirm(false)}
           loading={revokeLoading}

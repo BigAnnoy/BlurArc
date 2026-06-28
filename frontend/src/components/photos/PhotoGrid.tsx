@@ -68,17 +68,19 @@ export function PhotoGrid({ photos, selectionMode, selectedIds, onPhotoClick, ha
   // 按日期分组照片
   const groupPhotosByDate = (photos: Photo[], groupBy: 'month' | 'year', sort?: string) => {
     const groups: { [key: string]: Photo[] } = {};
-    
+
     photos.forEach(photo => {
-      const date = new Date(photo.date);
+      const date = photo.date ? new Date(photo.date) : new Date(NaN);
       let key: string;
-      
-      if (groupBy === 'year') {
+
+      if (isNaN(date.getTime())) {
+        key = 'unknown';
+      } else if (groupBy === 'year') {
         key = date.getFullYear().toString();
       } else {
         key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       }
-      
+
       if (!groups[key]) {
         groups[key] = [];
       }

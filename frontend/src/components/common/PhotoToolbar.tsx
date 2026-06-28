@@ -63,7 +63,7 @@ export function PhotoToolbar({
               className={`w-[34px] h-[34px] rounded-[6px] border-none bg-transparent cursor-pointer flex items-center justify-center transition-all hover:bg-page hover:text-primary ${
                 actionsDisabled ? 'text-text-tertiary cursor-not-allowed opacity-50' : 'text-text-secondary'
               } ${layoutMode === 'masonry' ? 'text-primary bg-primary-light' : ''}`}
-              title={layoutMode === 'grid' ? t('main.layoutSwitch') + '（网格）' : t('main.layoutSwitch') + '（瀑布流）'}
+              title={layoutMode === 'grid' ? t('main.layoutSwitch') + t('main.layoutGrid') : t('main.layoutSwitch') + t('main.layoutMasonry')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>

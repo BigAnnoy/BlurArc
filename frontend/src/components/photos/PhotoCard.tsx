@@ -41,8 +41,7 @@ export function PhotoCard({ photo, selected, selectionMode, onClick, onFavoriteC
     setIsFav(photo.is_favorite || false);
   }, [photo.is_favorite]);
 
-  const handleFavoriteClick = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const doToggleFavorite = async () => {
     try {
       if (isFav) {
         await api.removeFavorite(Number(photo.id));
@@ -56,6 +55,11 @@ export function PhotoCard({ photo, selected, selectionMode, onClick, onFavoriteC
     } catch (error) {
       console.error('收藏操作失败:', error);
     }
+  };
+
+  const handleFavoriteClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await doToggleFavorite();
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -114,7 +118,7 @@ export function PhotoCard({ photo, selected, selectionMode, onClick, onFavoriteC
             <polyline points="3 15 8 11 12 14 16 10 21 14" />
             <line x1="6" y1="7" x2="18" y2="17" />
           </svg>
-          <span className="text-xs">无法加载</span>
+          <span className="text-xs">{t('photoCard.loadFailed')}</span>
         </div>
       ) : (
         <img
@@ -129,7 +133,7 @@ export function PhotoCard({ photo, selected, selectionMode, onClick, onFavoriteC
       {/* 收藏按钮（v0.7 §8.2 对齐原型：收藏后红色圆背景 + 白色心形，未收藏半透明黑底 + 白色描边心形） */}
       <button
         onClick={handleFavoriteClick}
-        title={isFav ? '取消收藏' : '加入收藏'}
+        title={isFav ? t('photoCard.removeFavorite') : t('photoCard.addFavorite')}
         className={`photo-heart absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-150 z-[2] ${
           isFav
             ? 'opacity-100 bg-favorite hover:bg-red-600'
@@ -176,7 +180,7 @@ export function PhotoCard({ photo, selected, selectionMode, onClick, onFavoriteC
             inAlbumId: albumId,
             onPreview: () => onClick(),
             onToggleFavorite: () => {
-              handleFavoriteClick({ stopPropagation: () => {} } as React.MouseEvent);
+              doToggleFavorite();
             },
             onJoinAlbum: () => onJoinAlbum?.(photo.id),
             onRemoveFromAlbum: onRemoveFromAlbum,

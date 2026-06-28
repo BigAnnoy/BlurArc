@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { AlbumCoverDefault } from '../common/AlbumCoverDefault';
+import { useI18n } from '../../contexts/I18nContext';
 import { api } from '../../services/api';
 
 interface JoinAlbumModalProps {
@@ -19,6 +20,7 @@ interface Album {
 }
 
 export function JoinAlbumModal({ isOpen, onClose, photoIds, onJoined }: JoinAlbumModalProps) {
+  const { t } = useI18n();
   const [albums, setAlbums] = useState<Album[]>([]);
   const [selectedAlbumIds, setSelectedAlbumIds] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,25 +97,25 @@ export function JoinAlbumModal({ isOpen, onClose, photoIds, onJoined }: JoinAlbu
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="加入相册"
+      title={t('joinAlbum.title')}
       size="lg"
       footer={
         <>
           <span className="text-sm text-text-secondary mr-auto">
-            已选 <span className="text-primary font-medium">{selectedAlbumIds.size}</span> 个相册 · 含 {photoIds.length} 张照片
+            {t('joinAlbum.selectedSummary', { count: selectedAlbumIds.size, photoCount: photoIds.length })}
           </span>
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm text-text-secondary hover:bg-page rounded transition-colors"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleJoin}
             disabled={selectedAlbumIds.size === 0 || loading}
             className="px-5 py-2 text-sm bg-primary text-white rounded hover:bg-primary-hover disabled:opacity-50 transition-colors"
           >
-            {loading ? '加入中...' : `加入 ${selectedAlbumIds.size || ''} 个相册`}
+            {loading ? t('joinAlbum.joining') : t('joinAlbum.joinCount', { count: selectedAlbumIds.size })}
           </button>
         </>
       }
@@ -128,7 +130,7 @@ export function JoinAlbumModal({ isOpen, onClose, photoIds, onJoined }: JoinAlbu
               if (e.key === 'Enter') handleCreateAlbum();
               if (e.key === 'Escape') setShowCreateForm(false);
             }}
-            placeholder="新相册名称..."
+            placeholder={t('joinAlbum.newAlbumPlaceholder')}
             className="w-full px-3 py-2.5 border border-border rounded-md focus:outline-none focus:border-primary text-sm"
             autoFocus
           />
@@ -137,14 +139,14 @@ export function JoinAlbumModal({ isOpen, onClose, photoIds, onJoined }: JoinAlbu
               onClick={() => { setShowCreateForm(false); setNewAlbumName(''); }}
               className="px-4 py-1.5 text-sm text-text-secondary hover:bg-page rounded"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               onClick={handleCreateAlbum}
               disabled={!newAlbumName.trim()}
               className="px-4 py-1.5 text-sm bg-primary text-white rounded hover:bg-primary-hover disabled:opacity-50"
             >
-              创建
+              {t('common.create')}
             </button>
           </div>
         </div>
@@ -160,7 +162,7 @@ export function JoinAlbumModal({ isOpen, onClose, photoIds, onJoined }: JoinAlbu
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索相册..."
+                placeholder={t('joinAlbum.searchPlaceholder')}
                 className="w-full pl-9 pr-3 py-2.5 border border-border rounded-md focus:outline-none focus:border-primary text-sm bg-page"
               />
             </div>
@@ -170,11 +172,11 @@ export function JoinAlbumModal({ isOpen, onClose, photoIds, onJoined }: JoinAlbu
           <div className="flex-1 overflow-y-auto p-3 min-h-0">
             {filteredAlbums.length === 0 && !searchQuery ? (
               <div className="py-12 text-center text-text-secondary text-sm">
-                还没有相册,创建第一个相册开始使用
+                {t('joinAlbum.noAlbums')}
               </div>
             ) : filteredAlbums.length === 0 ? (
               <div className="py-12 text-center text-text-secondary text-sm">
-                没有匹配的相册
+                {t('joinAlbum.noMatch')}
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2.5">
@@ -205,7 +207,7 @@ export function JoinAlbumModal({ isOpen, onClose, photoIds, onJoined }: JoinAlbu
                       {/* 名称 + 数量 */}
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate text-text-primary">{album.name}</div>
-                        <div className="text-xs text-text-tertiary">{album.photo_count} 张</div>
+                        <div className="text-xs text-text-tertiary">{t('main.photoCount', { count: album.photo_count })}</div>
                       </div>
                     </button>
                   );
@@ -219,8 +221,8 @@ export function JoinAlbumModal({ isOpen, onClose, photoIds, onJoined }: JoinAlbu
                     +
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-primary">新建相册</div>
-                    <div className="text-xs text-text-tertiary">创建新相册</div>
+                    <div className="text-sm font-medium text-primary">{t('joinAlbum.createNewAlbum')}</div>
+                    <div className="text-xs text-text-tertiary">{t('joinAlbum.createNewAlbumDesc')}</div>
                   </div>
                 </button>
               </div>
