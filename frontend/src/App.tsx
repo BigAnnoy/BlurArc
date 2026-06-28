@@ -306,6 +306,8 @@ function AppContent() {
         totalPhotos: res.total,
         selectedTitle: t('sidebar.myFavorites'),
         selectedPath: null,
+        currentPage: res.page,
+        hasMore: res.page < res.total_pages,
         loading: false,
       }));
     } catch (error) {
@@ -362,7 +364,7 @@ function AppContent() {
     }
   }, [state.currentView, state.selectedPath, state.selectedTitle, state.selectedAlbumId, mainSort, loadPhotos, handleSelectAlbum, handleShowFavorites, refreshAllCounters, showToast, t]);
 
-  // v0.7: 滚动加载更多（文件夹/相册详情）
+  // v0.7: 滚动加载更多（文件夹/相册详情/收藏）
   const handleLoadMore = useCallback(async () => {
     if (state.loading || !state.hasMore) return;
 
@@ -390,6 +392,31 @@ function AppContent() {
         }));
       } catch (error) {
         console.error('Failed to load more album photos:', error);
+        showToast(t('app.loadMoreFailed'), 'error');
+      }
+    } else if (state.currentView === 'favorites') {
+      try {
+        const nextPage = state.currentPage + 1;
+        const res = await api.getFavorites(mainSort, nextPage, 100);
+        const newPhotos = res.photos.map((p) => ({
+          id: String(p.id),
+          name: p.filename,
+          path: p.path,
+          size: p.size,
+          date: p.date || '',
+          type: p.type as 'photo' | 'video',
+          is_favorite: p.is_favorite,
+          favorited_at: p.favorited_at,
+        }));
+        setState((prev) => ({
+          ...prev,
+          photos: [...prev.photos, ...newPhotos],
+          totalPhotos: res.total,
+          currentPage: res.page,
+          hasMore: res.page < res.total_pages,
+        }));
+      } catch (error) {
+        console.error('Failed to load more favorites:', error);
         showToast(t('app.loadMoreFailed'), 'error');
       }
     }
@@ -667,7 +694,7 @@ function AppContent() {
             onSelectAll={handleSelectAll}
             onDelete={handleDelete}
             hasMore={state.hasMore}
-            onLoadMore={undefined}
+            onLoadMore={handleLoadMore}
             albumId={null}
             onJoinAlbum={handleJoinAlbum}
             onJoinAlbums={handleJoinAlbums}

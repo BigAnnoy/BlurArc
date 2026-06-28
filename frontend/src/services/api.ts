@@ -470,8 +470,14 @@ export const api = {
       body: JSON.stringify({ photo_ids: photoIds, favorite }),
     }),
 
-  getFavorites: (sort?: string) =>
-    fetchJson<{ photos: { id: number; filename: string; path: string; size: number; date: string | null; type: string; is_favorite: boolean; favorited_at: string | null }[]; total: number }>(`${API_BASE}/photos/favorites${sort ? `?sort=${sort}` : ''}`),
+  getFavorites: (sort?: string, page?: number, per_page?: number) => {
+    const params = new URLSearchParams();
+    if (sort) params.append('sort', sort);
+    if (page) params.append('page', page.toString());
+    if (per_page) params.append('per_page', per_page.toString());
+    const query = params.toString();
+    return fetchJson<{ photos: { id: number; filename: string; path: string; size: number; date: string | null; type: string; is_favorite: boolean; favorited_at: string | null }[]; total: number; page: number; total_pages: number }>(`${API_BASE}/photos/favorites${query ? `?${query}` : ''}`);
+  },
 
   // ============================================================================
   // 文件夹操作 API (v0.7)

@@ -3605,7 +3605,9 @@ def get_favorites():
                     'favorited_at': p.favorited_at.isoformat() if p.favorited_at else None,
                 })
             
-            return jsonify({'photos': result, 'total': total, 'page': page, 'per_page': per_page})
+            import math
+            total_pages = math.ceil(total / per_page) if per_page > 0 else 0
+            return jsonify({'photos': result, 'total': total, 'page': page, 'per_page': per_page, 'total_pages': total_pages})
         finally:
             db.close()
     except Exception as e:
