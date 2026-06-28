@@ -569,3 +569,104 @@ def test_get_setting_default(temp_dir):
     # 测试获取不存在的设置
     assert config_manager.get_setting("nonexistent_setting") is None
     assert config_manager.get_setting("nonexistent_setting", "default_value") == "default_value"
+
+
+def test_set_album_path_only_saves_previous_album_path(temp_dir):
+    """set_album_path_only 应将旧 album_path 保存到 previous_album_path。"""
+    config_manager = create_config_manager_with_mock(temp_dir)
+
+    with tempfile.TemporaryDirectory() as old_dir, tempfile.TemporaryDirectory() as new_dir:
+        config_manager.set_album_path(old_dir)
+        assert config_manager.config["album_path"] == str(Path(old_dir).absolute())
+
+        config_manager.set_album_path_only(new_dir)
+        assert config_manager.config["album_path"] == str(Path(new_dir).absolute())
+        assert config_manager.config["previous_album_path"] == str(Path(old_dir).absolute())
+
+
+def test_get_album_path_invalid_preserves_previous_path(temp_dir):
+    """相册路径失效时，get_album_path 应保留旧值到 previous_album_path 并返回 None。"""
+    config_manager = create_config_manager_with_mock(temp_dir)
+
+    with tempfile.TemporaryDirectory() as album_dir:
+        config_manager.set_album_path(album_dir)
+        old_abs = str(Path(album_dir).absolute())
+        assert config_manager.get_album_path() == old_abs
+
+        shutil.rmtree(album_dir)
+        assert config_manager.get_album_path() is None
+        assert config_manager.config["previous_album_path"] == old_abs
+        assert config_manager.config["album_path"] is None
+
+
+def test_rebuild_empty_album_deletes_all_photos(temp_dir, in_memory_db):
+    """空相册重建时，所有旧记录和相册关联应被清理。"""
+    config_manager = create_config_manager_with_mock(temp_dir)
+    db = in_memory_db()
+
+    with tempfile.TemporaryDirectory() as album_dir:
+        files = []
+        for i in range(2):
+            fpath = Path(album_dir) / f"photo{i}.jpg"
+            fpath.write_text(f"content {i}")
+            files.append(fpath)
+
+        p0 = _make_photo_record(db, files[0])
+        p1 = _make_photo_record(db, files[1])
+        album = _create_album_with_photos(db, "家庭", [p0, p1], cover_photo=p0)
+
+        # 删除所有物理文件，模拟空相册
+        for fpath in files:
+            fpath.unlink()
+
+        with patch.object(config_manager, '_compute_md5', side_effect=lambda p: f"md5_{p.name}"):
+            config_manager._rebuild_md5_index_for_album(Path(album_dir))
+
+        db.expire_all()
+        assert db.query(Photo).count() == 0
+        assert db.query(AlbumPhoto).count() == 0
+        album = db.query(Album).filter(Album.name == "家庭").first()
+        assert album is not None
+        assert album.cover_photo_id is None
+
+
+def test_rebuild_path_migration_prefix_collision(temp_dir, in_memory_db):
+    r"""
+    path 迁移按字符串前缀匹配：当新路径以旧路径开头时，旧记录会被迁移过去。
+
+    这是 v1 的已知限制：无法区分「D:\Photos 改名为 D:\MyPhotos」
+    和「把相册路径误设为 D:\PhotosBackup」。前者期望迁移保留收藏，
+    后者期望不迁移；按前缀匹配会同时满足前者，也会把 Photo.jpg
+    这类旧路径迁移到 PhotosBackup\photo.jpg 上。
+    """
+    config_manager = create_config_manager_with_mock(temp_dir)
+    db = in_memory_db()
+
+    with tempfile.TemporaryDirectory() as root:
+        old_dir = Path(root) / "Photos"
+        similar_dir = Path(root) / "PhotosBackup"
+        old_dir.mkdir()
+        similar_dir.mkdir()
+
+        old_file = old_dir / "photo.jpg"
+        old_file.write_text("old")
+        photo = _make_photo_record(db, old_file, is_favorite=True, title="旧相册")
+
+        similar_file = similar_dir / "photo.jpg"
+        similar_file.write_text("similar")
+
+        config_manager.config["previous_album_path"] = str(old_dir.absolute())
+
+        with patch.object(config_manager, '_compute_md5', side_effect=lambda p: f"md5_{p.name}"):
+            config_manager._rebuild_md5_index_for_album(similar_dir)
+
+        db.expire_all()
+        photos = {p.path: p for p in db.query(Photo).all()}
+
+        # 旧路径记录被迁移到新路径，id 和收藏都保留（已知限制行为）
+        assert str(old_file) not in photos
+        assert str(similar_file) in photos
+        assert photos[str(similar_file)].id == photo.id
+        assert photos[str(similar_file)].is_favorite is True
+        assert photos[str(similar_file)].title == "旧相册"
+        assert config_manager.config.get("previous_album_path") is None

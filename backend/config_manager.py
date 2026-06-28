@@ -243,6 +243,13 @@ class ConfigManager:
                     old_prefix_with_sep = prev_abs.rstrip("\\/") + os.sep
                     new_prefix_with_sep = new_album_path_abs.rstrip("\\/") + os.sep
 
+                    # LIKE pattern 必须用旧前缀（不含末尾分隔符）拼接 "\\%"，
+                    # 其中 "\\" 表示字面 "\"，"%" 是通配符。
+                    # 如果写成 "\\%"（仅一个反斜杠），SQLite 会把它解析为字面 "%"，
+                    # 导致匹配失败；如果写成旧写法 "_escape_like(old_prefix_with_sep) + '%'"，
+                    # 末尾的 "\\%" 又会被解析为字面 "%"，从而误匹配 PhotosBackup。
+                    old_prefix_like = _escape_like(prev_abs) + "\\\\%"
+
                     db.execute(
                         text(
                             "UPDATE photos "
@@ -252,7 +259,7 @@ class ConfigManager:
                         {
                             "new_prefix": new_prefix_with_sep,
                             "old_prefix": old_prefix_with_sep,
-                            "old_prefix_like": _escape_like(old_prefix_with_sep) + "%",
+                            "old_prefix_like": old_prefix_like,
                         }
                     )
                     db.commit()
