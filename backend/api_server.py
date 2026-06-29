@@ -18,6 +18,7 @@ import os
 import shutil
 import sys
 import urllib.parse
+from functools import lru_cache
 from pathlib import Path
 from datetime import datetime
 import threading
@@ -231,14 +232,7 @@ def album_stats():
             logger.error('[API] 📊 无法获取相册统计信息')
             return jsonify({'error': '无法获取相册统计信息'}), 500
         
-        # 添加最后导入时间
-        config = get_config_manager()
-        if config:
-            last_import = config.get_last_import()
-            stats['last_import'] = last_import
-        else:
-            stats['last_import'] = None
-        
+        # v0.7 性能优化：last_import 已由 get_album_stats() 内部提供，无需重复查询
         logger.info(f'[API] 📊 统计结果: {stats["total_files"]} 个文件, {stats["total_size_mb"]} MB, 最后导入: {stats.get("last_import")}')
         return jsonify(stats)
     except Exception as e:
@@ -709,6 +703,25 @@ def album_preview():
         return jsonify({'error': str(e)}), 500
 
 
+@lru_cache(maxsize=500)
+def _cached_video_metadata(file_path_str: str, file_mtime: float) -> dict:
+    """缓存的视频元数据提取（内部函数）
+    
+    Args:
+        file_path_str: 文件路径字符串
+        file_mtime: 文件修改时间，用于缓存失效判断
+    
+    Returns:
+        元数据字典，包含 duration, width, height, codec, format, size 等
+    """
+    try:
+        from .video_processor import VideoProcessor
+    except ImportError:
+        from video_processor import VideoProcessor
+    
+    return VideoProcessor.extract_metadata(file_path_str)
+
+
 @app.route('/api/video/metadata', methods=['GET'])
 def video_metadata():
     """提取视频元数据（时长、分辨率、编码等）"""
@@ -731,13 +744,9 @@ def video_metadata():
             except ValueError:
                 return jsonify({'error': '访问被拒绝：文件不在相册目录内'}), 403
 
-        # 使用 VideoProcessor 提取元数据
-        try:
-            from .video_processor import VideoProcessor
-        except ImportError:
-            from video_processor import VideoProcessor
-
-        metadata = VideoProcessor.extract_metadata(str(file_path))
+        # 使用缓存的元数据提取（文件修改后自动失效）
+        file_mtime = file_path.stat().st_mtime
+        metadata = _cached_video_metadata(str(file_path), file_mtime)
 
         if metadata is None:
             return jsonify({
@@ -1493,9 +1502,10 @@ def _perform_import_check(source_path: Path, progress_callback=None):
     # 阶段1：扫描源目录并一次性收集所有信息（0% -> 50%）
     emit(0, 'scanning', '开始扫描源目录...')
 
-    # 先统计文件总数（用于进度显示）
-    all_files_total = sum(len(files) for _, _, files in os.walk(source_path))
     scanned_files = 0
+    # 动态进度估算参数（无需预知总数）
+    # 使用渐进公式: 49 * n / (n + K)，K 越大初期越快饱和
+    _ESTIMATED_MEDIA = 200
 
     # EXIF 读取函数（提前定义，避免重复定义）
     def _get_exif_datetime_fast(path):
@@ -1549,9 +1559,11 @@ def _perform_import_check(source_path: Path, progress_callback=None):
                     'thumbnail_url': f'/api/album/thumbnail?path={urllib.parse.quote(str(file_path))}'
                 })
 
-            if all_files_total > 0:
-                stage_progress = int((scanned_files / all_files_total) * 50)
-                emit(stage_progress, 'scanning', f'扫描中... {scanned_files}/{all_files_total}')
+            # 动态进度估算：渐进公式，无需预知总数
+            # 每扫描 50 个文件更新一次进度，减少 emit 调用开销
+            if scanned_files % 50 == 0:
+                stage_progress = int(49 * scanned_files / (scanned_files + _ESTIMATED_MEDIA))
+                emit(stage_progress, 'scanning', f'扫描中... 已扫描 {scanned_files} 个文件')
 
     # 阶段2：按日期分组（50% -> 55%）—— 使用缓存的 mtime
     emit(50, 'grouping', '按日期整理预览...')
@@ -2593,24 +2605,32 @@ def mobile_pairing_cancel():
 def get_albums():
     """获取所有相册列表"""
     try:
-        from database import SessionLocal, Album, Photo
+        from database import SessionLocal, Album, Photo, AlbumPhoto
+        from sqlalchemy import func
         db = SessionLocal()
         try:
-            albums = db.query(Album).all()
+            # v0.7 性能优化：用 JOIN + GROUP BY 替代 N+1 查询
+            # 一次查询获取所有相册 + 封面路径 + 照片计数
+            albums_query = db.query(
+                Album,
+                Photo.path.label('cover_path'),
+                func.count(AlbumPhoto.photo_id).label('photo_count')
+            ).outerjoin(
+                Photo, Album.cover_photo_id == Photo.id
+            ).outerjoin(
+                AlbumPhoto, Album.id == AlbumPhoto.album_id
+            ).group_by(Album.id)
+
+            albums = albums_query.all()
             result = []
-            for album in albums:
-                cover_path = None
-                if album.cover_photo_id:
-                    cover_photo = db.query(Photo).filter(Photo.id == album.cover_photo_id).first()
-                    if cover_photo:
-                        cover_path = cover_photo.path
+            for album, cover_path, count in albums:
                 result.append({
                     'id': album.id,
                     'name': album.name,
                     'description': album.description,
                     'cover_photo_id': album.cover_photo_id,
                     'cover_photo_path': cover_path,
-                    'photo_count': _album_photo_count(db, album.id),
+                    'photo_count': count,
                     'created_at': album.created_at.isoformat() if album.created_at else None,
                 })
             return jsonify({'albums': result})
@@ -3151,21 +3171,45 @@ def get_timeline_years():
                 years_data = query.all()
                 has_next = False
 
+            # v0.7 性能优化：用窗口函数一次获取所有年份的封面，替代 N+1 查询
+            # 先收集需要封面的年份列表
+            target_years = [int(year_data.year) for year_data in years_data]
+
+            covers_by_year = {}
+            if target_years:
+                # 窗口函数：按年份分区，每年取前 4 张
+                subq = db.query(
+                    Photo.id,
+                    Photo.path,
+                    Photo.media_date,
+                    func.row_number().over(
+                        partition_by=func.strftime('%Y', Photo.media_date),
+                        order_by=Photo.media_date
+                    ).label('rn')
+                ).filter(
+                    Photo.file_type == 'photo',
+                    func.strftime('%Y', Photo.media_date).in_([str(y) for y in target_years])
+                ).subquery()
+
+                covers = db.query(subq).filter(subq.c.rn <= 4).all()
+                for row in covers:
+                    year_key = int(row.media_date.strftime('%Y'))
+                    covers_by_year.setdefault(year_key, []).append({
+                        'id': row.id,
+                        'path': row.path,
+                    })
+
             result = []
             for year_data in years_data:
                 year = int(year_data.year)
-                # 获取该年的 4 张代表性缩略图（按日期均匀分布）
-                cover_photos = db.query(Photo).filter(
-                    extract('year', Photo.media_date) == year,
-                    Photo.file_type == 'photo'
-                ).order_by(Photo.media_date).limit(4).all()
+                year_covers = covers_by_year.get(year, [])
 
                 result.append({
                     'year': year,
                     'count': year_data.count,
-                    'cover_photo_id': cover_photos[0].id if cover_photos else None,
-                    'cover_photo_path': cover_photos[0].path if cover_photos else None,
-                    'cover_photo_paths': [p.path for p in cover_photos],
+                    'cover_photo_id': year_covers[0]['id'] if year_covers else None,
+                    'cover_photo_path': year_covers[0]['path'] if year_covers else None,
+                    'cover_photo_paths': [c['path'] for c in year_covers],
                 })
 
             # next_cursor 为当前批次最后一年（最小年份），仅在还有下一批时返回
@@ -3248,24 +3292,52 @@ def get_timeline_months():
                 months_data = query.all()
                 has_next = False
 
+            # v0.7 性能优化：用窗口函数一次获取所有月份的封面，替代 N+1 查询
+            # 先收集需要封面的月份列表
+            target_months = [(int(md.year), int(md.month)) for md in months_data]
+
+            covers_by_month = {}
+            if target_months:
+                # 窗口函数：按年月分区，每月取前 4 张
+                subq = db.query(
+                    Photo.id,
+                    Photo.path,
+                    Photo.media_date,
+                    func.row_number().over(
+                        partition_by=func.strftime('%Y-%m', Photo.media_date),
+                        order_by=Photo.media_date
+                    ).label('rn')
+                ).filter(
+                    Photo.file_type == 'photo',
+                    func.strftime('%Y-%m', Photo.media_date).in_([
+                        f'{y:04d}-{m:02d}' for y, m in target_months
+                    ])
+                ).subquery()
+
+                covers = db.query(subq).filter(subq.c.rn <= 4).all()
+                for row in covers:
+                    month_key = (
+                        int(row.media_date.strftime('%Y')),
+                        int(row.media_date.strftime('%m'))
+                    )
+                    covers_by_month.setdefault(month_key, []).append({
+                        'id': row.id,
+                        'path': row.path,
+                    })
+
             result = []
             for month_data in months_data:
                 y = int(month_data.year)
                 m = int(month_data.month)
-                # 获取该月的 4 张代表性缩略图
-                cover_photos = db.query(Photo).filter(
-                    extract('year', Photo.media_date) == y,
-                    extract('month', Photo.media_date) == m,
-                    Photo.file_type == 'photo'
-                ).order_by(Photo.media_date).limit(4).all()
+                month_covers = covers_by_month.get((y, m), [])
 
                 result.append({
                     'year': y,
                     'month': m,
                     'count': month_data.count,
-                    'cover_photo_id': cover_photos[0].id if cover_photos else None,
-                    'cover_photo_path': cover_photos[0].path if cover_photos else None,
-                    'cover_photo_paths': [p.path for p in cover_photos],
+                    'cover_photo_id': month_covers[0]['id'] if month_covers else None,
+                    'cover_photo_path': month_covers[0]['path'] if month_covers else None,
+                    'cover_photo_paths': [c['path'] for c in month_covers],
                 })
 
             # next_cursor 为当前批次最后一个月（最小年月），仅在还有下一批时返回
