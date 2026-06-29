@@ -261,12 +261,101 @@ class TestThumbnailManager:
         """测试获取其他格式文件的预览图"""
         # 创建视频文件路径
         video_path = temp_file.with_suffix('.mp4')
-        
+
         # 模拟文件存在
         with patch('backend.thumbnail_manager.Path.exists') as mock_exists:
             mock_exists.return_value = True
             with patch('backend.thumbnail_manager.Path.is_file') as mock_is_file:
                 mock_is_file.return_value = True
-                
+
                 result = thumbnail_manager.get_preview_jpeg(str(video_path))
                 assert result is None  # 视频格式返回None
+
+
+# ============================================================================
+# v0.7 P1 修复：缩略图路径统一 (#5)
+# 覆盖场景：路径来源、不含旧路径、目录自动创建、无循环导入
+# ============================================================================
+
+class TestThumbnailManagerPath:
+    """v0.7 缩略图路径测试（独立类，不依赖真实 _get_user_data_dir）"""
+
+    def test_cache_dir_uses_user_data_dir(self, tmp_path, monkeypatch):
+        """#5: cache_dir 必须基于 _get_user_data_dir() 而非硬编码"""
+        # 注意：thumbnail_manager.py 使用 `from .config_manager import _get_user_data_dir`
+        # 这种 import 会把函数引用复制到 thumbnail_manager 的命名空间，
+        # 所以必须 monkeypatch thumbnail_manager 模块的属性，而不是 config_manager
+        from backend import thumbnail_manager as tm_mod
+
+        fake_data_dir = tmp_path / "BlurArc"
+        monkeypatch.setattr(tm_mod, "_get_user_data_dir", lambda: fake_data_dir)
+
+        manager = ThumbnailManager()
+        expected = fake_data_dir / "thumbnails"
+
+        assert manager.cache_dir == expected, (
+            f"cache_dir 应为 {expected}，实际为 {manager.cache_dir}"
+        )
+
+    def test_cache_dir_excludes_legacy_path(self, tmp_path, monkeypatch):
+        """#5: cache_dir 不应使用旧版路径 ~/.photomanager/thumbnails"""
+        from backend import thumbnail_manager as tm_mod
+
+        fake_data_dir = tmp_path / "BlurArc"
+        monkeypatch.setattr(tm_mod, "_get_user_data_dir", lambda: fake_data_dir)
+
+        manager = ThumbnailManager()
+        cache_str = str(manager.cache_dir).replace("\\", "/").lower()
+
+        assert ".photomanager" not in cache_str, (
+            f"cache_dir 不应包含旧路径 .photomanager，实际: {manager.cache_dir}"
+        )
+        # 验证路径组件
+        assert cache_str.endswith("blurarc/thumbnails"), (
+            f"cache_dir 应以 blurarc/thumbnails 结尾，实际: {manager.cache_dir}"
+        )
+
+    def test_cache_dir_auto_creates_on_init(self, tmp_path, monkeypatch):
+        """#5: 目录在 __init__ 时自动创建"""
+        from backend import thumbnail_manager as tm_mod
+
+        fake_data_dir = tmp_path / "BlurArc"
+        monkeypatch.setattr(tm_mod, "_get_user_data_dir", lambda: fake_data_dir)
+
+        # 初始不存在
+        assert not (fake_data_dir / "thumbnails").exists()
+
+        manager = ThumbnailManager()
+
+        # __init__ 之后必须存在
+        assert manager.cache_dir.exists(), f"目录应被自动创建: {manager.cache_dir}"
+        assert manager.cache_dir.is_dir(), f"cache_dir 必须是目录: {manager.cache_dir}"
+
+    def test_cache_dir_handles_missing_parent(self, tmp_path, monkeypatch):
+        """#5: 当 BlurArc 父目录不存在时，mkdir(parents=True) 应正确创建"""
+        from backend import thumbnail_manager as tm_mod
+
+        # tmp_path/blurarc_nested 还没创建
+        fake_data_dir = tmp_path / "blurarc_nested"
+        assert not fake_data_dir.exists()
+
+        monkeypatch.setattr(tm_mod, "_get_user_data_dir", lambda: fake_data_dir)
+
+        # 不应抛 FileNotFoundError
+        manager = ThumbnailManager()
+
+        assert manager.cache_dir.exists()
+        assert manager.cache_dir == fake_data_dir / "thumbnails"
+
+    def test_thumbnail_manager_no_circular_import(self):
+        """#5: 导入 thumbnail_manager 不应触发循环导入错误"""
+        # 如果有循环导入，这一步就会失败
+        try:
+            from backend.thumbnail_manager import ThumbnailManager
+            from backend.config_manager import _get_user_data_dir
+            from backend import thumbnail_manager, config_manager, database
+        except ImportError as e:
+            pytest.fail(f"检测到循环导入或其他导入错误: {e}")
+
+        assert ThumbnailManager is not None
+        assert callable(_get_user_data_dir)

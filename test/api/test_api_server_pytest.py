@@ -25,41 +25,37 @@ class TestAPIServer:
         assert 'timestamp' in data
     
     @patch('backend.api_server.get_album_stats')
-    @patch('backend.api_server.get_config_manager')
-    def test_album_stats(self, mock_get_config_manager, mock_get_album_stats, client):
+    def test_album_stats(self, mock_get_album_stats, client):
         """测试相册统计端点"""
         # 模拟成功获取统计信息
+        # v0.7 #6 修复后：last_import 由 get_album_stats() 内部从 config.get_last_import() 填充
         mock_stats = {
             'total_files': 100,
             'video_count': 20,
             'total_size': 1024 * 1024 * 100,  # 100MB
             'total_size_mb': 100.0,
-            'years': {}
+            'years': {},
+            'last_import': '2023-01-01T00:00:00',
         }
         mock_get_album_stats.return_value = mock_stats
-        
-        # 模拟配置管理器返回最后导入时间
-        mock_config = MagicMock()
-        mock_config.get_last_import.return_value = '2023-01-01T00:00:00'
-        mock_get_config_manager.return_value = mock_config
-        
+
         response = client.get('/api/album/stats')
-        
+
         assert response.status_code == 200
-        
+
         data = json.loads(response.data)
         assert 'total_files' in data
         assert data['total_files'] == 100
         assert 'last_import' in data
         assert data['last_import'] == '2023-01-01T00:00:00'
-        
+
         # 模拟获取统计信息失败
         mock_get_album_stats.return_value = None
-        
+
         response = client.get('/api/album/stats')
-        
+
         assert response.status_code == 500
-        
+
         data = json.loads(response.data)
         assert 'error' in data
     
