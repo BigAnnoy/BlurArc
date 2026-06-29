@@ -25,6 +25,7 @@ except ImportError:
 
 # 视频处理模块
 from .video_processor import VideoProcessor
+from .config_manager import _get_user_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,9 @@ class ThumbnailManager:
     """缩略图管理器"""
     
     def __init__(self):
-        self.cache_dir = Path('~/.photomanager/thumbnails').expanduser()
+        # v0.7: 统一数据目录 ~/Documents/BlurArc/thumbnails/
+        # 旧版（v0.6）使用 ~/.photomanager/thumbnails/，升级后旧目录不再复用
+        self.cache_dir = _get_user_data_dir() / 'thumbnails'
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
         # 获取缩略图配置

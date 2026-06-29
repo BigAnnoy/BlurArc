@@ -274,6 +274,20 @@ def init_db():
         print(f"v0.7 字段迁移时出错: {e}")
         pass
 
+    # v0.7 迁移：为 photos.favorited_at 创建索引
+    # 收藏列表 GET /api/photos/favorites 默认按 favorited_at desc 排序，
+    # 没索引时全表扫描。create_all 不会给旧表补索引，必须手动建。幂等：IF NOT EXISTS。
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_photos_favorited_at ON photos (favorited_at)"
+                )
+            )
+            conn.commit()
+    except Exception:
+        pass  # 表尚未创建时忽略（由 create_all 负责）
+
     # 初始化默认设置
     db = SessionLocal()
     try:
